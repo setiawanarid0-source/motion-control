@@ -4,7 +4,18 @@ const state = {
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false,
 };
 const $ = s => document.querySelector(s);
-const $$ = s => [...document.querySelectorAll(s)];
+const $ = s => [...document.querySelectorAll(s)];
+
+function getDeviceId(){
+  const key='vantaDeviceIdV1';
+  let id=localStorage.getItem(key);
+  if(!id){
+    if(globalThis.crypto?.randomUUID) id=crypto.randomUUID().replaceAll('-','');
+    else id=`${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key,id);
+  }
+  return id;
+}
 
 function toast(message, error=false){ const el=$('#toast'); el.textContent=message; el.classList.toggle('error',error); el.classList.add('show'); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove('show'),4200); }
 function fmtTime(seconds){ seconds=Math.max(0,Math.round(seconds||0)); const m=Math.floor(seconds/60),s=seconds%60; return m?`${m}m ${String(s).padStart(2,'0')}s`:`${s}s`; }
@@ -14,7 +25,7 @@ function escapeHtml(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;',
 
 function switchView(view){ state.view=view; $$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`)); $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $('#pageTitle').textContent=view==='create'?'Motion Control':view==='history'?'History':'Account Pool'; $('#sidebar').classList.remove('open'); if(view==='history')renderHistory(); if(view==='accounts')refreshAccounts(); }
 
-async function api(url, options={}){ const r=await fetch(url,{...options,headers:{...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(options.headers||{})}}); let data={}; try{data=await r.json()}catch{} if(!r.ok) throw new Error(data.error||`HTTP ${r.status}`); return data; }
+async function api(url, options={}){ const r=await fetch(url,{...options,headers:{'X-Vanta-Device':getDeviceId(),...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(options.headers||{})}}); let data={}; try{data=await r.json()}catch{} if(!r.ok) throw new Error(data.error||`HTTP ${r.status}`); return data; }
 
 async function loadSession(){
   state.session=await api('/api/session'); state.accounts=state.session.accounts||[]; renderAccountSelect(); updateGenerate(); await refreshAccounts();
@@ -198,7 +209,7 @@ function renderHistory(){
     const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
     const resolvedAccountId=resolveHistoryAccountId(x);
     const rawDownloadUrl=(resolvedAccountId&&x.taskId)
-      ? `/api/tasks/${encodeURIComponent(x.taskId)}/download?accountId=${encodeURIComponent(resolvedAccountId)}`
+      ? `/api/tasks/${encodeURIComponent(x.taskId)}/download?accountId=${encodeURIComponent(resolvedAccountId)}&deviceId=${encodeURIComponent(getDeviceId())}`
       : (x.resultUrl||'');
     const safeDownloadUrl=escapeHtml(rawDownloadUrl);
     const result=x.resultUrl
