@@ -4,7 +4,7 @@ const state = {
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false,
 };
 const $ = s => document.querySelector(s);
-const $ = s => [...document.querySelectorAll(s)];
+const $$ = s => [...document.querySelectorAll(s)];
 
 function getDeviceId(){
   const key='vantaDeviceIdV1';
