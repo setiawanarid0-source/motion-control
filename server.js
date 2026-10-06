@@ -1,0 +1,354 @@
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import multer from 'multer';
+import axios from 'axios';
+import FormData from 'form-data';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const app = express();
+const PORT = Number(process.env.PORT || 3000);
+const RH_BASE = 'https://www.runninghub.ai';
+const COOKIE_NAME = 'vanta_session_v2';
+const MAX_ACCOUNTS = 6;
+const IMAGE_MAX = 20 * 1024 * 1024;
+const VIDEO_MAX = 100 * 1024 * 1024;
+
+const workflowGraphs = {
+  r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
+  current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
+};
+
+const workflowMeta = {
+  r15: {
+    id: 'r15',
+    name: 'R15 Baseline',
+    subtitle: 'Motion baseline · 30 FPS · 6 steps · CFG 1.5',
+    detail: 'Raw driving motion path retained; recovered pre-R16 baseline.'
+  },
+  current: {
+    id: 'current',
+    name: 'Current Workflow',
+    subtitle: 'SCAIL-2 Preserve V7 · 24 FPS · 8 steps · CFG 1',
+    detail: 'Workflow yang sebelumnya sudah dipakai VANTA Motion Studio.'
+  }
+};
+
+const masterSecret = process.env.APP_MASTER_KEY || 'development-only-change-me';
+const cipherKey = crypto.createHash('sha256').update(masterSecret).digest();
+if (!process.env.APP_MASTER_KEY) {
+  console.warn('[WARN] APP_MASTER_KEY is not set. Use a persistent secret in production.');
+}
+
+function encrypt(value) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', cipherKey, iv);
+  const raw = Buffer.from(JSON.stringify(value), 'utf8');
+  const encrypted = Buffer.concat([cipher.update(raw), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv, tag, encrypted].map(b => b.toString('base64url')).join('.');
+}
+
+function decrypt(token) {
+  if (!token) return null;
+  try {
+    const [ivB64, tagB64, dataB64] = token.split('.');
+    if (!ivB64 || !tagB64 || !dataB64) return null;
+    const decipher = crypto.createDecipheriv('aes-256-gcm', cipherKey, Buffer.from(ivB64, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tagB64, 'base64url'));
+    const out = Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64url')), decipher.final()]);
+    return JSON.parse(out.toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function getSession(req) {
+  const session = decrypt(req.cookies?.[COOKIE_NAME]);
+  const base = session && typeof session === 'object' ? session : {};
+  return {
+    accounts: Array.isArray(base.accounts) ? base.accounts.slice(0, MAX_ACCOUNTS) : [],
+    workflowId: String(base.workflowId || process.env.RUNNINGHUB_WORKFLOW_ID || '').trim(),
+  };
+}
+
+function saveSession(res, session, req) {
+  const secure = String(req.headers['x-forwarded-proto'] || '').includes('https') || req.secure;
+  res.cookie(COOKIE_NAME, encrypt(session), {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure,
+    maxAge: 180 * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+}
+
+function publicAccount(account, status = null) {
+  return {
+    id: account.id,
+    name: account.name,
+    addedAt: account.addedAt,
+    lastUsedAt: account.lastUsedAt || null,
+    status,
+  };
+}
+
+async function rhJson(pathname, apiKey, body, timeout = 30000) {
+  const { data } = await axios.post(`${RH_BASE}${pathname}`, body, {
+    timeout,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    validateStatus: () => true,
+  });
+  return data;
+}
+
+async function accountStatus(apiKey) {
+  const data = await rhJson('/uc/openapi/accountStatus', apiKey, { apikey: apiKey }, 20000);
+  if (!data || Number(data.code) !== 0) throw new Error(data?.msg || 'API key tidak dapat divalidasi.');
+  return {
+    remainCoins: Number(data.data?.remainCoins || 0),
+    currentTaskCounts: Number(data.data?.currentTaskCounts || 0),
+    currency: data.data?.currency || null,
+    apiType: data.data?.apiType || null,
+  };
+}
+
+async function uploadToRunningHub(apiKey, file) {
+  const form = new FormData();
+  form.append('apiKey', apiKey);
+  form.append('fileType', 'input');
+  form.append('file', fs.createReadStream(file.path), {
+    filename: file.originalname,
+    contentType: file.mimetype,
+    knownLength: file.size,
+  });
+  const response = await axios.post(`${RH_BASE}/task/openapi/upload`, form, {
+    timeout: 10 * 60 * 1000,
+    headers: {
+      ...form.getHeaders(),
+      Authorization: `Bearer ${apiKey}`,
+    },
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    validateStatus: () => true,
+  });
+  const data = response.data;
+  if (!data || Number(data.code) !== 0 || !data.data?.fileName) {
+    throw new Error(data?.msg || `Upload ${file.originalname} gagal.`);
+  }
+  return data.data.fileName;
+}
+
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile }) {
+  const imageName = await uploadToRunningHub(apiKey, imageFile);
+  const videoName = await uploadToRunningHub(apiKey, videoFile);
+  const payload = {
+    apiKey,
+    workflowId,
+    nodeInfoList: [
+      { nodeId: '30', fieldName: 'image', fieldValue: imageName },
+      { nodeId: '33', fieldName: 'video', fieldValue: videoName },
+      { nodeId: '331', fieldName: 'seed', fieldValue: 50 },
+    ],
+    workflow: JSON.stringify(workflowGraphs[workflowKey]),
+    addMetadata: true,
+    retainSeconds: 86400,
+  };
+  if (mode === 'standard') payload.instanceType = 'default';
+
+  const data = await rhJson('/task/openapi/create', apiKey, payload, 60000);
+  if (!data || Number(data.code) !== 0 || !data.data?.taskId) {
+    const tips = data?.data?.promptTips;
+    throw new Error(data?.msg || tips || 'RunningHub gagal membuat task.');
+  }
+  return data.data;
+}
+
+const upload = multer({
+  dest: '/tmp/vanta-motion/',
+  limits: { files: 2, fileSize: VIDEO_MAX },
+});
+
+app.disable('x-powered-by');
+app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h', etag: true }));
+
+app.get('/health', (req, res) => res.json({ ok: true, service: 'vanta-motion-studio', workflows: Object.keys(workflowGraphs) }));
+
+app.get('/api/workflows', (req, res) => {
+  res.json({ workflows: Object.values(workflowMeta) });
+});
+
+app.get('/api/session', async (req, res) => {
+  const session = getSession(req);
+  res.json({
+    workflowIdConfigured: Boolean(session.workflowId),
+    workflowId: session.workflowId ? `${session.workflowId.slice(0, 6)}••••${session.workflowId.slice(-4)}` : '',
+    accounts: session.accounts.map(a => publicAccount(a)),
+  });
+});
+
+app.put('/api/config', (req, res) => {
+  const workflowId = String(req.body?.workflowId || '').trim();
+  if (!/^\d{12,24}$/.test(workflowId)) {
+    return res.status(400).json({ error: 'Workflow ID harus berupa ID numerik RunningHub.' });
+  }
+  const session = getSession(req);
+  session.workflowId = workflowId;
+  saveSession(res, session, req);
+  res.json({ ok: true, masked: `${workflowId.slice(0, 6)}••••${workflowId.slice(-4)}` });
+});
+
+app.post('/api/accounts', async (req, res) => {
+  const apiKey = String(req.body?.apiKey || '').trim();
+  if (apiKey.length < 12 || apiKey.length > 256) return res.status(400).json({ error: 'API key tidak valid.' });
+  const session = getSession(req);
+  if (session.accounts.length >= MAX_ACCOUNTS) return res.status(400).json({ error: `Maksimal ${MAX_ACCOUNTS} akun dalam pool.` });
+  const fingerprint = crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
+  if (session.accounts.some(a => a.fingerprint === fingerprint)) return res.status(409).json({ error: 'API key ini sudah ada di pool.' });
+  try {
+    const status = await accountStatus(apiKey);
+    const account = {
+      id: crypto.randomUUID(),
+      name: `Account ${String(session.accounts.length + 1).padStart(2, '0')}`,
+      key: apiKey,
+      fingerprint,
+      addedAt: new Date().toISOString(),
+      lastUsedAt: null,
+    };
+    session.accounts.push(account);
+    saveSession(res, session, req);
+    res.json({ account: publicAccount(account, status) });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'API key tidak dapat divalidasi.' });
+  }
+});
+
+app.delete('/api/accounts/:id', (req, res) => {
+  const session = getSession(req);
+  const before = session.accounts.length;
+  session.accounts = session.accounts.filter(a => a.id !== req.params.id);
+  if (session.accounts.length === before) return res.status(404).json({ error: 'Akun tidak ditemukan.' });
+  session.accounts.forEach((a, i) => { a.name = `Account ${String(i + 1).padStart(2, '0')}`; });
+  saveSession(res, session, req);
+  res.json({ ok: true });
+});
+
+app.post('/api/accounts/refresh', async (req, res) => {
+  const session = getSession(req);
+  const accounts = await Promise.all(session.accounts.map(async account => {
+    try { return publicAccount(account, await accountStatus(account.key)); }
+    catch (error) { return { ...publicAccount(account), status: { error: error.message } }; }
+  }));
+  res.json({ accounts });
+});
+
+app.post('/api/generate', upload.fields([
+  { name: 'referenceImage', maxCount: 1 },
+  { name: 'videoReference', maxCount: 1 },
+]), async (req, res) => {
+  const imageFile = req.files?.referenceImage?.[0];
+  const videoFile = req.files?.videoReference?.[0];
+  const cleanup = () => {
+    for (const f of [imageFile, videoFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
+  };
+
+  try {
+    if (!imageFile || !videoFile) throw new Error('Reference Image dan Video Reference wajib diisi.');
+    if (imageFile.size > IMAGE_MAX) throw new Error('Reference Image maksimal 20 MB.');
+    if (videoFile.size > VIDEO_MAX) throw new Error('Video Reference maksimal 100 MB.');
+    if (!/^image\/(jpeg|png|webp)$/i.test(imageFile.mimetype)) throw new Error('Format gambar harus JPG, PNG, atau WEBP.');
+    if (!/^video\/(mp4|quicktime|webm|x-matroska)$/i.test(videoFile.mimetype)) throw new Error('Format video harus MP4, MOV, atau WEBM.');
+
+    const workflowKey = String(req.body?.workflow || 'r15');
+    const mode = String(req.body?.mode || 'lite');
+    const requestedAccountId = String(req.body?.accountId || 'auto');
+    if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
+    if (!['lite', 'standard'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
+
+    const session = getSession(req);
+    if (!session.workflowId) throw new Error('Template Workflow ID belum dikonfigurasi. Buka Account Pool → System Setup.');
+    if (!session.accounts.length) throw new Error('Belum ada RunningHub API key di Account Pool.');
+
+    let candidates = session.accounts;
+    if (requestedAccountId !== 'auto') {
+      candidates = session.accounts.filter(a => a.id === requestedAccountId);
+      if (!candidates.length) throw new Error('Akun yang dipilih tidak ditemukan.');
+    } else {
+      const ranked = await Promise.all(session.accounts.map(async a => {
+        try { return { a, s: await accountStatus(a.key) }; }
+        catch { return { a, s: { currentTaskCounts: 999999, remainCoins: -1 } }; }
+      }));
+      ranked.sort((x, y) => (x.s.currentTaskCounts - y.s.currentTaskCounts) || (y.s.remainCoins - x.s.remainCoins));
+      candidates = ranked.map(x => x.a);
+    }
+
+    let lastError = null;
+    for (const account of candidates) {
+      try {
+        const task = await createTask({
+          apiKey: account.key,
+          workflowId: session.workflowId,
+          workflowKey,
+          mode,
+          imageFile,
+          videoFile,
+        });
+        account.lastUsedAt = new Date().toISOString();
+        saveSession(res, session, req);
+        cleanup();
+        return res.json({
+          ok: true,
+          taskId: String(task.taskId),
+          taskStatus: task.taskStatus || 'QUEUED',
+          accountId: account.id,
+          accountName: account.name,
+          workflow: workflowMeta[workflowKey],
+          mode,
+          netWssUrl: task.netWssUrl || null,
+        });
+      } catch (error) {
+        lastError = error;
+        if (requestedAccountId !== 'auto') break;
+      }
+    }
+    throw lastError || new Error('Tidak ada akun RunningHub yang dapat membuat task.');
+  } catch (error) {
+    cleanup();
+    res.status(400).json({ error: error.message || 'Generate gagal.' });
+  }
+});
+
+app.post('/api/tasks/:taskId', async (req, res) => {
+  const session = getSession(req);
+  const accountId = String(req.body?.accountId || '');
+  const account = session.accounts.find(a => a.id === accountId);
+  if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan dalam sesi.' });
+  try {
+    const data = await rhJson('/task/openapi/outputs', account.key, { apiKey: account.key, taskId: req.params.taskId }, 30000);
+    const code = Number(data?.code);
+    if (code === 0 && Array.isArray(data?.data) && data.data.length) {
+      const outputs = data.data.map(x => ({ fileUrl: x.fileUrl, fileType: x.fileType, nodeId: x.nodeId ?? null })).filter(x => x.fileUrl);
+      return res.json({ state: 'success', outputs, rawCode: code });
+    }
+    if (code === 804 || code === 813 || code === 0) {
+      return res.json({ state: code === 813 ? 'queued' : 'running', rawCode: code, message: data?.msg || '' });
+    }
+    res.json({ state: 'failed', rawCode: code, message: data?.msg || 'Task gagal.' });
+  } catch (error) {
+    res.status(502).json({ error: error.message || 'Gagal mengambil status task.' });
+  }
+});
+
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
+
+app.listen(PORT, '0.0.0.0', () => console.log(`VANTA Motion Studio listening on :${PORT}`));
