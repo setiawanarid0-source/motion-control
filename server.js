@@ -349,6 +349,6 @@ app.post('/api/tasks/:taskId', async (req, res) => {
   }
 });
 
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
+app.use((req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
 
 app.listen(PORT, '0.0.0.0', () => console.log(`VANTA Motion Studio listening on :${PORT}`));
