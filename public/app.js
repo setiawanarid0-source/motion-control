@@ -40,26 +40,97 @@ function setMedia(kind,file){
 }
 function updateEstimates(){ const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
 function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&state.session?.workflowIdConfigured&&!state.task; $('#generateBtn').disabled=!ready; }
+function workflowName(){ return state.workflow==='r15'?'R15 Baseline':'Current Workflow'; }
+function estimateSeconds(){ if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
+function startVisibleTimer(){
+  state.startedAt=Date.now();
+  $('#taskElapsed').textContent='00:00';
+  clearInterval(state.elapsedTimer);
+  state.elapsedTimer=setInterval(()=>$('#taskElapsed').textContent=fmtElapsed(Date.now()-state.startedAt),1000);
+}
+function showStartingTask(){
+  $('#taskSection').classList.remove('hidden');
+  $('#resultSection').classList.add('hidden');
+  $('#taskStatus').textContent='Mengupload input';
+  $('#taskWorkflow').textContent=workflowName();
+  $('#taskAccount').textContent=$('#accountSelect').value==='auto'?'Automatic':'Akun dipilih';
+  $('#taskMode').textContent=state.mode==='standard'?'Standard':'Lite';
+  $('#taskId').textContent='Menunggu task ID';
+  const est=estimateSeconds();
+  $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
+  startVisibleTimer();
+  $('#taskSection').scrollIntoView({behavior:'smooth',block:'center'});
+}
 
 async function generate(){
-  if(!state.image||!state.video)return; const btn=$('#generateBtn');btn.disabled=true;btn.querySelector('span:first-child').textContent='Uploading…';
+  if(!state.image||!state.video)return;
+  const btn=$('#generateBtn');
+  btn.disabled=true;
+  btn.querySelector('span:first-child').textContent='Uploading…';
+  showStartingTask();
+  const startedIso=new Date().toISOString();
   const fd=new FormData();fd.append('referenceImage',state.image);fd.append('videoReference',state.video);fd.append('workflow',state.workflow);fd.append('mode',state.mode);fd.append('accountId',$('#accountSelect').value||'auto');
   try{
-    const data=await api('/api/generate',{method:'POST',body:fd}); state.task=data;state.startedAt=Date.now();showTask(data);saveHistory({taskId:data.taskId,workflow:data.workflow.name,mode:data.mode,account:data.accountName,video:state.video.name,status:'running',startedAt:new Date().toISOString(),resultUrl:null});startPolling();
-  }catch(e){toast(e.message,true);state.task=null;updateGenerate()}
-  finally{btn.querySelector('span:first-child').textContent='Generate motion';if(!state.task)updateGenerate();}
+    const data=await api('/api/generate',{method:'POST',body:fd});
+    state.task=data;
+    showTask(data);
+    saveHistory({taskId:data.taskId,workflow:data.workflow.name,mode:data.mode,account:data.accountName,video:state.video.name,videoSeconds:state.videoDuration,status:'running',startedAt:startedIso,runtimeMs:null,resultUrl:null});
+    startPolling();
+  }catch(e){
+    clearInterval(state.elapsedTimer);
+    $('#taskStatus').textContent='Gagal memulai';
+    $('#taskEstimate').textContent='Tidak selesai';
+    toast(e.message,true);
+    state.task=null;
+    updateGenerate();
+  } finally {
+    btn.querySelector('span:first-child').textContent='Generate motion';
+    if(!state.task)updateGenerate();
+  }
 }
-function showTask(data){$('#taskSection').classList.remove('hidden');$('#resultSection').classList.add('hidden');$('#taskStatus').textContent=data.taskStatus==='RUNNING'?'Memproses':'Dalam antrean';$('#taskWorkflow').textContent=data.workflow.name;$('#taskAccount').textContent=data.accountName;$('#taskMode').textContent=data.mode==='standard'?'Standard':'Lite';$('#taskId').textContent=`#${data.taskId}`;clearInterval(state.elapsedTimer);state.elapsedTimer=setInterval(()=>$('#taskElapsed').textContent=fmtElapsed(Date.now()-state.startedAt),1000);$('#taskSection').scrollIntoView({behavior:'smooth',block:'center'});}
+function showTask(data){
+  $('#taskSection').classList.remove('hidden');
+  $('#resultSection').classList.add('hidden');
+  $('#taskStatus').textContent=data.taskStatus==='RUNNING'?'Memproses':'Dalam antrean';
+  $('#taskWorkflow').textContent=data.workflow.name;
+  $('#taskAccount').textContent=data.accountName;
+  $('#taskMode').textContent=data.mode==='standard'?'Standard':'Lite';
+  $('#taskId').textContent=`#${data.taskId}`;
+  const est=estimateSeconds();
+  $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
+}
 function startPolling(){clearInterval(state.pollTimer);pollTask();state.pollTimer=setInterval(pollTask,6000)}
 async function pollTask(){ if(!state.task)return; try{const data=await api(`/api/tasks/${state.task.taskId}`,{method:'POST',body:JSON.stringify({accountId:state.task.accountId})}); if(data.state==='queued')$('#taskStatus').textContent='Dalam antrean'; if(data.state==='running')$('#taskStatus').textContent='Memproses'; if(data.state==='failed'){finishFailed(data.message||'Task gagal.');} if(data.state==='success'){const video=data.outputs.find(o=>String(o.fileType||'').toLowerCase().includes('video'))||data.outputs[0];if(!video?.fileUrl)return finishFailed('Task selesai tetapi URL output tidak ditemukan.');finishSuccess(video.fileUrl);} }catch(e){console.warn('poll',e.message)} }
-function finishFailed(msg){clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);toast(msg,true);updateHistory(state.task.taskId,{status:'failed',finishedAt:new Date().toISOString()});state.task=null;$('#taskStatus').textContent='Failed';updateGenerate();}
-function finishSuccess(url){clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);const elapsed=Date.now()-state.startedAt;$('#taskStatus').textContent='Selesai';$('#resultSection').classList.remove('hidden');$('#resultVideo').src=url;$('#downloadBtn').href=url;$('#resultWorkflow').textContent=state.task.workflow.name;$('#resultDuration').textContent=fmtElapsed(elapsed);updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),resultUrl:url});state.task=null;updateGenerate();$('#resultSection').scrollIntoView({behavior:'smooth',block:'start'});toast('Video selesai dibuat.');}
+function finishFailed(msg){
+  clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
+  const elapsed=Date.now()-state.startedAt;
+  $('#taskElapsed').textContent=fmtElapsed(elapsed);
+  $('#taskEstimate').textContent='Task gagal';
+  toast(msg,true);
+  updateHistory(state.task.taskId,{status:'failed',finishedAt:new Date().toISOString(),runtimeMs:elapsed});
+  state.task=null;$('#taskStatus').textContent='Failed';updateGenerate();
+}
+function finishSuccess(url){
+  clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
+  const elapsed=Date.now()-state.startedAt;
+  $('#taskElapsed').textContent=fmtElapsed(elapsed);
+  $('#taskEstimate').textContent='Selesai';
+  $('#taskStatus').textContent='Selesai';
+  $('#resultSection').classList.remove('hidden');
+  $('#resultVideo').src=url;$('#downloadBtn').href=url;
+  $('#resultWorkflow').textContent=state.task.workflow.name;
+  $('#resultDuration').textContent=`Generate time ${fmtElapsed(elapsed)}`;
+  updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:url});
+  state.task=null;updateGenerate();
+  $('#resultSection').scrollIntoView({behavior:'smooth',block:'start'});
+  toast(`Video selesai dalam ${fmtElapsed(elapsed)}.`);
+}
 
 function history(){try{return JSON.parse(localStorage.getItem('vantaHistoryV2')||'[]')}catch{return[]}}
 function setHistory(items){localStorage.setItem('vantaHistoryV2',JSON.stringify(items.slice(0,100)))}
 function saveHistory(item){setHistory([item,...history().filter(x=>x.taskId!==item.taskId)])}
 function updateHistory(taskId,patch){setHistory(history().map(x=>x.taskId===taskId?{...x,...patch}:x));if(state.view==='history')renderHistory()}
-function renderHistory(){const items=history();const root=$('#historyBody');if(!items.length){root.innerHTML='<tr><td colspan="7" style="text-align:center;color:#798493;padding:34px">Belum ada riwayat.</td></tr>';return}root.innerHTML=items.map(x=>`<tr><td>${new Date(x.startedAt).toLocaleString('id-ID')}</td><td>${escapeHtml(x.workflow)}</td><td>${escapeHtml(x.mode)}</td><td>${escapeHtml(x.account)}</td><td>${escapeHtml(x.video)}</td><td>${escapeHtml(x.status)}</td><td>${x.resultUrl?`<a href="${x.resultUrl}" target="_blank" rel="noopener">Open</a>`:'—'}</td></tr>`).join('')}
+function renderHistory(){const items=history();const root=$('#historyBody');if(!items.length){root.innerHTML='<tr><td colspan="8" style="text-align:center;color:#798493;padding:34px">Belum ada riwayat.</td></tr>';return}root.innerHTML=items.map(x=>`<tr><td>${new Date(x.startedAt).toLocaleString('id-ID')}</td><td>${escapeHtml(x.workflow)}</td><td>${escapeHtml(x.mode)}</td><td>${escapeHtml(x.account)}</td><td>${escapeHtml(x.video)}</td><td>${x.runtimeMs?fmtElapsed(x.runtimeMs):'—'}</td><td>${escapeHtml(x.status)}</td><td>${x.resultUrl?`<a href="${x.resultUrl}" target="_blank" rel="noopener">Open</a>`:'—'}</td></tr>`).join('')}
 
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
