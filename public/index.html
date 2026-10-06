@@ -101,7 +101,6 @@
             <select id="accountSelect"><option value="auto">Automatic</option></select>
             <div class="account-hint" id="accountHint">Akun otomatis dipilih dari beban task terendah, lalu saldo tertinggi.</div>
 
-            <div class="setup-warning hidden" id="setupWarning">Template Workflow ID belum diatur. Buka <button id="openSetupBtn">Account Pool</button> untuk setup satu kali.</div>
             <button id="generateBtn" class="generate-btn" disabled><span>Generate motion</span><span class="btn-arrow">↗</span></button>
           </div>
         </div>
@@ -128,15 +127,9 @@
       </section>
 
       <section id="view-accounts" class="view">
-        <div class="section-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>API key disimpan dalam cookie terenkripsi; nilai mentah tidak dikirim kembali ke browser.</p></div><button class="ghost-btn" id="refreshAccounts">Refresh status</button></div>
+        <div class="section-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>Tambahkan API key RunningHub. Workflow R15 dan Current sudah dikunci otomatis di backend.</p></div><button class="ghost-btn" id="refreshAccounts">Refresh status</button></div>
         <div class="account-layout">
           <div class="panel add-account">
-            <h3>System Setup</h3>
-            <label class="field-label" for="workflowIdInput">RUNNINGHUB TEMPLATE WORKFLOW ID</label>
-            <input id="workflowIdInput" class="text-input" inputmode="numeric" autocomplete="off" placeholder="Contoh: 1904136902449209346" />
-            <button id="saveWorkflowId" class="secondary-btn">Save workflow ID</button>
-            <p class="form-note" id="workflowIdState">Dipakai sebagai template ID; graph R15/current dikirim sebagai workflow override.</p>
-            <div class="divider"></div>
             <h3>Add RunningHub API key</h3>
             <label class="field-label" for="apiKeyInput">API KEY</label>
             <input id="apiKeyInput" class="text-input" type="password" autocomplete="off" placeholder="Paste API key" />
