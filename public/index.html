@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#090b0e" />
+  <title>VANTA Motion Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">V</div>
+        <div class="brand-copy"><strong>VANTA</strong><span>motion studio</span></div>
+      </div>
+      <nav class="nav-list" aria-label="Main navigation">
+        <button class="nav-item active" data-view="create"><span class="nav-icon">◈</span><span>Create</span></button>
+        <button class="nav-item" data-view="history"><span class="nav-icon">↺</span><span>History</span></button>
+        <button class="nav-item" data-view="accounts"><span class="nav-icon">◎</span><span>Account Pool</span></button>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="status-dot" id="poolDot"></span>
+        <div><strong id="poolCount">0 akun siap</strong><small>RunningHub pool</small></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="menuBtn" class="icon-btn menu-btn" aria-label="Toggle sidebar">☰</button>
+        <div class="topbar-title">
+          <div class="eyebrow">WORKFLOW / KOH MOTION</div>
+          <h1 id="pageTitle">Motion Control</h1>
+        </div>
+        <div class="balance-pill" title="Total RH credits dari akun yang berhasil dibaca">
+          <span>Pool credits</span><strong id="poolCredits">0</strong><small>RH</small>
+        </div>
+      </header>
+
+      <section id="view-create" class="view active">
+        <div class="hero-copy">
+          <div class="hero-kicker"><span class="pulse"></span>DUAL WORKFLOW</div>
+          <h2>Direct motion.<br><span>Choose the pipeline.</span></h2>
+          <p>Gunakan gambar karakter dan video gerakan yang sama, lalu pilih workflow yang ingin diuji. R15 dan workflow lama berjalan terpisah tanpa saling mengubah.</p>
+        </div>
+
+        <div class="workspace-grid">
+          <div class="panel media-panel">
+            <div class="panel-head"><span>01</span><div><h3>Source media</h3><p>Kedua file wajib diisi</p></div></div>
+            <div class="upload-grid">
+              <label class="dropzone" id="imageDrop">
+                <input id="referenceImage" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+                <div class="drop-icon">＋</div>
+                <strong>Reference Image</strong>
+                <span>JPG, PNG, WEBP · maks. 20 MB</span>
+                <div class="media-preview" id="imagePreview"></div>
+              </label>
+              <label class="dropzone" id="videoDrop">
+                <input id="videoReference" type="file" accept="video/mp4,video/quicktime,video/webm" hidden />
+                <div class="drop-icon">▶</div>
+                <strong>Video Reference</strong>
+                <span>MP4, MOV, WEBM · maks. 100 MB</span>
+                <div class="media-preview" id="videoPreview"></div>
+              </label>
+            </div>
+          </div>
+
+          <div class="panel launch-panel">
+            <div class="panel-head"><span>02</span><div><h3>Launch sequence</h3><p>Pilih workflow, machine, dan akun</p></div></div>
+
+            <label class="field-label">WORKFLOW</label>
+            <div class="workflow-list" id="workflowList">
+              <button class="workflow-card selected" data-workflow="r15">
+                <div class="workflow-row"><strong>R15 Baseline</strong><span class="badge badge-accent">01</span></div>
+                <p>30 FPS · 6 steps · CFG 1.5</p>
+                <small>Recovered pre-R16 motion baseline.</small>
+              </button>
+              <button class="workflow-card" data-workflow="current">
+                <div class="workflow-row"><strong>Current Workflow</strong><span class="badge">02</span></div>
+                <p>SCAIL-2 Preserve V7</p>
+                <small>Workflow yang sebelumnya dipakai website.</small>
+              </button>
+            </div>
+
+            <label class="field-label">RUNNINGHUB MACHINE</label>
+            <div class="mode-grid">
+              <button class="mode-card selected" data-mode="lite">
+                <div class="mode-row"><strong>Lite</strong><span>Auto schedule</span></div>
+                <div class="mode-metrics"><div><small>Estimated credits</small><b id="liteCredits">—</b></div><div><small>Estimated time</small><b id="liteTime">—</b></div></div>
+              </button>
+              <button class="mode-card" data-mode="standard">
+                <div class="mode-row"><strong>Standard</strong><span>24 GB · default</span></div>
+                <div class="mode-metrics"><div><small>Estimated credits</small><b id="standardCredits">—</b></div><div><small>Estimated time</small><b id="standardTime">—</b></div></div>
+              </button>
+            </div>
+
+            <label class="field-label" for="accountSelect">ACCOUNT</label>
+            <select id="accountSelect"><option value="auto">Automatic</option></select>
+            <div class="account-hint" id="accountHint">Akun otomatis dipilih dari beban task terendah, lalu saldo tertinggi.</div>
+
+            <div class="setup-warning hidden" id="setupWarning">Template Workflow ID belum diatur. Buka <button id="openSetupBtn">Account Pool</button> untuk setup satu kali.</div>
+            <button id="generateBtn" class="generate-btn" disabled><span>Generate motion</span><span class="btn-arrow">↗</span></button>
+          </div>
+        </div>
+
+        <section id="taskSection" class="panel task-panel hidden">
+          <div class="task-head">
+            <div><div class="eyebrow">LIVE TASK</div><h3 id="taskStatus">Menyiapkan</h3></div>
+            <div class="eta"><small>Elapsed</small><strong id="taskElapsed">00:00</strong></div>
+          </div>
+          <div class="progress-track indeterminate"><div class="progress-bar"></div></div>
+          <div class="task-meta"><span id="taskWorkflow">—</span><span id="taskAccount">—</span><span id="taskMode">—</span><span id="taskId">—</span></div>
+        </section>
+
+        <section id="resultSection" class="panel result-panel hidden">
+          <div class="result-head"><div><div class="eyebrow">RESULT</div><h3>Generation completed</h3></div><div class="result-stats"><span id="resultWorkflow">—</span><span id="resultDuration">—</span></div></div>
+          <div class="video-frame"><video id="resultVideo" controls playsinline></video></div>
+          <div class="result-actions"><div class="cache-state"><span class="status-dot online"></span>Hasil siap diputar</div><a id="downloadBtn" class="download-btn" href="#" download>Download</a></div>
+        </section>
+      </section>
+
+      <section id="view-history" class="view">
+        <div class="section-title"><div><div class="eyebrow">ARCHIVE</div><h2>Generation history</h2><p>Riwayat lokal browser, termasuk workflow yang digunakan.</p></div><button class="ghost-btn" id="clearHistory">Clear</button></div>
+        <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+      </section>
+
+      <section id="view-accounts" class="view">
+        <div class="section-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>API key disimpan dalam cookie terenkripsi; nilai mentah tidak dikirim kembali ke browser.</p></div><button class="ghost-btn" id="refreshAccounts">Refresh status</button></div>
+        <div class="account-layout">
+          <div class="panel add-account">
+            <h3>System Setup</h3>
+            <label class="field-label" for="workflowIdInput">RUNNINGHUB TEMPLATE WORKFLOW ID</label>
+            <input id="workflowIdInput" class="text-input" inputmode="numeric" autocomplete="off" placeholder="Contoh: 1904136902449209346" />
+            <button id="saveWorkflowId" class="secondary-btn">Save workflow ID</button>
+            <p class="form-note" id="workflowIdState">Dipakai sebagai template ID; graph R15/current dikirim sebagai workflow override.</p>
+            <div class="divider"></div>
+            <h3>Add RunningHub API key</h3>
+            <label class="field-label" for="apiKeyInput">API KEY</label>
+            <input id="apiKeyInput" class="text-input" type="password" autocomplete="off" placeholder="Paste API key" />
+            <button id="addAccountBtn" class="generate-btn compact">Add to pool</button>
+            <p class="form-note">Key divalidasi ke RunningHub sebelum disimpan. Maksimal 6 akun.</p>
+          </div>
+          <div class="account-list" id="accountList"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
