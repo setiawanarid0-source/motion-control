@@ -196,8 +196,13 @@ function renderHistory(){
     const statusLabel=historyStatusLabel(x.status);
     const error=x.error?`<small class="history-error" title="${escapeHtml(x.error)}">${escapeHtml(x.error)}</small>`:'';
     const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
+    const resolvedAccountId=resolveHistoryAccountId(x);
+    const rawDownloadUrl=(resolvedAccountId&&x.taskId)
+      ? `/api/tasks/${encodeURIComponent(x.taskId)}/download?accountId=${encodeURIComponent(resolvedAccountId)}`
+      : (x.resultUrl||'');
+    const safeDownloadUrl=escapeHtml(rawDownloadUrl);
     const result=x.resultUrl
-      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safeUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Preview</button><a class="history-action-btn download" href="${safeUrl}" download>Download</a></div>`
+      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safeUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Preview</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a></div>`
       : (isActiveHistoryStatus(x.status)?'<span class="history-pending"><span class="history-live-dot"></span>Menunggu hasil</span>':'—');
     return `<tr data-task-id="${escapeHtml(x.taskId||'')}">
       <td>${new Date(x.startedAt).toLocaleString('id-ID')}</td>
@@ -240,7 +245,7 @@ async function pollHistoryTasks(){
     state.historyPollBusy=false;
   }
 }
-function openHistoryPreview(url,taskId=''){
+function openHistoryPreview(url,taskId='',downloadUrl=''){
   const modal=$('#historyPreviewModal');
   const video=$('#historyPreviewVideo');
   const download=$('#historyPreviewDownload');
@@ -249,8 +254,8 @@ function openHistoryPreview(url,taskId=''){
   video.pause();
   video.src=url;
   video.load();
-  download.href=url;
-  download.setAttribute('download', taskId?`motion-${taskId}.mp4`:'motion-result.mp4');
+  download.href=downloadUrl||url;
+  download.removeAttribute('download');
   if(title) title.textContent=taskId?`Preview #${taskId}`:'Video preview';
   modal.classList.remove('hidden');
   document.body.classList.add('modal-open');
@@ -269,7 +274,7 @@ function bindHistoryActions(){
       const btn=e.target.closest('[data-preview-url]');
       if(!btn)return;
       e.preventDefault();
-      openHistoryPreview(btn.dataset.previewUrl,btn.dataset.previewTask||'');
+      openHistoryPreview(btn.dataset.previewUrl,btn.dataset.previewTask||'',btn.dataset.downloadUrl||'');
     });
   }
   $('#historyPreviewClose')?.addEventListener('click',closeHistoryPreview);
