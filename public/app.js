@@ -195,7 +195,10 @@ function renderHistory(){
     const statusClass=historyStatusClass(x.status);
     const statusLabel=historyStatusLabel(x.status);
     const error=x.error?`<small class="history-error" title="${escapeHtml(x.error)}">${escapeHtml(x.error)}</small>`:'';
-    const result=x.resultUrl?`<a href="${x.resultUrl}" target="_blank" rel="noopener">Open</a>`:(isActiveHistoryStatus(x.status)?'<span class="history-live-dot"></span>':'—');
+    const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
+    const result=x.resultUrl
+      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safeUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Preview</button><a class="history-action-btn download" href="${safeUrl}" download>Download</a></div>`
+      : (isActiveHistoryStatus(x.status)?'<span class="history-pending"><span class="history-live-dot"></span>Menunggu hasil</span>':'—');
     return `<tr data-task-id="${escapeHtml(x.taskId||'')}">
       <td>${new Date(x.startedAt).toLocaleString('id-ID')}</td>
       <td>${escapeHtml(x.workflow)}</td>
@@ -237,6 +240,44 @@ async function pollHistoryTasks(){
     state.historyPollBusy=false;
   }
 }
+function openHistoryPreview(url,taskId=''){
+  const modal=$('#historyPreviewModal');
+  const video=$('#historyPreviewVideo');
+  const download=$('#historyPreviewDownload');
+  const title=$('#historyPreviewTitle');
+  if(!modal||!video||!download)return;
+  video.pause();
+  video.src=url;
+  video.load();
+  download.href=url;
+  download.setAttribute('download', taskId?`motion-${taskId}.mp4`:'motion-result.mp4');
+  if(title) title.textContent=taskId?`Preview #${taskId}`:'Video preview';
+  modal.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+}
+function closeHistoryPreview(){
+  const modal=$('#historyPreviewModal');
+  const video=$('#historyPreviewVideo');
+  if(video){video.pause();video.removeAttribute('src');video.load();}
+  if(modal)modal.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+}
+function bindHistoryActions(){
+  const body=$('#historyBody');
+  if(body){
+    body.addEventListener('click',e=>{
+      const btn=e.target.closest('[data-preview-url]');
+      if(!btn)return;
+      e.preventDefault();
+      openHistoryPreview(btn.dataset.previewUrl,btn.dataset.previewTask||'');
+    });
+  }
+  $('#historyPreviewClose')?.addEventListener('click',closeHistoryPreview);
+  $('#historyPreviewCloseBottom')?.addEventListener('click',closeHistoryPreview);
+  $('[data-close-preview]').forEach(el=>el.addEventListener('click',closeHistoryPreview));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeHistoryPreview();});
+}
+
 function startHistoryMonitor(){
   clearInterval(state.historyPollTimer);
   clearInterval(state.historyClockTimer);
@@ -254,4 +295,4 @@ initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#vide
 $('#generateBtn').onclick=generate;$('#refreshAccounts').onclick=refreshAccounts;$('#clearHistory').onclick=()=>{localStorage.removeItem('vantaHistoryV2');renderHistory();toast('History dibersihkan.')};
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
 
-loadSession().then(()=>startHistoryMonitor()).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
+bindHistoryActions();loadSession().then(()=>startHistoryMonitor()).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
