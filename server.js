@@ -17,6 +17,7 @@ const COOKIE_NAME = 'vanta_session_v2';
 const MAX_ACCOUNTS = 6;
 const IMAGE_MAX = 20 * 1024 * 1024;
 const VIDEO_MAX = 100 * 1024 * 1024;
+const LOCKED_WORKFLOW_ID = process.env.RUNNINGHUB_WORKFLOW_ID || '2101170393796079617';
 
 const workflowGraphs = {
   r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
@@ -72,7 +73,6 @@ function getSession(req) {
   const base = session && typeof session === 'object' ? session : {};
   return {
     accounts: Array.isArray(base.accounts) ? base.accounts.slice(0, MAX_ACCOUNTS) : [],
-    workflowId: String(base.workflowId || process.env.RUNNINGHUB_WORKFLOW_ID || '').trim(),
   };
 }
 
@@ -191,21 +191,9 @@ app.get('/api/workflows', (req, res) => {
 app.get('/api/session', async (req, res) => {
   const session = getSession(req);
   res.json({
-    workflowIdConfigured: Boolean(session.workflowId),
-    workflowId: session.workflowId ? `${session.workflowId.slice(0, 6)}••••${session.workflowId.slice(-4)}` : '',
     accounts: session.accounts.map(a => publicAccount(a)),
+    workflowsReady: true,
   });
-});
-
-app.put('/api/config', (req, res) => {
-  const workflowId = String(req.body?.workflowId || '').trim();
-  if (!/^\d{12,24}$/.test(workflowId)) {
-    return res.status(400).json({ error: 'Workflow ID harus berupa ID numerik RunningHub.' });
-  }
-  const session = getSession(req);
-  session.workflowId = workflowId;
-  saveSession(res, session, req);
-  res.json({ ok: true, masked: `${workflowId.slice(0, 6)}••••${workflowId.slice(-4)}` });
 });
 
 app.post('/api/accounts', async (req, res) => {
@@ -276,7 +264,6 @@ app.post('/api/generate', upload.fields([
     if (!['lite', 'standard'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
 
     const session = getSession(req);
-    if (!session.workflowId) throw new Error('Template Workflow ID belum dikonfigurasi. Buka Account Pool → System Setup.');
     if (!session.accounts.length) throw new Error('Belum ada RunningHub API key di Account Pool.');
 
     let candidates = session.accounts;
@@ -297,7 +284,7 @@ app.post('/api/generate', upload.fields([
       try {
         const task = await createTask({
           apiKey: account.key,
-          workflowId: session.workflowId,
+          workflowId: LOCKED_WORKFLOW_ID,
           workflowKey,
           mode,
           imageFile,
