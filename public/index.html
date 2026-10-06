@@ -109,14 +109,14 @@
         <section id="taskSection" class="panel task-panel hidden">
           <div class="task-head">
             <div><div class="eyebrow">LIVE TASK</div><h3 id="taskStatus">Menyiapkan</h3></div>
-            <div class="eta"><small>Elapsed</small><strong id="taskElapsed">00:00</strong></div>
+            <div class="eta"><small>Generate time</small><strong id="taskElapsed">00:00</strong><span id="taskEstimate">Estimasi —</span></div>
           </div>
           <div class="progress-track indeterminate"><div class="progress-bar"></div></div>
           <div class="task-meta"><span id="taskWorkflow">—</span><span id="taskAccount">—</span><span id="taskMode">—</span><span id="taskId">—</span></div>
         </section>
 
         <section id="resultSection" class="panel result-panel hidden">
-          <div class="result-head"><div><div class="eyebrow">RESULT</div><h3>Generation completed</h3></div><div class="result-stats"><span id="resultWorkflow">—</span><span id="resultDuration">—</span></div></div>
+          <div class="result-head"><div><div class="eyebrow">RESULT</div><h3>Generation completed</h3></div><div class="result-stats"><span id="resultWorkflow">—</span><span id="resultDuration">Generate time —</span></div></div>
           <div class="video-frame"><video id="resultVideo" controls playsinline></video></div>
           <div class="result-actions"><div class="cache-state"><span class="status-dot online"></span>Hasil siap diputar</div><a id="downloadBtn" class="download-btn" href="#" download>Download</a></div>
         </section>
@@ -124,7 +124,7 @@
 
       <section id="view-history" class="view">
         <div class="section-title"><div><div class="eyebrow">ARCHIVE</div><h2>Generation history</h2><p>Riwayat lokal browser, termasuk workflow yang digunakan.</p></div><button class="ghost-btn" id="clearHistory">Clear</button></div>
-        <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+        <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Generate time</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
       </section>
 
       <section id="view-accounts" class="view">
