@@ -18,6 +18,8 @@ const MAX_ACCOUNTS = 6;
 const IMAGE_MAX = 20 * 1024 * 1024;
 const VIDEO_MAX = 100 * 1024 * 1024;
 const LOCKED_WORKFLOW_ID = process.env.RUNNINGHUB_WORKFLOW_ID || '2101170393796079617';
+const DATA_DIR = process.env.VANTA_DATA_DIR || '/data';
+const ACCOUNT_DIR = path.join(DATA_DIR, 'account-vaults');
 
 const workflowGraphs = {
   r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
@@ -66,6 +68,50 @@ function decrypt(token) {
   } catch {
     return null;
   }
+}
+
+function getDeviceId(req) {
+  const raw = String(req.headers['x-vanta-device'] || '').trim();
+  return /^[a-zA-Z0-9_-]{20,128}$/.test(raw) ? raw : '';
+}
+
+function accountVaultPath(deviceId) {
+  return path.join(ACCOUNT_DIR, `${deviceId}.enc`);
+}
+
+function loadVaultAccounts(deviceId) {
+  if (!deviceId) return [];
+  try {
+    const token = fs.readFileSync(accountVaultPath(deviceId), 'utf8').trim();
+    const data = decrypt(token);
+    return Array.isArray(data?.accounts) ? data.accounts.slice(0, MAX_ACCOUNTS) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveVaultAccounts(deviceId, accounts) {
+  if (!deviceId) return;
+  fs.mkdirSync(ACCOUNT_DIR, { recursive: true });
+  const target = accountVaultPath(deviceId);
+  const temp = `${target}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(temp, encrypt({ accounts: accounts.slice(0, MAX_ACCOUNTS), updatedAt: new Date().toISOString() }), { mode: 0o600 });
+  fs.renameSync(temp, target);
+}
+
+function getPersistentAccounts(req) {
+  const deviceId = getDeviceId(req);
+  let accounts = loadVaultAccounts(deviceId);
+
+  // One-time migration from the older encrypted cookie session if it still exists.
+  if (!accounts.length && deviceId) {
+    const legacy = getSession(req);
+    if (legacy.accounts.length) {
+      accounts = legacy.accounts;
+      saveVaultAccounts(deviceId, accounts);
+    }
+  }
+  return { deviceId, accounts };
 }
 
 function getSession(req) {
@@ -188,62 +234,66 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
-app.get('/health', (req, res) => res.json({ ok: true, service: 'vanta-motion-studio', workflows: Object.keys(workflowGraphs) }));
+app.get('/health', (req, res) => res.json({ ok: true, service: 'vanta-motion-studio', workflows: Object.keys(workflowGraphs), persistentStorage: DATA_DIR }));
 
 app.get('/api/workflows', (req, res) => {
   res.json({ workflows: Object.values(workflowMeta) });
 });
 
 app.get('/api/session', async (req, res) => {
-  const session = getSession(req);
+  const { deviceId, accounts } = getPersistentAccounts(req);
+  if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
   res.json({
-    accounts: session.accounts.map(a => publicAccount(a)),
+    accounts: accounts.map(a => publicAccount(a)),
     workflowsReady: true,
+    storage: 'persistent',
   });
 });
 
 app.post('/api/accounts', async (req, res) => {
   const apiKey = String(req.body?.apiKey || '').trim();
   if (apiKey.length < 12 || apiKey.length > 256) return res.status(400).json({ error: 'API key tidak valid.' });
-  const session = getSession(req);
-  if (session.accounts.length >= MAX_ACCOUNTS) return res.status(400).json({ error: `Maksimal ${MAX_ACCOUNTS} akun dalam pool.` });
+  const { deviceId, accounts } = getPersistentAccounts(req);
+  if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
+  if (accounts.length >= MAX_ACCOUNTS) return res.status(400).json({ error: `Maksimal ${MAX_ACCOUNTS} akun dalam pool.` });
   const fingerprint = crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
-  if (session.accounts.some(a => a.fingerprint === fingerprint)) return res.status(409).json({ error: 'API key ini sudah ada di pool.' });
+  if (accounts.some(a => a.fingerprint === fingerprint)) return res.status(409).json({ error: 'API key ini sudah ada di pool.' });
   try {
     const status = await accountStatus(apiKey);
     const account = {
       id: crypto.randomUUID(),
-      name: `Account ${String(session.accounts.length + 1).padStart(2, '0')}`,
+      name: `Account ${String(accounts.length + 1).padStart(2, '0')}`,
       key: apiKey,
       fingerprint,
       addedAt: new Date().toISOString(),
       lastUsedAt: null,
     };
-    session.accounts.push(account);
-    saveSession(res, session, req);
-    res.json({ account: publicAccount(account, status) });
+    accounts.push(account);
+    saveVaultAccounts(deviceId, accounts);
+    res.json({ account: publicAccount(account, status), storage: 'persistent' });
   } catch (error) {
     res.status(400).json({ error: error.message || 'API key tidak dapat divalidasi.' });
   }
 });
 
 app.delete('/api/accounts/:id', (req, res) => {
-  const session = getSession(req);
-  const before = session.accounts.length;
-  session.accounts = session.accounts.filter(a => a.id !== req.params.id);
-  if (session.accounts.length === before) return res.status(404).json({ error: 'Akun tidak ditemukan.' });
-  session.accounts.forEach((a, i) => { a.name = `Account ${String(i + 1).padStart(2, '0')}`; });
-  saveSession(res, session, req);
+  const { deviceId, accounts } = getPersistentAccounts(req);
+  if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
+  const next = accounts.filter(a => a.id !== req.params.id);
+  if (next.length === accounts.length) return res.status(404).json({ error: 'Akun tidak ditemukan.' });
+  next.forEach((a, i) => { a.name = `Account ${String(i + 1).padStart(2, '0')}`; });
+  saveVaultAccounts(deviceId, next);
   res.json({ ok: true });
 });
 
 app.post('/api/accounts/refresh', async (req, res) => {
-  const session = getSession(req);
-  const accounts = await Promise.all(session.accounts.map(async account => {
+  const { deviceId, accounts } = getPersistentAccounts(req);
+  if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
+  const publicAccounts = await Promise.all(accounts.map(async account => {
     try { return publicAccount(account, await accountStatus(account.key)); }
     catch (error) { return { ...publicAccount(account), status: { error: error.message } }; }
   }));
-  res.json({ accounts });
+  res.json({ accounts: publicAccounts });
 });
 
 app.post('/api/generate', upload.fields([
@@ -269,15 +319,16 @@ app.post('/api/generate', upload.fields([
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
     if (!['lite', 'standard'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
 
-    const session = getSession(req);
-    if (!session.accounts.length) throw new Error('Belum ada RunningHub API key di Account Pool.');
+    const { deviceId, accounts } = getPersistentAccounts(req);
+    if (!deviceId) throw new Error('Device session tidak tersedia. Reload halaman.');
+    if (!accounts.length) throw new Error('Belum ada RunningHub API key di Account Pool.');
 
-    let candidates = session.accounts;
+    let candidates = accounts;
     if (requestedAccountId !== 'auto') {
-      candidates = session.accounts.filter(a => a.id === requestedAccountId);
+      candidates = accounts.filter(a => a.id === requestedAccountId);
       if (!candidates.length) throw new Error('Akun yang dipilih tidak ditemukan.');
     } else {
-      const ranked = await Promise.all(session.accounts.map(async a => {
+      const ranked = await Promise.all(accounts.map(async a => {
         try { return { a, s: await accountStatus(a.key) }; }
         catch { return { a, s: { currentTaskCounts: 999999, remainCoins: -1 } }; }
       }));
@@ -297,7 +348,7 @@ app.post('/api/generate', upload.fields([
           videoFile,
         });
         account.lastUsedAt = new Date().toISOString();
-        saveSession(res, session, req);
+        saveVaultAccounts(deviceId, accounts);
         cleanup();
         return res.json({
           ok: true,
@@ -322,9 +373,9 @@ app.post('/api/generate', upload.fields([
 });
 
 app.post('/api/tasks/:taskId', async (req, res) => {
-  const session = getSession(req);
+  const { accounts } = getPersistentAccounts(req);
   const accountId = String(req.body?.accountId || '');
-  const account = session.accounts.find(a => a.id === accountId);
+  const account = accounts.find(a => a.id === accountId);
   if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan dalam sesi.' });
   try {
     const data = await rhJson('/task/openapi/outputs', account.key, { apiKey: account.key, taskId: req.params.taskId }, 30000);
@@ -343,9 +394,9 @@ app.post('/api/tasks/:taskId', async (req, res) => {
 });
 
 app.get('/api/tasks/:taskId/download', async (req, res) => {
-  const session = getSession(req);
+  const { accounts } = getPersistentAccounts(req);
   const accountId = String(req.query?.accountId || '');
-  const account = session.accounts.find(a => a.id === accountId);
+  const account = accounts.find(a => a.id === accountId);
   if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan dalam sesi.' });
   try {
     const data = await rhJson('/task/openapi/outputs', account.key, { apiKey: account.key, taskId: req.params.taskId }, 30000);
