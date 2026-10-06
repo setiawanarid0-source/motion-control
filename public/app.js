@@ -1,6 +1,7 @@
 const state = {
   view: 'create', workflow: 'r15', mode: 'lite', session: null, accounts: [],
   image: null, video: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
+  historyPollTimer: null, historyClockTimer: null, historyPollBusy: false,
 };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -73,7 +74,7 @@ async function generate(){
     const data=await api('/api/generate',{method:'POST',body:fd});
     state.task=data;
     showTask(data);
-    saveHistory({taskId:data.taskId,workflow:data.workflow.name,mode:data.mode,account:data.accountName,video:state.video.name,videoSeconds:state.videoDuration,status:'running',startedAt:startedIso,runtimeMs:null,resultUrl:null});
+    saveHistory({taskId:data.taskId,accountId:data.accountId,workflow:data.workflow.name,mode:data.mode,account:data.accountName,video:state.video.name,videoSeconds:state.videoDuration,status:data.taskStatus==='RUNNING'?'processing':'queued',startedAt:startedIso,runtimeMs:null,resultUrl:null,error:null});
     startPolling();
   }catch(e){
     clearInterval(state.elapsedTimer);
@@ -99,14 +100,35 @@ function showTask(data){
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
 }
 function startPolling(){clearInterval(state.pollTimer);pollTask();state.pollTimer=setInterval(pollTask,6000)}
-async function pollTask(){ if(!state.task)return; try{const data=await api(`/api/tasks/${state.task.taskId}`,{method:'POST',body:JSON.stringify({accountId:state.task.accountId})}); if(data.state==='queued')$('#taskStatus').textContent='Dalam antrean'; if(data.state==='running')$('#taskStatus').textContent='Memproses'; if(data.state==='failed'){finishFailed(data.message||'Task gagal.');} if(data.state==='success'){const video=data.outputs.find(o=>String(o.fileType||'').toLowerCase().includes('video'))||data.outputs[0];if(!video?.fileUrl)return finishFailed('Task selesai tetapi URL output tidak ditemukan.');finishSuccess(video.fileUrl);} }catch(e){console.warn('poll',e.message)} }
+async function pollTask(){
+  if(!state.task)return;
+  try{
+    const data=await api(`/api/tasks/${state.task.taskId}`,{method:'POST',body:JSON.stringify({accountId:state.task.accountId})});
+    if(data.state==='queued'){
+      $('#taskStatus').textContent='Dalam antrean';
+      updateHistory(state.task.taskId,{status:'queued',error:null});
+    }
+    if(data.state==='running'){
+      $('#taskStatus').textContent='Memproses';
+      updateHistory(state.task.taskId,{status:'processing',error:null});
+    }
+    if(data.state==='failed') finishFailed(data.message||'Task gagal.');
+    if(data.state==='success'){
+      const video=data.outputs.find(o=>String(o.fileType||'').toLowerCase().includes('video'))||data.outputs[0];
+      if(!video?.fileUrl) return finishFailed('Task selesai tetapi URL output tidak ditemukan.');
+      finishSuccess(video.fileUrl);
+    }
+  }catch(e){
+    console.warn('poll',e.message);
+  }
+}
 function finishFailed(msg){
   clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
   const elapsed=Date.now()-state.startedAt;
   $('#taskElapsed').textContent=fmtElapsed(elapsed);
   $('#taskEstimate').textContent='Task gagal';
   toast(msg,true);
-  updateHistory(state.task.taskId,{status:'failed',finishedAt:new Date().toISOString(),runtimeMs:elapsed});
+  updateHistory(state.task.taskId,{status:'failed',finishedAt:new Date().toISOString(),runtimeMs:elapsed,error:msg});
   state.task=null;$('#taskStatus').textContent='Failed';updateGenerate();
 }
 function finishSuccess(url){
@@ -128,8 +150,100 @@ function finishSuccess(url){
 function history(){try{return JSON.parse(localStorage.getItem('vantaHistoryV2')||'[]')}catch{return[]}}
 function setHistory(items){localStorage.setItem('vantaHistoryV2',JSON.stringify(items.slice(0,100)))}
 function saveHistory(item){setHistory([item,...history().filter(x=>x.taskId!==item.taskId)])}
-function updateHistory(taskId,patch){setHistory(history().map(x=>x.taskId===taskId?{...x,...patch}:x));if(state.view==='history')renderHistory()}
-function renderHistory(){const items=history();const root=$('#historyBody');if(!items.length){root.innerHTML='<tr><td colspan="8" style="text-align:center;color:#798493;padding:34px">Belum ada riwayat.</td></tr>';return}root.innerHTML=items.map(x=>`<tr><td>${new Date(x.startedAt).toLocaleString('id-ID')}</td><td>${escapeHtml(x.workflow)}</td><td>${escapeHtml(x.mode)}</td><td>${escapeHtml(x.account)}</td><td>${escapeHtml(x.video)}</td><td>${x.runtimeMs?fmtElapsed(x.runtimeMs):'—'}</td><td>${escapeHtml(x.status)}</td><td>${x.resultUrl?`<a href="${x.resultUrl}" target="_blank" rel="noopener">Open</a>`:'—'}</td></tr>`).join('')}
+function updateHistory(taskId,patch){
+  setHistory(history().map(x=>x.taskId===taskId?{...x,...patch}:x));
+  if(state.view==='history')renderHistory();
+}
+function isActiveHistoryStatus(status){return ['uploading','queued','running','processing'].includes(String(status||'').toLowerCase())}
+function historyElapsed(item){
+  if(item.runtimeMs!=null) return Number(item.runtimeMs)||0;
+  if(isActiveHistoryStatus(item.status)&&item.startedAt){
+    const start=Date.parse(item.startedAt);
+    return Number.isFinite(start)?Math.max(0,Date.now()-start):0;
+  }
+  return 0;
+}
+function historyStatusLabel(status){
+  const s=String(status||'').toLowerCase();
+  if(s==='queued')return 'Dalam antrean';
+  if(s==='running'||s==='processing')return 'Memproses';
+  if(s==='success')return 'Berhasil';
+  if(s==='failed')return 'Gagal';
+  return status||'—';
+}
+function historyStatusClass(status){
+  const s=String(status||'').toLowerCase();
+  if(s==='success')return 'success';
+  if(s==='failed')return 'failed';
+  if(s==='queued')return 'queued';
+  if(s==='running'||s==='processing')return 'processing';
+  return 'neutral';
+}
+function resolveHistoryAccountId(item){
+  if(item.accountId)return item.accountId;
+  return state.accounts.find(a=>a.name===item.account)?.id||null;
+}
+function renderHistory(){
+  const items=history();
+  const root=$('#historyBody');
+  if(!items.length){
+    root.innerHTML='<tr><td colspan="8" style="text-align:center;color:#798493;padding:34px">Belum ada riwayat.</td></tr>';
+    return;
+  }
+  root.innerHTML=items.map(x=>{
+    const elapsed=historyElapsed(x);
+    const statusClass=historyStatusClass(x.status);
+    const statusLabel=historyStatusLabel(x.status);
+    const error=x.error?`<small class="history-error" title="${escapeHtml(x.error)}">${escapeHtml(x.error)}</small>`:'';
+    const result=x.resultUrl?`<a href="${x.resultUrl}" target="_blank" rel="noopener">Open</a>`:(isActiveHistoryStatus(x.status)?'<span class="history-live-dot"></span>':'—');
+    return `<tr data-task-id="${escapeHtml(x.taskId||'')}">
+      <td>${new Date(x.startedAt).toLocaleString('id-ID')}</td>
+      <td>${escapeHtml(x.workflow)}</td>
+      <td>${escapeHtml(x.mode)}</td>
+      <td>${escapeHtml(x.account)}</td>
+      <td>${escapeHtml(x.video)}</td>
+      <td class="history-runtime">${elapsed?fmtElapsed(elapsed):'—'}</td>
+      <td><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}</td>
+      <td>${result}</td>
+    </tr>`;
+  }).join('');
+}
+async function pollHistoryTasks(){
+  if(state.historyPollBusy)return;
+  state.historyPollBusy=true;
+  try{
+    const active=history().filter(item=>isActiveHistoryStatus(item.status)&&item.taskId);
+    for(const item of active){
+      if(state.task&&String(state.task.taskId)===String(item.taskId))continue;
+      const accountId=resolveHistoryAccountId(item);
+      if(!accountId)continue;
+      try{
+        const data=await api(`/api/tasks/${item.taskId}`,{method:'POST',body:JSON.stringify({accountId})});
+        if(data.state==='queued'){
+          updateHistory(item.taskId,{accountId,status:'queued',error:null});
+        }else if(data.state==='running'){
+          updateHistory(item.taskId,{accountId,status:'processing',error:null});
+        }else if(data.state==='failed'){
+          updateHistory(item.taskId,{accountId,status:'failed',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),error:data.message||'Task gagal.'});
+        }else if(data.state==='success'){
+          const video=data.outputs?.find(o=>String(o.fileType||'').toLowerCase().includes('video'))||data.outputs?.[0];
+          updateHistory(item.taskId,{accountId,status:'success',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),resultUrl:video?.fileUrl||null,error:null});
+        }
+      }catch(e){
+        console.warn('history poll',item.taskId,e.message);
+      }
+    }
+  }finally{
+    state.historyPollBusy=false;
+  }
+}
+function startHistoryMonitor(){
+  clearInterval(state.historyPollTimer);
+  clearInterval(state.historyClockTimer);
+  state.historyPollTimer=setInterval(pollHistoryTasks,5000);
+  state.historyClockTimer=setInterval(()=>{if(state.view==='history')renderHistory()},1000);
+  pollHistoryTasks();
+}
 
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
@@ -140,4 +254,4 @@ initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#vide
 $('#generateBtn').onclick=generate;$('#refreshAccounts').onclick=refreshAccounts;$('#clearHistory').onclick=()=>{localStorage.removeItem('vantaHistoryV2');renderHistory();toast('History dibersihkan.')};
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
 
-loadSession().catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
+loadSession().then(()=>startHistoryMonitor()).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
