@@ -71,7 +71,7 @@ function decrypt(token) {
 }
 
 function getDeviceId(req) {
-  const raw = String(req.headers['x-vanta-device'] || '').trim();
+  const raw = String(req.headers['x-vanta-device'] || req.query?.deviceId || '').trim();
   return /^[a-zA-Z0-9_-]{20,128}$/.test(raw) ? raw : '';
 }
 
