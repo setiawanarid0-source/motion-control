@@ -16,9 +16,8 @@ function switchView(view){ state.view=view; $$('.view').forEach(v=>v.classList.t
 async function api(url, options={}){ const r=await fetch(url,{...options,headers:{...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(options.headers||{})}}); let data={}; try{data=await r.json()}catch{} if(!r.ok) throw new Error(data.error||`HTTP ${r.status}`); return data; }
 
 async function loadSession(){
-  state.session=await api('/api/session'); state.accounts=state.session.accounts||[]; renderAccountSelect(); updateSetupState(); await refreshAccounts();
+  state.session=await api('/api/session'); state.accounts=state.session.accounts||[]; renderAccountSelect(); updateGenerate(); await refreshAccounts();
 }
-function updateSetupState(){ const configured=Boolean(state.session?.workflowIdConfigured); $('#setupWarning').classList.toggle('hidden',configured); $('#workflowIdState').textContent=configured?`Configured: ${state.session.workflowId}`:'Belum dikonfigurasi. Dipakai untuk R15 dan Current Workflow.'; updateGenerate(); }
 function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic</option>'+state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join(''); sel.value=[...sel.options].some(o=>o.value===current)?current:'auto'; }
 
 async function refreshAccounts(){
@@ -39,7 +38,7 @@ function setMedia(kind,file){
   $$('[data-remove]').forEach(btn=>btn.onclick=e=>{e.preventDefault();e.stopPropagation();setMedia(btn.dataset.remove,null)});updateGenerate();
 }
 function updateEstimates(){ const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
-function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&state.session?.workflowIdConfigured&&!state.task; $('#generateBtn').disabled=!ready; }
+function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&!state.task; $('#generateBtn').disabled=!ready; }
 function workflowName(){ return state.workflow==='r15'?'R15 Baseline':'Current Workflow'; }
 function estimateSeconds(){ if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
 function startVisibleTimer(){
@@ -134,12 +133,11 @@ function renderHistory(){const items=history();const root=$('#historyBody');if(!
 
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
-$$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');$('#openSetupBtn').onclick=()=>switchView('accounts');
+$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');
 $$('.workflow-card').forEach(b=>b.onclick=()=>{$$('.workflow-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.workflow=b.dataset.workflow});
 $$('.mode-card').forEach(b=>b.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode});
 initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');
 $('#generateBtn').onclick=generate;$('#refreshAccounts').onclick=refreshAccounts;$('#clearHistory').onclick=()=>{localStorage.removeItem('vantaHistoryV2');renderHistory();toast('History dibersihkan.')};
-$('#saveWorkflowId').onclick=async()=>{const value=$('#workflowIdInput').value.trim();try{const data=await api('/api/config',{method:'PUT',body:JSON.stringify({workflowId:value})});$('#workflowIdInput').value='';toast('Workflow ID tersimpan.');await loadSession();$('#workflowIdState').textContent=`Configured: ${data.masked}`;}catch(e){toast(e.message,true)}};
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
 
 loadSession().catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
