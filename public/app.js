@@ -290,7 +290,7 @@ function bindHistoryActions(){
   }
   $('#historyPreviewClose')?.addEventListener('click',closeHistoryPreview);
   $('#historyPreviewCloseBottom')?.addEventListener('click',closeHistoryPreview);
-  $('[data-close-preview]').forEach(el=>el.addEventListener('click',closeHistoryPreview));
+  $$('[data-close-preview]').forEach(el=>el.addEventListener('click',closeHistoryPreview));
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeHistoryPreview();});
 }
 
