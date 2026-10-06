@@ -180,7 +180,13 @@ const upload = multer({
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h', etag: true }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: 0,
+  etag: false,
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  },
+}));
 
 app.get('/health', (req, res) => res.json({ ok: true, service: 'vanta-motion-studio', workflows: Object.keys(workflowGraphs) }));
 
@@ -336,6 +342,9 @@ app.post('/api/tasks/:taskId', async (req, res) => {
   }
 });
 
-app.use((req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
+app.use((req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.sendFile(path.join(__dirname, 'public/index.html'));
+});
 
 app.listen(PORT, '0.0.0.0', () => console.log(`VANTA Motion Studio listening on :${PORT}`));
