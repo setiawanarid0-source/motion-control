@@ -342,6 +342,41 @@ app.post('/api/tasks/:taskId', async (req, res) => {
   }
 });
 
+app.get('/api/tasks/:taskId/download', async (req, res) => {
+  const session = getSession(req);
+  const accountId = String(req.query?.accountId || '');
+  const account = session.accounts.find(a => a.id === accountId);
+  if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan dalam sesi.' });
+  try {
+    const data = await rhJson('/task/openapi/outputs', account.key, { apiKey: account.key, taskId: req.params.taskId }, 30000);
+    if (!data || Number(data.code) !== 0 || !Array.isArray(data.data) || !data.data.length) {
+      return res.status(409).json({ error: data?.msg || 'Video belum tersedia untuk diunduh.' });
+    }
+    const output = data.data.find(x => String(x.fileType || '').toLowerCase().includes('video')) || data.data[0];
+    const fileUrl = String(output?.fileUrl || '');
+    if (!/^https?:\/\//i.test(fileUrl)) return res.status(502).json({ error: 'URL hasil video tidak valid.' });
+
+    const upstream = await axios.get(fileUrl, {
+      responseType: 'stream',
+      timeout: 10 * 60 * 1000,
+      maxRedirects: 5,
+      validateStatus: status => status >= 200 && status < 400,
+    });
+    res.setHeader('Content-Type', upstream.headers['content-type'] || 'video/mp4');
+    if (upstream.headers['content-length']) res.setHeader('Content-Length', upstream.headers['content-length']);
+    res.setHeader('Content-Disposition', `attachment; filename="motion-${req.params.taskId}.mp4"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    upstream.data.on('error', err => {
+      console.error('download stream failed', err.message);
+      if (!res.headersSent) res.status(502).end();
+      else res.destroy(err);
+    });
+    upstream.data.pipe(res);
+  } catch (error) {
+    if (!res.headersSent) res.status(502).json({ error: error.message || 'Download video gagal.' });
+  }
+});
+
 app.use((req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   res.sendFile(path.join(__dirname, 'public/index.html'));
