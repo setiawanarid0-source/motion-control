@@ -36,8 +36,8 @@ const workflowMeta = {
   current: {
     id: 'current',
     name: 'Current Workflow',
-    subtitle: 'SCAIL-2 Preserve V7 · 24 FPS · 8 steps · CFG 1',
-    detail: 'Workflow yang sebelumnya sudah dipakai VANTA Motion Studio.'
+    subtitle: 'KOH (1) · 30 FPS · 6 steps · CFG 1',
+    detail: 'Current Workflow dari file KOH (1) yang baru.'
   }
 };
 
