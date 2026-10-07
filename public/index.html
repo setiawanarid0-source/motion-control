@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20261006-2005" />
+  <link rel="stylesheet" href="/styles.css?v=20261007-0900" />
 </head>
 <body>
   <div class="app-shell">
@@ -44,7 +44,7 @@
         <div class="hero-copy">
           <div class="hero-kicker"><span class="pulse"></span>DUAL WORKFLOW</div>
           <h2>Direct motion.<br><span>Choose the pipeline.</span></h2>
-          <p>Gunakan gambar karakter dan video gerakan yang sama, lalu pilih workflow yang ingin diuji. R15 dan workflow lama berjalan terpisah tanpa saling mengubah.</p>
+          <p>Gunakan gambar karakter dan video gerakan yang sama, lalu pilih workflow yang ingin diuji. R15 dan Current Workflow berjalan terpisah tanpa saling mengubah.</p>
         </div>
 
         <div class="workspace-grid">
@@ -80,8 +80,8 @@
               </button>
               <button class="workflow-card" data-workflow="current">
                 <div class="workflow-row"><strong>Current Workflow</strong><span class="badge">02</span></div>
-                <p>SCAIL-2 Preserve V7</p>
-                <small>Workflow yang sebelumnya dipakai website.</small>
+                <p>KOH (1) · 30 FPS · 6 steps · CFG 1</p>
+                <small>Current Workflow terbaru.</small>
               </button>
             </div>
 
@@ -122,7 +122,7 @@
       </section>
 
       <section id="view-history" class="view">
-        <div class="section-title"><div><div class="eyebrow">ARCHIVE</div><h2>Generation history</h2><p>Riwayat lokal browser, termasuk workflow yang digunakan.</p></div><button class="ghost-btn" id="clearHistory">Clear</button></div>
+        <div class="section-title history-title"><div><div class="eyebrow">ARCHIVE</div><h2>Generation history</h2><p>Pantau status, waktu proses, dan hasil setiap generation.</p></div></div>
         <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Generate time</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
       </section>
 
@@ -167,6 +167,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261006-2005" defer></script>
+  <script src="/app.js?v=20261007-0900" defer></script>
 </body>
 </html>
