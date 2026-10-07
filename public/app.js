@@ -100,7 +100,8 @@ async function generate(){
   }
 }
 function showTask(data){
-  $('#taskSection').classList.remove('hidden');
+  clearInterval(state.elapsedTimer);
+  $('#taskSection').classList.add('hidden');
   $('#resultSection').classList.add('hidden');
   $('#taskStatus').textContent=data.taskStatus==='RUNNING'?'Memproses':'Dalam antrean';
   $('#taskWorkflow').textContent=data.workflow.name;
@@ -109,6 +110,7 @@ function showTask(data){
   $('#taskId').textContent=`#${data.taskId}`;
   const est=estimateSeconds();
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
+  toast('Task sudah dikirim ke RunningHub. Status dapat dipantau di History.');
 }
 function startPolling(){clearInterval(state.pollTimer);pollTask();state.pollTimer=setInterval(pollTask,6000)}
 async function pollTask(){
@@ -198,7 +200,7 @@ function renderHistory(){
   const items=history();
   const root=$('#historyBody');
   if(!items.length){
-    root.innerHTML='<tr><td colspan="8" style="text-align:center;color:#798493;padding:34px">Belum ada riwayat.</td></tr>';
+    root.innerHTML='<tr class="history-empty-row"><td colspan="8">Belum ada riwayat generation.</td></tr>';
     return;
   }
   root.innerHTML=items.map(x=>{
@@ -216,14 +218,14 @@ function renderHistory(){
       ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safeUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Preview</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a></div>`
       : (isActiveHistoryStatus(x.status)?'<span class="history-pending"><span class="history-live-dot"></span>Menunggu hasil</span>':'—');
     return `<tr data-task-id="${escapeHtml(x.taskId||'')}">
-      <td>${new Date(x.startedAt).toLocaleString('id-ID')}</td>
-      <td>${escapeHtml(x.workflow)}</td>
-      <td>${escapeHtml(x.mode)}</td>
-      <td>${escapeHtml(x.account)}</td>
-      <td>${escapeHtml(x.video)}</td>
-      <td class="history-runtime">${elapsed?fmtElapsed(elapsed):'—'}</td>
-      <td><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}</td>
-      <td>${result}</td>
+      <td data-label="Time">${new Date(x.startedAt).toLocaleString('id-ID')}</td>
+      <td data-label="Workflow">${escapeHtml(x.workflow)}</td>
+      <td data-label="Mode">${escapeHtml(x.mode)}</td>
+      <td data-label="Account">${escapeHtml(x.account)}</td>
+      <td data-label="Video" class="history-video-name">${escapeHtml(x.video)}</td>
+      <td data-label="Generate time" class="history-runtime">${elapsed?fmtElapsed(elapsed):'—'}</td>
+      <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}</td>
+      <td data-label="Result">${result}</td>
     </tr>`;
   }).join('');
 }
