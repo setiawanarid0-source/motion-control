@@ -33,9 +33,26 @@ async function loadSession(){
 function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic</option>'+state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join(''); sel.value=[...sel.options].some(o=>o.value===current)?current:'auto'; }
 
 async function refreshAccounts(){
-  if(!state.accounts.length){ state.accounts=[]; renderAccounts(); updatePoolSummary(); return; }
-  try{ const data=await api('/api/accounts/refresh',{method:'POST',body:'{}'}); state.accounts=data.accounts||[]; renderAccounts(); updatePoolSummary(); renderAccountSelect(); }
-  catch(e){ toast(e.message,true); }
+  const refreshBtn=$('#refreshAccounts');
+  if(refreshBtn){ refreshBtn.disabled=true; refreshBtn.classList.add('refreshing'); }
+  if(!state.accounts.length){
+    state.accounts=[];
+    renderAccounts();
+    updatePoolSummary();
+    if(refreshBtn){ refreshBtn.disabled=false; refreshBtn.classList.remove('refreshing'); }
+    return;
+  }
+  try{
+    const data=await api('/api/accounts/refresh',{method:'POST',body:'{}'});
+    state.accounts=data.accounts||[];
+    renderAccounts();
+    updatePoolSummary();
+    renderAccountSelect();
+  }catch(e){
+    toast(e.message,true);
+  }finally{
+    if(refreshBtn){ refreshBtn.disabled=false; refreshBtn.classList.remove('refreshing'); }
+  }
 }
 function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.status&&!a.status.error); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
@@ -60,6 +77,8 @@ function startVisibleTimer(){
   state.elapsedTimer=setInterval(()=>$('#taskElapsed').textContent=fmtElapsed(Date.now()-state.startedAt),1000);
 }
 function showStartingTask(){
+  state.startedAt=null;
+  clearInterval(state.elapsedTimer);
   $('#taskSection').classList.remove('hidden');
   $('#resultSection').classList.add('hidden');
   $('#taskStatus').textContent='Mengupload input';
@@ -67,9 +86,9 @@ function showStartingTask(){
   $('#taskAccount').textContent=$('#accountSelect').value==='auto'?'Automatic':'Akun dipilih';
   $('#taskMode').textContent=state.mode==='standard'?'Standard':'Lite';
   $('#taskId').textContent='Menunggu task ID';
+  $('#taskElapsed').textContent='—';
   const est=estimateSeconds();
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
-  startVisibleTimer();
   $('#taskSection').scrollIntoView({behavior:'smooth',block:'center'});
 }
 
@@ -79,13 +98,15 @@ async function generate(){
   btn.disabled=true;
   btn.querySelector('span:first-child').textContent='Uploading…';
   showStartingTask();
-  const startedIso=new Date().toISOString();
   const fd=new FormData();fd.append('referenceImage',state.image);fd.append('videoReference',state.video);fd.append('workflow',state.workflow);fd.append('mode',state.mode);fd.append('accountId',$('#accountSelect').value||'auto');
   try{
     const data=await api('/api/generate',{method:'POST',body:fd});
     state.task=data;
+    const submittedIso=data.submittedAt||new Date().toISOString();
+    const submittedMs=Date.parse(submittedIso);
+    state.startedAt=Number.isFinite(submittedMs)?submittedMs:Date.now();
     showTask(data);
-    saveHistory({taskId:data.taskId,accountId:data.accountId,workflow:data.workflow.name,mode:data.mode,account:data.accountName,video:state.video.name,videoSeconds:state.videoDuration,status:data.taskStatus==='RUNNING'?'processing':'queued',startedAt:startedIso,runtimeMs:null,resultUrl:null,error:null});
+    saveHistory({taskId:data.taskId,accountId:data.accountId,workflow:data.workflow.name,mode:data.mode,account:data.accountName,video:state.video.name,videoSeconds:state.videoDuration,status:data.taskStatus==='RUNNING'?'processing':'queued',startedAt:submittedIso,runtimeMs:null,resultUrl:null,error:null});
     startPolling();
   }catch(e){
     clearInterval(state.elapsedTimer);
@@ -160,7 +181,22 @@ function finishSuccess(url){
   toast(`Video selesai dalam ${fmtElapsed(elapsed)}.`);
 }
 
-function history(){try{return JSON.parse(localStorage.getItem('vantaHistoryV2')||'[]')}catch{return[]}}
+const HISTORY_RETENTION_MS=3*24*60*60*1000;
+function history(){
+  try{
+    const raw=JSON.parse(localStorage.getItem('vantaHistoryV2')||'[]');
+    const items=Array.isArray(raw)?raw:[];
+    const now=Date.now();
+    const kept=items.filter(item=>{
+      const status=String(item?.status||'').toLowerCase();
+      if(status!=='success'&&status!=='failed')return true;
+      const terminalAt=Date.parse(item.finishedAt||item.startedAt||'');
+      return !Number.isFinite(terminalAt)||(now-terminalAt)<=HISTORY_RETENTION_MS;
+    });
+    if(kept.length!==items.length)localStorage.setItem('vantaHistoryV2',JSON.stringify(kept.slice(0,100)));
+    return kept;
+  }catch{return[]}
+}
 function setHistory(items){localStorage.setItem('vantaHistoryV2',JSON.stringify(items.slice(0,100)))}
 function saveHistory(item){setHistory([item,...history().filter(x=>x.taskId!==item.taskId)])}
 function updateHistory(taskId,patch){
