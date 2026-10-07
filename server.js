@@ -20,6 +20,7 @@ const VIDEO_MAX = 100 * 1024 * 1024;
 const LOCKED_WORKFLOW_ID = process.env.RUNNINGHUB_WORKFLOW_ID || '2101170393796079617';
 const DATA_DIR = process.env.VANTA_DATA_DIR || '/data';
 const ACCOUNT_DIR = path.join(DATA_DIR, 'account-vaults');
+const GLOBAL_ACCOUNT_VAULT = path.join(DATA_DIR, 'accounts.enc');
 
 const workflowGraphs = {
   r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
@@ -79,39 +80,77 @@ function accountVaultPath(deviceId) {
   return path.join(ACCOUNT_DIR, `${deviceId}.enc`);
 }
 
-function loadVaultAccounts(deviceId) {
-  if (!deviceId) return [];
+function normalizeAccounts(accounts) {
+  const seen = new Set();
+  const out = [];
+  for (const account of Array.isArray(accounts) ? accounts : []) {
+    const key = account?.fingerprint || account?.id || account?.key;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(account);
+    if (out.length >= MAX_ACCOUNTS) break;
+  }
+  out.forEach((a, i) => { a.name = `Account ${String(i + 1).padStart(2, '0')}`; });
+  return out;
+}
+
+function loadEncryptedAccountFile(filePath) {
   try {
-    const token = fs.readFileSync(accountVaultPath(deviceId), 'utf8').trim();
+    const token = fs.readFileSync(filePath, 'utf8').trim();
     const data = decrypt(token);
-    return Array.isArray(data?.accounts) ? data.accounts.slice(0, MAX_ACCOUNTS) : [];
+    return normalizeAccounts(data?.accounts);
   } catch {
     return [];
   }
 }
 
-function saveVaultAccounts(deviceId, accounts) {
-  if (!deviceId) return;
-  fs.mkdirSync(ACCOUNT_DIR, { recursive: true });
-  const target = accountVaultPath(deviceId);
-  const temp = `${target}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(temp, encrypt({ accounts: accounts.slice(0, MAX_ACCOUNTS), updatedAt: new Date().toISOString() }), { mode: 0o600 });
-  fs.renameSync(temp, target);
+function loadGlobalAccounts() {
+  return loadEncryptedAccountFile(GLOBAL_ACCOUNT_VAULT);
+}
+
+function recoverLegacyVaultAccounts() {
+  const recovered = [];
+  try {
+    if (!fs.existsSync(ACCOUNT_DIR)) return recovered;
+    for (const name of fs.readdirSync(ACCOUNT_DIR)) {
+      if (!name.endsWith('.enc')) continue;
+      recovered.push(...loadEncryptedAccountFile(path.join(ACCOUNT_DIR, name)));
+    }
+  } catch (error) {
+    console.warn('legacy account vault recovery failed', error.message);
+  }
+  return normalizeAccounts(recovered);
+}
+
+function saveGlobalAccounts(accounts) {
+  const normalized = normalizeAccounts(accounts);
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const temp = `${GLOBAL_ACCOUNT_VAULT}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(temp, encrypt({ accounts: normalized, updatedAt: new Date().toISOString() }), { mode: 0o600 });
+  fs.renameSync(temp, GLOBAL_ACCOUNT_VAULT);
+}
+
+// Kept as the single persistence write path used by the existing endpoints.
+// Account Pool is intentionally global for this private studio, not tied to browser/device localStorage.
+function saveVaultAccounts(_deviceId, accounts) {
+  saveGlobalAccounts(accounts);
 }
 
 function getPersistentAccounts(req) {
-  const deviceId = getDeviceId(req);
-  let accounts = loadVaultAccounts(deviceId);
+  let accounts = loadGlobalAccounts();
 
-  // One-time migration from the older encrypted cookie session if it still exists.
-  if (!accounts.length && deviceId) {
-    const legacy = getSession(req);
-    if (legacy.accounts.length) {
-      accounts = legacy.accounts;
-      saveVaultAccounts(deviceId, accounts);
+  if (!accounts.length) {
+    const recovered = recoverLegacyVaultAccounts();
+    const legacyCookieAccounts = getSession(req).accounts;
+    accounts = normalizeAccounts([...recovered, ...legacyCookieAccounts]);
+    if (accounts.length) {
+      saveGlobalAccounts(accounts);
+      console.log(`Recovered ${accounts.length} Account Pool entr${accounts.length === 1 ? 'y' : 'ies'} into global persistent vault.`);
     }
   }
-  return { deviceId, accounts };
+
+  // Keep a non-empty compatibility value so existing endpoint guards do not depend on browser storage.
+  return { deviceId: getDeviceId(req) || 'global', accounts };
 }
 
 function getSession(req) {
