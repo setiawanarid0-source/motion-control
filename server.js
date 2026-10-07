@@ -14,7 +14,6 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const RH_BASE = 'https://www.runninghub.ai';
 const COOKIE_NAME = 'vanta_session_v2';
-const MAX_ACCOUNTS = 6;
 const IMAGE_MAX = 20 * 1024 * 1024;
 const VIDEO_MAX = 100 * 1024 * 1024;
 const LOCKED_WORKFLOW_ID = process.env.RUNNINGHUB_WORKFLOW_ID || '2101170393796079617';
@@ -88,7 +87,6 @@ function normalizeAccounts(accounts) {
     if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(account);
-    if (out.length >= MAX_ACCOUNTS) break;
   }
   out.forEach((a, i) => { a.name = `Account ${String(i + 1).padStart(2, '0')}`; });
   return out;
@@ -157,7 +155,7 @@ function getSession(req) {
   const session = decrypt(req.cookies?.[COOKIE_NAME]);
   const base = session && typeof session === 'object' ? session : {};
   return {
-    accounts: Array.isArray(base.accounts) ? base.accounts.slice(0, MAX_ACCOUNTS) : [],
+    accounts: Array.isArray(base.accounts) ? base.accounts : [],
   };
 }
 
@@ -245,16 +243,17 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     ],
     workflow: JSON.stringify(workflowGraphs[workflowKey]),
     addMetadata: true,
-    retainSeconds: 86400,
+    retainSeconds: 259200,
   };
   if (mode === 'standard') payload.instanceType = 'default';
 
+  const submittedAt = new Date().toISOString();
   const data = await rhJson('/task/openapi/create', apiKey, payload, 60000);
   if (!data || Number(data.code) !== 0 || !data.data?.taskId) {
     const tips = data?.data?.promptTips;
     throw new Error(data?.msg || tips || 'RunningHub gagal membuat task.');
   }
-  return data.data;
+  return { ...data.data, submittedAt };
 }
 
 const upload = multer({
@@ -294,7 +293,6 @@ app.post('/api/accounts', async (req, res) => {
   if (apiKey.length < 12 || apiKey.length > 256) return res.status(400).json({ error: 'API key tidak valid.' });
   const { deviceId, accounts } = getPersistentAccounts(req);
   if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
-  if (accounts.length >= MAX_ACCOUNTS) return res.status(400).json({ error: `Maksimal ${MAX_ACCOUNTS} akun dalam pool.` });
   const fingerprint = crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
   if (accounts.some(a => a.fingerprint === fingerprint)) return res.status(409).json({ error: 'API key ini sudah ada di pool.' });
   try {
@@ -397,6 +395,7 @@ app.post('/api/generate', upload.fields([
           accountName: account.name,
           workflow: workflowMeta[workflowKey],
           mode,
+          submittedAt: task.submittedAt,
           netWssUrl: task.netWssUrl || null,
         });
       } catch (error) {
