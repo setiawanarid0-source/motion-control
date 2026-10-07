@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20261007-1015" />
+  <link rel="stylesheet" href="/styles.css?v=20261007-1045" />
 </head>
 <body>
   <div class="app-shell">
@@ -35,8 +35,8 @@
           <div class="eyebrow">WORKFLOW / KOH MOTION</div>
           <h1 id="pageTitle">Motion Control</h1>
         </div>
-        <div class="balance-pill" title="Total RH credits dari akun yang berhasil dibaca">
-          <span>Pool credits</span><strong id="poolCredits">0</strong><small>RH</small>
+        <div class="balance-pill" title="Jumlah akun RunningHub yang siap digunakan">
+          <span>Pool ready</span><strong id="poolCredits">0</strong><small>akun</small>
         </div>
       </header>
 
@@ -123,6 +123,12 @@
 
       <section id="view-history" class="view">
         <div class="section-title history-title"><div><div class="eyebrow">ARCHIVE</div><h2>Generation history</h2><p>Pantau status, waktu proses, dan hasil setiap generation.</p></div></div>
+        <div class="history-filters" id="historyFilters" aria-label="Filter generation history">
+          <button type="button" class="history-filter active" data-history-filter="all">Semua</button>
+          <button type="button" class="history-filter" data-history-filter="success">Berhasil</button>
+          <button type="button" class="history-filter" data-history-filter="failed">Gagal</button>
+          <button type="button" class="history-filter" data-history-filter="process">Proses</button>
+        </div>
         <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Generate time</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
       </section>
 
@@ -167,6 +173,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261007-1015" defer></script>
+  <script src="/app.js?v=20261007-1045" defer></script>
 </body>
 </html>
