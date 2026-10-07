@@ -226,9 +226,13 @@ function renderHistory(){
     const rawDownloadUrl=(resolvedAccountId&&x.taskId)
       ? `/api/tasks/${encodeURIComponent(x.taskId)}/download?accountId=${encodeURIComponent(resolvedAccountId)}&deviceId=${encodeURIComponent(getDeviceId())}`
       : (x.resultUrl||'');
+    const rawPreviewUrl=(resolvedAccountId&&x.taskId)
+      ? `/api/tasks/${encodeURIComponent(x.taskId)}/preview?accountId=${encodeURIComponent(resolvedAccountId)}&deviceId=${encodeURIComponent(getDeviceId())}`
+      : (x.resultUrl||'');
     const safeDownloadUrl=escapeHtml(rawDownloadUrl);
+    const safePreviewUrl=escapeHtml(rawPreviewUrl);
     const result=x.resultUrl
-      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safeUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Preview</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a></div>`
+      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safePreviewUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Preview</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a></div>`
       : (isActiveHistoryStatus(x.status)?'<span class="history-pending"><span class="history-live-dot"></span>Menunggu hasil</span>':'—');
     return `<tr data-task-id="${escapeHtml(x.taskId||'')}">
       <td data-label="Time">${new Date(x.startedAt).toLocaleString('id-ID')}</td>
@@ -278,8 +282,11 @@ function openHistoryPreview(url,taskId='',downloadUrl=''){
   const title=$('#historyPreviewTitle');
   if(!modal||!video||!download)return;
   video.pause();
+  video.preload='auto';
   video.src=url;
   video.load();
+  video.onerror=()=>toast('Preview video gagal dimuat. Coba tutup lalu buka Preview lagi.',true);
+  video.oncanplay=()=>{ video.play().catch(()=>{}); };
   download.href=downloadUrl||url;
   download.removeAttribute('download');
   if(title) title.textContent=taskId?`Preview #${taskId}`:'Video preview';
