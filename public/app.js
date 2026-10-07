@@ -37,7 +37,7 @@ async function refreshAccounts(){
   try{ const data=await api('/api/accounts/refresh',{method:'POST',body:'{}'}); state.accounts=data.accounts||[]; renderAccounts(); updatePoolSummary(); renderAccountSelect(); }
   catch(e){ toast(e.message,true); }
 }
-function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.status&&!a.status.error); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
+function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.status&&!a.status.error); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada API key di pool.<br>Tambahkan akun pertama dari panel di sebelah kiri.</div>';return;}
   root.innerHTML=state.accounts.map(a=>{const s=a.status||{};const ok=!s.error&&a.status;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ok?'Ready':'Status belum dibaca'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}">Remove</button></div>`}).join('');
