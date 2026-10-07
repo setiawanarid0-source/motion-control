@@ -257,3 +257,106 @@ button,input,select{font:inherit}button,a{touch-action:manipulation}.hidden{disp
   .preview-video-frame{max-height:62vh}
   .preview-actions{grid-template-columns:1fr}
 }
+
+/* Generation History cleanup */
+.history-title{margin-bottom:18px}
+.history-title>div{max-width:640px}
+.history-video-name{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-empty-row td{text-align:center!important;color:#798493!important;padding:36px 18px!important}
+#view-history .table-wrap{border:1px solid var(--line);background:linear-gradient(180deg,rgba(17,22,29,.94),rgba(12,16,21,.94));box-shadow:0 12px 36px rgba(0,0,0,.14)}
+#view-history .table-wrap th{background:rgba(255,255,255,.018)}
+#view-history .table-wrap tbody tr:last-child td{border-bottom:0}
+
+@media(max-width:780px){
+  #view-history{padding-top:18px}
+  #view-history .history-title{margin:4px 2px 16px;gap:0}
+  #view-history .history-title h2{font-size:30px;line-height:1.04}
+  #view-history .history-title p{margin-top:8px;max-width:34rem}
+
+  #view-history .table-wrap{
+    overflow:visible;
+    border:0;
+    background:transparent;
+    box-shadow:none;
+  }
+  #view-history .table-wrap table{
+    display:block;
+    width:100%;
+    min-width:0;
+    border-collapse:separate;
+  }
+  #view-history .table-wrap thead{display:none}
+  #view-history .table-wrap tbody{
+    display:grid;
+    gap:10px;
+    width:100%;
+  }
+  #view-history .table-wrap tr{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:0;
+    width:100%;
+    padding:10px;
+    border:1px solid var(--line);
+    border-radius:15px;
+    background:linear-gradient(180deg,#11161d,#0d1218);
+    box-shadow:0 8px 26px rgba(0,0,0,.14);
+  }
+  #view-history .table-wrap td{
+    min-width:0;
+    padding:9px 8px;
+    border:0;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:5px;
+    font-size:11px;
+    line-height:1.35;
+    overflow-wrap:anywhere;
+  }
+  #view-history .table-wrap td::before{
+    content:attr(data-label);
+    color:var(--muted);
+    font-size:8px;
+    font-weight:700;
+    letter-spacing:.11em;
+    text-transform:uppercase;
+  }
+  #view-history .table-wrap td:nth-child(5),
+  #view-history .table-wrap td:nth-child(7),
+  #view-history .table-wrap td:nth-child(8){
+    grid-column:1/-1;
+  }
+  #view-history .history-video-name{
+    max-width:100%;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  #view-history .history-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:7px;
+  }
+  #view-history .history-action-btn{
+    width:100%;
+    min-height:40px;
+    font-size:10px;
+  }
+  #view-history .history-error{
+    max-width:100%;
+    white-space:normal;
+  }
+  #view-history .history-pending{min-height:30px}
+  #view-history .history-empty-row{
+    display:block;
+    padding:0;
+  }
+  #view-history .history-empty-row td{
+    display:block;
+    padding:30px 14px!important;
+    text-align:center!important;
+  }
+  #view-history .history-empty-row td::before{display:none}
+}
