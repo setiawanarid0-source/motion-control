@@ -1,7 +1,7 @@
 const state = {
   view: 'create', workflow: 'r15', mode: 'lite', session: null, accounts: [],
   image: null, video: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
-  historyPollTimer: null, historyClockTimer: null, historyPollBusy: false,
+  historyPollTimer: null, historyClockTimer: null, historyPollBusy: false, historyFilter: 'all',
 };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -37,7 +37,7 @@ async function refreshAccounts(){
   try{ const data=await api('/api/accounts/refresh',{method:'POST',body:'{}'}); state.accounts=data.accounts||[]; renderAccounts(); updatePoolSummary(); renderAccountSelect(); }
   catch(e){ toast(e.message,true); }
 }
-function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.status&&!a.status.error); const total=healthy.reduce((s,a)=>s+Number(a.status.remainCoins||0),0); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=Number.isFinite(total)?Math.round(total).toLocaleString('id-ID'):'0'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
+function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.status&&!a.status.error); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada API key di pool.<br>Tambahkan akun pertama dari panel di sebelah kiri.</div>';return;}
   root.innerHTML=state.accounts.map(a=>{const s=a.status||{};const ok=!s.error&&a.status;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ok?'Ready':'Status belum dibaca'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}">Remove</button></div>`}).join('');
@@ -196,11 +196,24 @@ function resolveHistoryAccountId(item){
   if(item.accountId)return item.accountId;
   return state.accounts.find(a=>a.name===item.account)?.id||null;
 }
+function historyFilterMatches(item){
+  const status=String(item?.status||'').toLowerCase();
+  if(state.historyFilter==='success')return status==='success';
+  if(state.historyFilter==='failed')return status==='failed';
+  if(state.historyFilter==='process')return ['uploading','queued','running','processing'].includes(status);
+  return true;
+}
+function syncHistoryFilterUI(){
+  $('.history-filter').forEach(btn=>btn.classList.toggle('active',btn.dataset.historyFilter===state.historyFilter));
+}
 function renderHistory(){
-  const items=history();
+  syncHistoryFilterUI();
+  const allItems=history();
+  const items=allItems.filter(historyFilterMatches);
   const root=$('#historyBody');
   if(!items.length){
-    root.innerHTML='<tr class="history-empty-row"><td colspan="8">Belum ada riwayat generation.</td></tr>';
+    const message=allItems.length?'Tidak ada generation pada filter ini.':'Belum ada riwayat generation.';
+    root.innerHTML=`<tr class="history-empty-row"><td colspan="8">${message}</td></tr>`;
     return;
   }
   root.innerHTML=items.map(x=>{
@@ -311,6 +324,13 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{$$('.workflow-card').forEach(x=>x
 $$('.mode-card').forEach(b=>b.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode});
 initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');
 $('#generateBtn').onclick=generate;$('#refreshAccounts').onclick=refreshAccounts;
+const historyFilters=$('#historyFilters');
+if(historyFilters) historyFilters.onclick=e=>{
+  const btn=e.target.closest('[data-history-filter]');
+  if(!btn)return;
+  state.historyFilter=btn.dataset.historyFilter||'all';
+  renderHistory();
+};
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
 
 bindHistoryActions();loadSession().then(()=>startHistoryMonitor()).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
