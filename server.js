@@ -16,6 +16,7 @@ const RH_BASE = 'https://www.runninghub.ai';
 const COOKIE_NAME = 'vanta_session_v2';
 const IMAGE_MAX = 20 * 1024 * 1024;
 const VIDEO_MAX = 100 * 1024 * 1024;
+const MIN_POOL_CREDITS = 100;
 const LOCKED_WORKFLOW_ID = process.env.RUNNINGHUB_WORKFLOW_ID || '2101170393796079617';
 const DATA_DIR = process.env.VANTA_DATA_DIR || '/data';
 const ACCOUNT_DIR = path.join(DATA_DIR, 'account-vaults');
@@ -297,6 +298,9 @@ app.post('/api/accounts', async (req, res) => {
   if (accounts.some(a => a.fingerprint === fingerprint)) return res.status(409).json({ error: 'API key ini sudah ada di pool.' });
   try {
     const status = await accountStatus(apiKey);
+    if (Number(status.remainCoins || 0) < MIN_POOL_CREDITS) {
+      return res.status(400).json({ error: `Akun tidak ditambahkan karena kredit di bawah ${MIN_POOL_CREDITS} RH.` });
+    }
     const account = {
       id: crypto.randomUUID(),
       name: `Account ${String(accounts.length + 1).padStart(2, '0')}`,
@@ -326,11 +330,32 @@ app.delete('/api/accounts/:id', (req, res) => {
 app.post('/api/accounts/refresh', async (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);
   if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
-  const publicAccounts = await Promise.all(accounts.map(async account => {
-    try { return publicAccount(account, await accountStatus(account.key)); }
-    catch (error) { return { ...publicAccount(account), status: { error: error.message } }; }
+
+  const checked = await Promise.all(accounts.map(async account => {
+    try {
+      const status = await accountStatus(account.key);
+      return { account, status, remove: Number(status.remainCoins || 0) < MIN_POOL_CREDITS };
+    } catch (error) {
+      return { account, status: { error: error.message }, remove: false };
+    }
   }));
-  res.json({ accounts: publicAccounts });
+
+  const kept = checked.filter(x => !x.remove).map(x => x.account);
+  const removed = checked.filter(x => x.remove).map(x => x.account.name);
+
+  if (removed.length) {
+    saveVaultAccounts(deviceId, kept);
+  }
+
+  const publicAccounts = checked
+    .filter(x => !x.remove)
+    .map(x => publicAccount(x.account, x.status));
+
+  res.json({
+    accounts: publicAccounts,
+    autoRemovedCount: removed.length,
+    minimumCredits: MIN_POOL_CREDITS,
+  });
 });
 
 app.post('/api/generate', upload.fields([
