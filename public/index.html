@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20261007-1020" />
+  <link rel="stylesheet" href="/styles.css?v=20261007-1325" />
 </head>
 <body>
   <div class="app-shell">
@@ -133,14 +133,14 @@
       </section>
 
       <section id="view-accounts" class="view">
-        <div class="section-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>Tambahkan API key RunningHub. Workflow R15 dan Current sudah dikunci otomatis di backend.</p></div><button class="ghost-btn" id="refreshAccounts">Refresh status</button></div>
+        <div class="section-title account-pool-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>Tambahkan API key RunningHub. Workflow R15 dan Current sudah dikunci otomatis di backend.</p></div><button class="ghost-btn refresh-account-btn" id="refreshAccounts" type="button" aria-label="Refresh status akun dan sisa kredit" title="Refresh status akun dan sisa kredit"><span aria-hidden="true">↻</span></button></div>
         <div class="account-layout">
           <div class="panel add-account">
             <h3>Add RunningHub API key</h3>
             <label class="field-label" for="apiKeyInput">API KEY</label>
             <input id="apiKeyInput" class="text-input" type="password" autocomplete="off" placeholder="Paste API key" />
             <button id="addAccountBtn" class="generate-btn compact">Add to pool</button>
-            <p class="form-note">Key divalidasi ke RunningHub sebelum disimpan. Maksimal 6 akun.</p>
+            <p class="form-note">Key divalidasi ke RunningHub sebelum disimpan.</p>
           </div>
           <div class="account-list" id="accountList"></div>
         </div>
@@ -173,6 +173,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261007-1020" defer></script>
+  <script src="/app.js?v=20261007-1325" defer></script>
 </body>
 </html>
