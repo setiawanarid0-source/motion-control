@@ -360,3 +360,15 @@ button,input,select{font:inherit}button,a{touch-action:manipulation}.hidden{disp
   }
   #view-history .history-empty-row td::before{display:none}
 }
+
+.history-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.history-filter{min-height:38px;padding:0 15px;border-radius:999px;border:1px solid var(--line-strong);background:#10151b;color:var(--muted);font:700 10px/1 Inter,sans-serif;cursor:pointer;transition:.18s ease}
+.history-filter:hover{color:var(--text);border-color:#465363}
+.history-filter.active{background:var(--accent);border-color:var(--accent);color:#090c0f;box-shadow:0 8px 22px rgba(185,255,90,.10)}
+@media(max-width:780px){
+  .history-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:0 2px 14px}
+  .history-filter{width:100%;min-width:0;min-height:42px;padding:0 6px;font-size:10px}
+}
+@media(max-width:370px){
+  .history-filters{grid-template-columns:repeat(2,1fr)}
+}
