@@ -204,7 +204,7 @@ function historyFilterMatches(item){
   return true;
 }
 function syncHistoryFilterUI(){
-  $('.history-filter').forEach(btn=>btn.classList.toggle('active',btn.dataset.historyFilter===state.historyFilter));
+  $$('.history-filter').forEach(btn=>btn.classList.toggle('active',btn.dataset.historyFilter===state.historyFilter));
 }
 function renderHistory(){
   syncHistoryFilterUI();
