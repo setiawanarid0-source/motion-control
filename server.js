@@ -472,4 +472,5 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
+console.log(`Account vault diagnostic: global=${loadGlobalAccounts().length}, legacy=${recoverLegacyVaultAccounts().length}`);
 app.listen(PORT, '0.0.0.0', () => console.log(`VANTA Motion Studio listening on :${PORT}`));
