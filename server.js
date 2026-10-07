@@ -411,6 +411,23 @@ app.post('/api/generate', upload.fields([
   }
 });
 
+async function resolveTaskVideoUrl(account, taskId) {
+  const data = await rhJson('/task/openapi/outputs', account.key, { apiKey: account.key, taskId }, 30000);
+  if (!data || Number(data.code) !== 0 || !Array.isArray(data.data) || !data.data.length) {
+    const err = new Error(data?.msg || 'Video belum tersedia.');
+    err.statusCode = 409;
+    throw err;
+  }
+  const output = data.data.find(x => String(x.fileType || '').toLowerCase().includes('video')) || data.data[0];
+  const fileUrl = String(output?.fileUrl || '');
+  if (!/^https?:\/\//i.test(fileUrl)) {
+    const err = new Error('URL hasil video tidak valid.');
+    err.statusCode = 502;
+    throw err;
+  }
+  return fileUrl;
+}
+
 app.post('/api/tasks/:taskId', async (req, res) => {
   const { accounts } = getPersistentAccounts(req);
   const accountId = String(req.body?.accountId || '');
@@ -432,19 +449,51 @@ app.post('/api/tasks/:taskId', async (req, res) => {
   }
 });
 
+app.get('/api/tasks/:taskId/preview', async (req, res) => {
+  const { accounts } = getPersistentAccounts(req);
+  const accountId = String(req.query?.accountId || '');
+  const account = accounts.find(a => a.id === accountId);
+  if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan.' });
+
+  try {
+    const fileUrl = await resolveTaskVideoUrl(account, req.params.taskId);
+    const range = req.headers.range;
+    const upstream = await axios.get(fileUrl, {
+      responseType: 'stream',
+      timeout: 10 * 60 * 1000,
+      maxRedirects: 5,
+      headers: range ? { Range: range } : {},
+      validateStatus: status => status === 200 || status === 206,
+    });
+
+    res.status(upstream.status);
+    res.setHeader('Content-Type', upstream.headers['content-type'] || 'video/mp4');
+    res.setHeader('Content-Disposition', `inline; filename="motion-${req.params.taskId}.mp4"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Accept-Ranges', upstream.headers['accept-ranges'] || 'bytes');
+    if (upstream.headers['content-length']) res.setHeader('Content-Length', upstream.headers['content-length']);
+    if (upstream.headers['content-range']) res.setHeader('Content-Range', upstream.headers['content-range']);
+    if (upstream.headers.etag) res.setHeader('ETag', upstream.headers.etag);
+    if (upstream.headers['last-modified']) res.setHeader('Last-Modified', upstream.headers['last-modified']);
+
+    upstream.data.on('error', err => {
+      console.error('preview stream failed', err.message);
+      if (!res.headersSent) res.status(502).end();
+      else res.destroy(err);
+    });
+    upstream.data.pipe(res);
+  } catch (error) {
+    if (!res.headersSent) res.status(error.statusCode || 502).json({ error: error.message || 'Preview video gagal dimuat.' });
+  }
+});
+
 app.get('/api/tasks/:taskId/download', async (req, res) => {
   const { accounts } = getPersistentAccounts(req);
   const accountId = String(req.query?.accountId || '');
   const account = accounts.find(a => a.id === accountId);
   if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan dalam sesi.' });
   try {
-    const data = await rhJson('/task/openapi/outputs', account.key, { apiKey: account.key, taskId: req.params.taskId }, 30000);
-    if (!data || Number(data.code) !== 0 || !Array.isArray(data.data) || !data.data.length) {
-      return res.status(409).json({ error: data?.msg || 'Video belum tersedia untuk diunduh.' });
-    }
-    const output = data.data.find(x => String(x.fileType || '').toLowerCase().includes('video')) || data.data[0];
-    const fileUrl = String(output?.fileUrl || '');
-    if (!/^https?:\/\//i.test(fileUrl)) return res.status(502).json({ error: 'URL hasil video tidak valid.' });
+    const fileUrl = await resolveTaskVideoUrl(account, req.params.taskId);
 
     const upstream = await axios.get(fileUrl, {
       responseType: 'stream',
