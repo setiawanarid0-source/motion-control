@@ -372,3 +372,33 @@ button,input,select{font:inherit}button,a{touch-action:manipulation}.hidden{disp
 @media(max-width:370px){
   .history-filters{grid-template-columns:repeat(2,1fr)}
 }
+
+/* Account Pool refresh control: desktop stays in the existing header action slot; mobile pins it top-right. */
+.refresh-account-btn{
+  width:46px;
+  min-width:46px;
+  height:46px;
+  padding:0;
+  font-size:20px;
+  line-height:1;
+}
+.refresh-account-btn span{display:inline-block}
+.refresh-account-btn.refreshing span{animation:refreshSpin .8s linear infinite}
+@keyframes refreshSpin{to{transform:rotate(360deg)}}
+
+@media(max-width:780px){
+  #view-accounts .account-pool-title{
+    position:relative;
+    display:block;
+    padding-right:58px;
+  }
+  #view-accounts .refresh-account-btn{
+    position:absolute;
+    top:0;
+    right:0;
+    width:44px;
+    min-width:44px;
+    height:44px;
+    margin:0;
+  }
+}
