@@ -402,3 +402,71 @@ button,input,select{font:inherit}button,a{touch-action:manipulation}.hidden{disp
     margin:0;
   }
 }
+
+/* Account removal action polish */
+.delete-account{
+  min-width:112px;
+  height:42px;
+  padding:0 13px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  border:1px solid rgba(255,105,118,.28);
+  border-radius:12px;
+  background:linear-gradient(180deg,rgba(74,19,27,.72),rgba(39,12,17,.86));
+  color:#ff9aa4;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 8px 20px rgba(0,0,0,.14);
+  font-weight:700;
+  letter-spacing:-.01em;
+  cursor:pointer;
+  transition:transform .16s ease,border-color .16s ease,background .16s ease,color .16s ease;
+}
+.delete-account:hover{
+  border-color:rgba(255,124,137,.5);
+  background:linear-gradient(180deg,rgba(92,23,34,.82),rgba(47,13,20,.92));
+  color:#ffb3bb;
+}
+.delete-account:active{transform:scale(.97)}
+.delete-account-icon{width:17px;height:17px;display:grid;place-items:center;flex:0 0 auto}
+.delete-account-icon svg{width:17px;height:17px;fill:currentColor}
+.delete-account-label{line-height:1}
+
+/* History retention helper */
+.history-retention-note{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin:-4px 0 14px;
+  padding:10px 12px;
+  border:1px solid rgba(255,255,255,.065);
+  border-radius:11px;
+  background:rgba(255,255,255,.018);
+  color:var(--muted);
+}
+.history-retention-note>span{
+  width:24px;
+  height:24px;
+  display:grid;
+  place-items:center;
+  flex:0 0 auto;
+  border-radius:8px;
+  background:#151b22;
+  color:#aeb8c4;
+  font-size:13px;
+}
+.history-retention-note p{margin:0;font-size:10px;line-height:1.45}
+
+@media(max-width:780px){
+  .delete-account{
+    min-width:48px;
+    width:48px;
+    height:44px;
+    padding:0;
+    border-radius:12px;
+  }
+  .delete-account-label{display:none}
+  .delete-account-icon,.delete-account-icon svg{width:18px;height:18px}
+  .history-retention-note{margin-top:-2px;margin-bottom:12px}
+  .history-retention-note p{font-size:10px}
+}
