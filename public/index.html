@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20261007-1655" />
+  <link rel="stylesheet" href="/styles.css?v=20261008-2235" />
 </head>
 <body>
   <div class="app-shell">
@@ -42,9 +42,9 @@
 
       <section id="view-create" class="view active">
         <div class="hero-copy">
-          <div class="hero-kicker"><span class="pulse"></span>DUAL WORKFLOW</div>
+          <div class="hero-kicker"><span class="pulse"></span>3 WORKFLOWS</div>
           <h2>Direct motion.<br><span>Choose the pipeline.</span></h2>
-          <p>Gunakan gambar karakter dan video gerakan yang sama, lalu pilih workflow yang ingin diuji. R15 dan Current Workflow berjalan terpisah tanpa saling mengubah.</p>
+          <p>Gunakan gambar karakter dan video gerakan yang sama, lalu pilih workflow yang ingin diuji. Ketiga workflow berjalan terpisah tanpa saling mengubah.</p>
         </div>
 
         <div class="workspace-grid">
@@ -82,6 +82,11 @@
                 <div class="workflow-row"><strong>Current Workflow</strong><span class="badge">02</span></div>
                 <p>KOH (1) · 30 FPS · 6 steps · CFG 1</p>
                 <small>Current Workflow terbaru.</small>
+              </button>
+              <button class="workflow-card" data-workflow="koh1AntiObject">
+                <div class="workflow-row"><strong>KOH 1 Anti Object</strong><span class="badge">03</span></div>
+                <p>KOH (1) · 30 FPS · 6 steps · CFG 1</p>
+                <small>Conditioning anti penambahan objek baru.</small>
               </button>
             </div>
 
@@ -134,7 +139,7 @@
       </section>
 
       <section id="view-accounts" class="view">
-        <div class="section-title account-pool-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>Tambahkan API key RunningHub. Workflow R15 dan Current sudah dikunci otomatis di backend.</p></div><button class="ghost-btn refresh-account-btn" id="refreshAccounts" type="button" aria-label="Refresh status akun dan sisa kredit" title="Refresh status akun dan sisa kredit"><span aria-hidden="true">↻</span></button></div>
+        <div class="section-title account-pool-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>Tambahkan API key RunningHub. Ketiga workflow sudah dikunci otomatis di backend.</p></div><button class="ghost-btn refresh-account-btn" id="refreshAccounts" type="button" aria-label="Refresh status akun dan sisa kredit" title="Refresh status akun dan sisa kredit"><span aria-hidden="true">↻</span></button></div>
         <div class="account-layout">
           <div class="panel add-account">
             <h3>Add RunningHub API key</h3>
@@ -174,6 +179,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261007-1655" defer></script>
+  <script src="/app.js?v=20261008-2235" defer></script>
 </body>
 </html>
