@@ -43,9 +43,9 @@ const workflowMeta = {
   },
   koh1AntiObject: {
     id: 'koh1AntiObject',
-    name: 'KOH 1 V3 Pose',
-    subtitle: 'KOH (1) V3 Pose · 30 FPS · 6 steps · CFG 1',
-    detail: 'Pose-only driving pipeline dengan reference anchoring.'
+    name: 'KOH 1 V3 Mask',
+    subtitle: 'KOH (1) V3 Mask · 30 FPS · 6 steps · CFG 1',
+    detail: 'Mask-only driving pipeline tanpa RGB driver langsung.'
   }
 };
 
