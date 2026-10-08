@@ -25,6 +25,7 @@ const GLOBAL_ACCOUNT_VAULT = path.join(DATA_DIR, 'accounts.enc');
 const workflowGraphs = {
   r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
+  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/koh1-anti-object-api.json'), 'utf8')),
 };
 
 const workflowMeta = {
@@ -39,6 +40,12 @@ const workflowMeta = {
     name: 'Current Workflow',
     subtitle: 'KOH (1) · 30 FPS · 6 steps · CFG 1',
     detail: 'Current Workflow dari file KOH (1) yang baru.'
+  },
+  koh1AntiObject: {
+    id: 'koh1AntiObject',
+    name: 'KOH 1 Anti Object',
+    subtitle: 'KOH (1) Anti Object · 30 FPS · 6 steps · CFG 1',
+    detail: 'KOH (1) dengan conditioning anti penambahan objek baru.'
   }
 };
 
