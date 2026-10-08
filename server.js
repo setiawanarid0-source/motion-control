@@ -43,9 +43,9 @@ const workflowMeta = {
   },
   koh1AntiObject: {
     id: 'koh1AntiObject',
-    name: 'KOH 1 Anti Object',
-    subtitle: 'KOH (1) Anti Object · 30 FPS · 6 steps · CFG 1',
-    detail: 'KOH (1) dengan conditioning anti penambahan objek baru.'
+    name: 'KOH 1 V2',
+    subtitle: 'KOH (1) V2 · 30 FPS · 6 steps · CFG 1',
+    detail: 'KOH (1) asli dengan pose_strength 0.8.'
   }
 };
 
