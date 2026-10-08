@@ -71,7 +71,11 @@ function setMedia(kind,file){
 }
 function updateEstimates(){ const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
 function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&!state.task; $('#generateBtn').disabled=!ready; }
-function workflowName(){ return state.workflow==='r15'?'R15 Baseline':'Current Workflow'; }
+function workflowName(){
+  if(state.workflow==='r15')return 'R15 Baseline';
+  if(state.workflow==='koh1AntiObject')return 'KOH 1 Anti Object';
+  return 'Current Workflow';
+}
 function estimateSeconds(){ if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
 function startVisibleTimer(){
   state.startedAt=Date.now();
