@@ -25,7 +25,7 @@ const GLOBAL_ACCOUNT_VAULT = path.join(DATA_DIR, 'accounts.enc');
 const workflowGraphs = {
   r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
-  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r2-hard-background-api.json'), 'utf8')),
+  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-camera-static-api.json'), 'utf8')),
 };
 
 const workflowMeta = {
@@ -43,9 +43,9 @@ const workflowMeta = {
   },
   koh1AntiObject: {
     id: 'koh1AntiObject',
-    name: 'MotionFly R2 · Camera Lock',
-    subtitle: 'MotionFly R2 · 35 FPS · 1080×1920 · 6 steps · CFG 1',
-    detail: 'Hard background lock: image + driving video + required clean plate (tanpa orang).'
+    name: 'MotionFly · Static Camera 35 FPS',
+    subtitle: 'MotionFly · 35 FPS · 1080×1920 · 6 steps · CFG 1',
+    detail: 'Dua input: Reference Image (karakter dan lingkungan), Video Reference (gerakan). Target kamera statis; hasil masih perlu diuji.'
   }
 };
 
@@ -238,10 +238,9 @@ async function uploadToRunningHub(apiKey, file) {
   return data.data.fileName;
 }
 
-async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, cleanBackgroundFile }) {
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile }) {
   const imageName = await uploadToRunningHub(apiKey, imageFile);
   const videoName = await uploadToRunningHub(apiKey, videoFile);
-  const cleanBackgroundName = workflowKey === 'koh1AntiObject' ? await uploadToRunningHub(apiKey, cleanBackgroundFile) : null;
   const payload = {
     apiKey,
     workflowId,
@@ -249,7 +248,6 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
       { nodeId: '30', fieldName: 'image', fieldValue: imageName },
       { nodeId: '33', fieldName: 'video', fieldValue: videoName },
       { nodeId: '331', fieldName: 'seed', fieldValue: 50 },
-      ...(cleanBackgroundName ? [{ nodeId: '493', fieldName: 'image', fieldValue: cleanBackgroundName }] : []),
     ],
     workflow: JSON.stringify(workflowGraphs[workflowKey]),
     addMetadata: true,
@@ -268,7 +266,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
 
 const upload = multer({
   dest: '/tmp/vanta-motion/',
-  limits: { files: 3, fileSize: VIDEO_MAX },
+  limits: { files: 2, fileSize: VIDEO_MAX },
 });
 
 app.disable('x-powered-by');
@@ -370,13 +368,11 @@ app.post('/api/accounts/refresh', async (req, res) => {
 app.post('/api/generate', upload.fields([
   { name: 'referenceImage', maxCount: 1 },
   { name: 'videoReference', maxCount: 1 },
-  { name: 'cleanBackground', maxCount: 1 },
 ]), async (req, res) => {
   const imageFile = req.files?.referenceImage?.[0];
   const videoFile = req.files?.videoReference?.[0];
-  const cleanBackgroundFile = req.files?.cleanBackground?.[0];
   const cleanup = () => {
-    for (const f of [imageFile, videoFile, cleanBackgroundFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
+    for (const f of [imageFile, videoFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
   };
 
   try {
@@ -390,11 +386,6 @@ app.post('/api/generate', upload.fields([
     const mode = String(req.body?.mode || 'lite');
     const requestedAccountId = String(req.body?.accountId || 'auto');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
-    if (workflowKey === 'koh1AntiObject') {
-      if (!cleanBackgroundFile) throw new Error('MotionFly R2 memerlukan Clean Background tanpa karakter.');
-      if (cleanBackgroundFile.size > IMAGE_MAX) throw new Error('Clean Background maksimal 20 MB.');
-      if (!/^image\/(jpeg|png|webp)$/i.test(cleanBackgroundFile.mimetype)) throw new Error('Clean Background harus JPG, PNG, atau WEBP.');
-    }
     if (!['lite', 'standard'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
 
     const { deviceId, accounts } = getPersistentAccounts(req);
@@ -424,7 +415,6 @@ app.post('/api/generate', upload.fields([
           mode,
           imageFile,
           videoFile,
-          cleanBackgroundFile,
         });
         account.lastUsedAt = new Date().toISOString();
         saveVaultAccounts(deviceId, accounts);
