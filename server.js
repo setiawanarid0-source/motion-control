@@ -26,7 +26,7 @@ const GLOBAL_ACCOUNT_VAULT = path.join(DATA_DIR, 'accounts.enc');
 const workflowGraphs = {
   r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
-  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r3-driver-stabilization-api.json'), 'utf8')),
+  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-sam3-diagnostic-api.json'), 'utf8')),
 };
 
 const workflowMeta = {
@@ -44,9 +44,10 @@ const workflowMeta = {
   },
   koh1AntiObject: {
     id: 'koh1AntiObject',
-    name: 'MotionFly R3 · Camera Stabilization',
-    subtitle: 'MotionFly R3 · 35 FPS · 1080×1920 · 6 steps · CFG 1',
-    detail: 'Stabilisasi driving video sebelum SCAIL-2. Dua input, tanpa clean background. Memerlukan node video_stabilizer_classic terpasang di RunningHub; kamera akhir belum terbukti statis.'
+    name: 'MotionFly R4 · SAM3 Mask Diagnostic',
+    subtitle: 'Diagnostik SAM3 · 35 FPS · tanpa generasi AI video',
+    detail: 'Upload video driving yang SUDAH dikompensasi 35 FPS. Hasil: video mask orang + gambar mask referensi. Memakai kredit RunningHub; belum menguji kamera hasil generasi.',
+    outputKind: 'diagnostic'
   }
 };
 
@@ -248,7 +249,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     nodeInfoList: [
       { nodeId: '30', fieldName: 'image', fieldValue: imageName },
       { nodeId: '33', fieldName: 'video', fieldValue: videoName },
-      { nodeId: '331', fieldName: 'seed', fieldValue: 50 },
+      ...(workflowKey === 'koh1AntiObject' ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
     ],
     workflow: JSON.stringify(workflowGraphs[workflowKey]),
     addMetadata: true,
@@ -450,7 +451,7 @@ async function resolveTaskVideoUrl(account, taskId) {
     err.statusCode = 409;
     throw err;
   }
-  const output = data.data.find(x => String(x.fileType || '').toLowerCase().includes('video')) || data.data[0];
+  const output = data.data.find(x => String(x.nodeId) === '393' || String(x.fileType || '').toLowerCase().includes('video') || /\.mp4(?:\?|$)/i.test(String(x.fileUrl || ''))) || data.data[0];
   const fileUrl = String(output?.fileUrl || '');
   if (!/^https?:\/\//i.test(fileUrl)) {
     const err = new Error('URL hasil video tidak valid.');

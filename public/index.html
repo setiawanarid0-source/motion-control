@@ -84,12 +84,13 @@
                 <small>Current Workflow terbaru.</small>
               </button>
               <button class="workflow-card" data-workflow="koh1AntiObject">
-                <div class="workflow-row"><strong>MotionFly R3 · Camera Stabilization</strong><span class="badge">03</span></div>
-                <p>35 FPS · 1080 × 1920 · 6 steps · CFG 1</p>
-                <small>Video stabilizer sebelum SCAIL-2 · perlu node video_stabilizer_classic di RunningHub.</small>
+                <div class="workflow-row"><strong>MotionFly R4 · SAM3 Mask Diagnostic</strong><span class="badge">03</span></div>
+                <p>35 FPS · Tes tracking dan mask · tanpa sampler</p>
+                <small>Hasil: video mask gerakan + gambar mask referensi. BUKAN video motion-transfer akhir.</small>
               </button>
             </div>
 
+            <div id="diagnosticNotice" class="diagnostic-notice hidden" role="note"><strong>Mode diagnosis SAM3</strong><p>Wajib upload driving video yang sudah dikompensasi ke 35 FPS, bukan video mentah. Tes ini menghasilkan mask saja dan tetap dapat menggunakan kredit RunningHub. Belum ada estimasi biaya yang tervalidasi.</p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
             <div class="mode-grid">
               <button class="mode-card selected" data-mode="lite">
@@ -120,9 +121,9 @@
         </section>
 
         <section id="resultSection" class="panel result-panel hidden">
-          <div class="result-head"><div><div class="eyebrow">RESULT</div><h3>Generation completed</h3></div><div class="result-stats"><span id="resultWorkflow">—</span><span id="resultDuration">Generate time —</span></div></div>
-          <div class="video-frame"><video id="resultVideo" controls playsinline></video></div>
-          <div class="result-actions"><div class="cache-state"><span class="status-dot online"></span>Hasil siap diputar</div><a id="downloadBtn" class="download-btn" href="#" download>Download</a></div>
+          <div class="result-head"><div><div class="eyebrow">RESULT</div><h3 id="resultHeading">Generation completed</h3></div><div class="result-stats"><span id="resultWorkflow">—</span><span id="resultDuration">Generate time —</span></div></div>
+          <p id="resultMediaLabel" class="result-media-label">Video hasil generasi</p><div class="video-frame"><video id="resultVideo" controls playsinline></video></div><div id="referenceMaskWrap" class="hidden diagnostic-mask"><p>Mask referensi SAM3</p><img id="referenceMaskPreview" alt="Hasil mask referensi SAM3" loading="lazy"><a id="referenceMaskDownload" class="download-btn" target="_blank" rel="noopener noreferrer" href="#">Buka gambar mask</a></div>
+          <div class="result-actions"><div class="cache-state"><span class="status-dot online"></span><span id="resultCacheState">Hasil siap diputar</span></div><a id="downloadBtn" class="download-btn" href="#" download>Download</a></div>
         </section>
       </section>
 
@@ -179,6 +180,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261009-0128" defer></script>
+  <script src="/app.js?v=20261009-1305" defer></script>
 </body>
 </html>

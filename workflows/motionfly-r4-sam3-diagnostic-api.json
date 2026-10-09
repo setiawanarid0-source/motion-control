@@ -1,0 +1,357 @@
+{
+  "30": {
+    "inputs": {
+      "image": "7909cb1c0c09e81b93c55ff472c09fddf21d131b3854311cb30b7c88e8cff3ae.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "REFERENCE IMAGE"
+    }
+  },
+  "33": {
+    "inputs": {
+      "video": "22caab43238b782c1e2d5585b12ae21ffa281e1644bd715e6bca50e7657527e2.mp4",
+      "force_rate": 35,
+      "force_size": "Disabled",
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "Cosmos"
+    },
+    "class_type": "VHS_LoadVideo",
+    "_meta": {
+      "title": "R4 DIAGNOSTIC — Upload PRECOMPENSATED 35 FPS video"
+    }
+  },
+  "85": {
+    "inputs": {
+      "detection_threshold": 0.5,
+      "max_objects": [
+        "320",
+        0
+      ],
+      "detect_interval": 2,
+      "images": [
+        "89",
+        0
+      ],
+      "model": [
+        "86",
+        0
+      ],
+      "conditioning": [
+        "275",
+        0
+      ]
+    },
+    "class_type": "SAM3_VideoTrack",
+    "_meta": {
+      "title": "Run SAM3 Video Track"
+    }
+  },
+  "86": {
+    "inputs": {
+      "ckpt_name": "sam3.1_multiplex_fp16.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "87": {
+    "inputs": {
+      "text": "person",
+      "clip": [
+        "86",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "SAM3 • reference person"
+    }
+  },
+  "89": {
+    "inputs": {
+      "width": [
+        "287",
+        0
+      ],
+      "height": [
+        "288",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "device": "cpu",
+      "image": [
+        "33",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Camera-compensated 35 FPS driver resize"
+    }
+  },
+  "91": {
+    "inputs": {
+      "detection_threshold": 0.5,
+      "max_objects": [
+        "320",
+        0
+      ],
+      "detect_interval": 2,
+      "images": [
+        "447",
+        0
+      ],
+      "model": [
+        "86",
+        0
+      ],
+      "conditioning": [
+        "87",
+        0
+      ]
+    },
+    "class_type": "SAM3_VideoTrack",
+    "_meta": {
+      "title": "Run SAM3 Video Track"
+    }
+  },
+  "104": {
+    "inputs": {
+      "object_indices": "",
+      "sort_by": "left_to_right",
+      "replacement_mode": [
+        "271",
+        0
+      ],
+      "driving_track_data": [
+        "85",
+        0
+      ],
+      "ref_track_data": [
+        "91",
+        0
+      ]
+    },
+    "class_type": "SCAIL2ColoredMask",
+    "_meta": {
+      "title": "Create SCAIL-2 Colored Mask"
+    }
+  },
+  "239": {
+    "inputs": {
+      "video_info": [
+        "33",
+        3
+      ]
+    },
+    "class_type": "VHS_VideoInfoLoaded",
+    "_meta": {
+      "title": "Video Info (Loaded) 🎥🅥🅗🅢"
+    }
+  },
+  "271": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "ANIMATION MODE (false)"
+    }
+  },
+  "275": {
+    "inputs": {
+      "text": "person",
+      "clip": [
+        "86",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "SAM3 • driving person"
+    }
+  },
+  "287": {
+    "inputs": {
+      "value": 640
+    },
+    "class_type": "easy int",
+    "_meta": {
+      "title": "Int"
+    }
+  },
+  "288": {
+    "inputs": {
+      "value": 1120
+    },
+    "class_type": "easy int",
+    "_meta": {
+      "title": "Int"
+    }
+  },
+  "298": {
+    "inputs": {
+      "rem_mode": "RMBG-2.0",
+      "image_output": "Preview",
+      "save_prefix": "ComfyUI",
+      "torchscript_jit": false,
+      "add_background": "black",
+      "refine_foreground": false,
+      "images": [
+        "308",
+        0
+      ]
+    },
+    "class_type": "easy imageRemBg",
+    "_meta": {
+      "title": "Image Remove Bg"
+    }
+  },
+  "308": {
+    "inputs": {
+      "width": [
+        "89",
+        1
+      ],
+      "height": [
+        "89",
+        2
+      ],
+      "upscale_method": "nvidia_rtx_vsr",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 16,
+      "device": "gpu",
+      "image": [
+        "30",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "REFERENSI - RESIZE LANCZOS"
+    }
+  },
+  "320": {
+    "inputs": {
+      "value": 1
+    },
+    "class_type": "easy int",
+    "_meta": {
+      "title": "Int"
+    }
+  },
+  "393": {
+    "inputs": {
+      "frame_rate": [
+        "239",
+        0
+      ],
+      "loop_count": 0,
+      "filename_prefix": "MotionFly_R4_SAM3_Driving_Mask",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "no_preview": false,
+      "images": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "R4 DIAGNOSTIC — Save SAM3 DRIVING MASK VIDEO"
+    }
+  },
+  "394": {
+    "inputs": {
+      "filename_prefix": "MotionFly_R4_SAM3_Reference_Mask",
+      "images": [
+        "104",
+        1
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "R4 DIAGNOSTIC — Save SAM3 REFERENCE MASK IMAGE"
+    }
+  },
+  "438": {
+    "inputs": {
+      "inputcount": 4,
+      "Update inputs": null,
+      "image_1": [
+        "449",
+        0
+      ]
+    },
+    "class_type": "ImageBatchMulti",
+    "_meta": {
+      "title": "Image Batch Multi"
+    }
+  },
+  "447": {
+    "inputs": {
+      "switch": [
+        "454",
+        0
+      ],
+      "on_false": [
+        "449",
+        0
+      ],
+      "on_true": [
+        "438",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch"
+    }
+  },
+  "449": {
+    "inputs": {
+      "switch": [
+        "271",
+        0
+      ],
+      "on_false": [
+        "308",
+        0
+      ],
+      "on_true": [
+        "298",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch"
+    }
+  },
+  "454": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "开启多参考图"
+    }
+  }
+}

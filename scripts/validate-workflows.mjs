@@ -1,29 +1,31 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-const load=p=>JSON.parse(fs.readFileSync(new URL('../workflows/'+p,import.meta.url),'utf8'));
-const graphs={r15:load('r15-api.json'),current:load('current-api.json'),r3:load('motionfly-r3-driver-stabilization-api.json')};
+const read=(p)=>JSON.parse(fs.readFileSync(new URL('../workflows/'+p,import.meta.url),'utf8'));
+const graphs={r15:read('r15-api.json'),current:read('current-api.json'),r4:read('motionfly-r4-sam3-diagnostic-api.json')};
 for(const [name,graph] of Object.entries(graphs)){
- for(const id of ['30','33','104','418','489','490'])assert.ok(graph[id],name+' missing '+id);
- for(const [id,node] of Object.entries(graph))for(const [field,value] of Object.entries(node.inputs||{}))
-  if(Array.isArray(value)&&value.length===2&&typeof value[0]==='string'&&Number.isInteger(value[1]))
-   assert.ok(graph[value[0]],name+' broken input '+id+'.'+field+' -> '+value[0]);
- assert.equal(graph['33'].inputs.force_rate,name==='r3'?35:30,name+' wrong fps');
- assert.equal(graph['489'].inputs.width,1080,name+' width');
- assert.equal(graph['489'].inputs.height,1920,name+' height');
- assert.deepEqual(graph['490'].inputs.frame_rate,['239',0],name+' output FPS');
+ for(const [id,node] of Object.entries(graph))for(const [field,value] of Object.entries(node.inputs||{}))if(Array.isArray(value)&&value.length===2&&typeof value[0]==='string'&&Number.isInteger(value[1]))assert.ok(graph[value[0]],name+' broken reference '+id+'.'+field+'->'+value[0]);
+ assert.ok(graph['30']?.class_type==='LoadImage');
+ assert.ok(graph['33']?.class_type==='VHS_LoadVideo');
+ assert.equal(graph['33'].inputs.force_rate,name==='r4'?35:30,name+' FPS');
 }
-const m=graphs.r3;
-assert.equal(m['492'].class_type,'video_stabilizer_classic');
-assert.match(m['492'].inputs.padding_color,/^\s*(?:0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\s*,\s*(?:0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\s*,\s*(?:0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\s*$/,'RunningHub node 492 needs decimal RGB; hex triggered ValueError');
-assert.deepEqual(m['492'].inputs.frames,['33',0]);
-assert.deepEqual(m['492'].inputs.frame_rate,['239',0]);
-assert.deepEqual(m['89'].inputs.image,['492',0]);
-assert.deepEqual(m['418'].inputs.pose_video,['89',0]);
-assert.deepEqual(m['490'].inputs.images,['489',0]);
-assert.deepEqual(m['492'].inputs,{frames:['33',0],frame_rate:['239',0],framing_mode:'crop_and_pad',transform_mode:'similarity',camera_lock:true,strength:1,smooth:1,keep_fov:0.6,padding_color:'0, 0, 0'});
-assert.equal(m['417'].inputs.retain_first_frame,true);
-assert.match(m['3'].inputs.text,/CAMERA LOCK/);
-assert.equal(Object.keys(m).length,40,'R3 API node count (exclude UI Note node and inactive graph)');
-assert.ok(!m['493'],'No clean background / placeholder input');
-assert.deepEqual(m['490'].inputs.audio,['33',2]);
-console.log('PASS: R15 and Current unchanged; MotionFly R3 two-input 35 FPS; RGB padding accepted by RunningHub; stabilizer node 492 -> 89 -> SCAIL-2; 1080x1920; final video/audio wired.');
+for(const name of ['r15','current']){
+ const g=graphs[name];
+ for(const id of ['104','418','331','489','490'])assert.ok(g[id],name+' changed');
+ assert.equal(g['489'].inputs.width,1080);
+ assert.equal(g['489'].inputs.height,1920);
+}
+const g=graphs.r4;
+for(const id of ['30','33','85','86','87','89','91','104','239','393','394'])assert.ok(g[id],'diagnostic node '+id+' absent');
+for(const id of ['331','418','417','490','492'])assert.ok(!g[id],'must NOT generate or stabilize: '+id);
+assert.equal(g['393'].class_type,'VHS_VideoCombine');
+assert.equal(g['393'].inputs.save_output,true);
+assert.deepEqual(g['393'].inputs.images,['104',0]);
+assert.deepEqual(g['393'].inputs.frame_rate,['239',0]);
+assert.equal(g['394'].class_type,'SaveImage');
+assert.deepEqual(g['394'].inputs.images,['104',1]);
+assert.deepEqual(g['89'].inputs.image,['33',0]);
+assert.deepEqual(g['85'].inputs.images,['89',0]);
+assert.deepEqual(g['104'].inputs.driving_track_data,['85',0]);
+assert.deepEqual(g['104'].inputs.ref_track_data,['91',0]);
+assert.ok(Object.keys(g).length<40);
+console.log('PASS: R15 & Current remain full generation, R4 mask-only API graph has dual outputs and no sampler or stabilizer.');

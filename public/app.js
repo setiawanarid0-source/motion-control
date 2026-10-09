@@ -69,14 +69,14 @@ function setMedia(kind,file){
   else{state.video=file;const p=$('#videoPreview'); if(!file){p.innerHTML='';p.classList.remove('active');state.videoDuration=0;updateEstimates();updateGenerate();return} const url=URL.createObjectURL(file);p.innerHTML=`<video src="${url}" muted playsinline preload="metadata"></video><div class="media-overlay"><div><strong>${escapeHtml(file.name)}</strong><small id="videoFileMeta">${fileSize(file.size)}</small></div><button class="remove-media" data-remove="video">×</button></div>`;p.classList.add('active');const v=p.querySelector('video');v.onloadedmetadata=()=>{state.videoDuration=v.duration||0;$('#videoFileMeta').textContent=`${fileSize(file.size)} · ${fmtTime(v.duration)}`;updateEstimates();};}
   $$('[data-remove]').forEach(btn=>btn.onclick=e=>{e.preventDefault();e.stopPropagation();setMedia(btn.dataset.remove,null)});updateGenerate();
 }
-function updateEstimates(){ const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
-function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&!state.task; $('#generateBtn').disabled=!ready; }
+function updateEstimates(){ if(state.workflow==='koh1AntiObject'){ ['liteCredits','liteTime','standardCredits','standardTime'].forEach(id=>$('#'+id).textContent='—');return;} const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
+function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&!state.task; $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':'Generate motion'; }
 function workflowName(){
   if(state.workflow==='r15')return 'R15 Baseline';
-  if(state.workflow==='koh1AntiObject')return 'MotionFly R3 · Camera Stabilization';
+  if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
   return 'Current Workflow';
 }
-function estimateSeconds(){ if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
+function estimateSeconds(){ if(state.workflow==='koh1AntiObject')return 0; if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
 function startVisibleTimer(){
   state.startedAt=Date.now();
   $('#taskElapsed').textContent='00:00';
@@ -113,7 +113,7 @@ async function generate(){
     const submittedMs=Date.parse(submittedIso);
     state.startedAt=Number.isFinite(submittedMs)?submittedMs:Date.now();
     showTask(data);
-    saveHistory({taskId:data.taskId,accountId:data.accountId,workflow:data.workflow.name,mode:data.mode,account:data.accountName,video:state.video.name,videoSeconds:state.videoDuration,status:data.taskStatus==='RUNNING'?'processing':'queued',startedAt:submittedIso,runtimeMs:null,resultUrl:null,error:null});
+    saveHistory({taskId:data.taskId,accountId:data.accountId,workflow:data.workflow.name,outputKind:data.workflow.outputKind||'video',mode:data.mode,account:data.accountName,video:state.video.name,videoSeconds:state.videoDuration,status:data.taskStatus==='RUNNING'?'processing':'queued',startedAt:submittedIso,runtimeMs:null,resultUrl:null,referenceMaskUrl:null,error:null});
     startPolling();
   }catch(e){
     clearInterval(state.elapsedTimer);
@@ -123,7 +123,7 @@ async function generate(){
     state.task=null;
     updateGenerate();
   } finally {
-    btn.querySelector('span:first-child').textContent='Generate motion';
+    btn.querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':'Generate motion';
     if(!state.task)updateGenerate();
   }
 }
@@ -155,13 +155,22 @@ async function pollTask(){
     }
     if(data.state==='failed') finishFailed(data.message||'Task gagal.',data.failure||null);
     if(data.state==='success'){
-      const video=data.outputs.find(o=>String(o.fileType||'').toLowerCase().includes('video'))||data.outputs[0];
-      if(!video?.fileUrl) return finishFailed('Task selesai tetapi URL output tidak ditemukan.');
-      finishSuccess(video.fileUrl);
+      const results=selectTaskOutputs(data.outputs, state.task.workflow.outputKind);
+      if(!results.videoUrl) return finishFailed('RunningHub tidak mengembalikan video mask/generasi.');
+      finishSuccess(results);
     }
   }catch(e){
     console.warn('poll',e.message);
   }
+}
+function selectTaskOutputs(outputs,kind){
+  const items=Array.isArray(outputs)?outputs:[];
+  const video=(kind==='diagnostic'?items.find(o=>String(o.nodeId)==='393'):null)
+    ||items.find(o=>String(o.fileType||'').toLowerCase().includes('video')||/\.mp4(?:\?|$)/i.test(String(o.fileUrl||'')));
+  const referenceMask=kind==='diagnostic'
+    ?(items.find(o=>String(o.nodeId)==='394')||items.find(o=>String(o.fileType||'').toLowerCase().includes('image')))
+    :null;
+  return {videoUrl:video?.fileUrl||null,referenceMaskUrl:referenceMask?.fileUrl||null};
 }
 function finishFailed(msg,failure=null){
   clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
@@ -172,20 +181,27 @@ function finishFailed(msg,failure=null){
   updateHistory(state.task.taskId,{status:'failed',finishedAt:new Date().toISOString(),runtimeMs:elapsed,error:msg,...(failure?{diagnosis:formatTaskDiagnosis(failure,msg),diagnosisChecked:true}:{})});
   state.task=null;$('#taskStatus').textContent='Failed';updateGenerate();
 }
-function finishSuccess(url){
+function finishSuccess(result){
   clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
   const elapsed=Date.now()-state.startedAt;
   $('#taskElapsed').textContent=fmtElapsed(elapsed);
   $('#taskEstimate').textContent='Selesai';
   $('#taskStatus').textContent='Selesai';
   $('#resultSection').classList.remove('hidden');
-  $('#resultVideo').src=url;$('#downloadBtn').href=url;
+  $('#resultVideo').src=result.videoUrl;$('#downloadBtn').href=result.videoUrl;
+  const diagnostic=state.task.workflow.outputKind==='diagnostic';
+  $('#resultHeading').textContent=diagnostic?'Tes SAM3 selesai — hasil mask':'Generation completed';
+  $('#resultMediaLabel').textContent=diagnostic?'Mask gerakan SAM3 (BUKAN hasil motion transfer)':'Video hasil generasi';
+  $('#resultCacheState').textContent=diagnostic?'Hasil diagnostik siap diperiksa':'Hasil siap diputar';
+  $('#downloadBtn').textContent=diagnostic?'Download video mask':'Download video';
+  $('#referenceMaskWrap').classList.toggle('hidden',!diagnostic||!result.referenceMaskUrl);
+  if(result.referenceMaskUrl){$('#referenceMaskPreview').src=result.referenceMaskUrl;$('#referenceMaskDownload').href=result.referenceMaskUrl;}
   $('#resultWorkflow').textContent=state.task.workflow.name;
   $('#resultDuration').textContent=`Generate time ${fmtElapsed(elapsed)}`;
-  updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:url});
+  updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:result.videoUrl,referenceMaskUrl:result.referenceMaskUrl});
   state.task=null;updateGenerate();
   $('#resultSection').scrollIntoView({behavior:'smooth',block:'start'});
-  toast(`Video selesai dalam ${fmtElapsed(elapsed)}.`);
+  toast(`${diagnostic?'Tes SAM3':'Video'} selesai dalam ${fmtElapsed(elapsed)}.`);
 }
 
 const HISTORY_RETENTION_MS=3*24*60*60*1000;
@@ -299,8 +315,9 @@ function renderHistory(){
       : (x.resultUrl||'');
     const safeDownloadUrl=escapeHtml(rawDownloadUrl);
     const safePreviewUrl=escapeHtml(rawPreviewUrl);
+    const extraMask=x.referenceMaskUrl?`<a class="history-action-btn download" href="${escapeHtml(x.referenceMaskUrl)}" target="_blank" rel="noopener noreferrer">Mask referensi</a>`:'';
     const result=x.resultUrl
-      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safePreviewUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Preview</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a></div>`
+      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safePreviewUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Preview ${x.outputKind==='diagnostic'?'mask':'video'}</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a>${extraMask}</div>`
       : (isActiveHistoryStatus(x.status)?'<span class="history-pending"><span class="history-live-dot"></span>Menunggu hasil</span>':'—');
     return `<tr data-task-id="${escapeHtml(x.taskId||'')}">
       <td data-label="Time">${new Date(x.startedAt).toLocaleString('id-ID')}</td>
@@ -332,8 +349,9 @@ async function pollHistoryTasks(){
         }else if(data.state==='failed'){
           updateHistory(item.taskId,{accountId,status:'failed',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),error:data.message||'Task gagal.',...(data.failure?{diagnosis:formatTaskDiagnosis(data.failure,data.message),diagnosisChecked:true}:{})});
         }else if(data.state==='success'){
-          const video=data.outputs?.find(o=>String(o.fileType||'').toLowerCase().includes('video'))||data.outputs?.[0];
-          updateHistory(item.taskId,{accountId,status:'success',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),resultUrl:video?.fileUrl||null,error:null});
+          const outputs=selectTaskOutputs(data.outputs,item.outputKind);
+          if(!outputs.videoUrl)throw new Error('Output video tidak tersedia pada respons RunningHub.');
+          updateHistory(item.taskId,{accountId,status:'success',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),resultUrl:outputs.videoUrl,referenceMaskUrl:outputs.referenceMaskUrl,error:null});
         }
       }catch(e){
         console.warn('history poll',item.taskId,e.message);
@@ -407,7 +425,7 @@ function startHistoryMonitor(){
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
 $$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');
-$$('.workflow-card').forEach(b=>b.onclick=()=>{$$('.workflow-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.workflow=b.dataset.workflow});
+$$('.workflow-card').forEach(b=>b.onclick=()=>{$$('.workflow-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.workflow=b.dataset.workflow;updateEstimates();updateGenerate();$('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');});
 $$('.mode-card').forEach(b=>b.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode});
 initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');
 $('#generateBtn').onclick=generate;$('#refreshAccounts').onclick=refreshAccounts;
