@@ -153,7 +153,7 @@ async function pollTask(){
       $('#taskStatus').textContent='Memproses';
       updateHistory(state.task.taskId,{status:'processing',error:null});
     }
-    if(data.state==='failed') finishFailed(data.message||'Task gagal.');
+    if(data.state==='failed') finishFailed(data.message||'Task gagal.',data.failure||null);
     if(data.state==='success'){
       const video=data.outputs.find(o=>String(o.fileType||'').toLowerCase().includes('video'))||data.outputs[0];
       if(!video?.fileUrl) return finishFailed('Task selesai tetapi URL output tidak ditemukan.');
@@ -163,13 +163,13 @@ async function pollTask(){
     console.warn('poll',e.message);
   }
 }
-function finishFailed(msg){
+function finishFailed(msg,failure=null){
   clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
   const elapsed=Date.now()-state.startedAt;
   $('#taskElapsed').textContent=fmtElapsed(elapsed);
   $('#taskEstimate').textContent='Task gagal';
   toast(msg,true);
-  updateHistory(state.task.taskId,{status:'failed',finishedAt:new Date().toISOString(),runtimeMs:elapsed,error:msg});
+  updateHistory(state.task.taskId,{status:'failed',finishedAt:new Date().toISOString(),runtimeMs:elapsed,error:msg,...(failure?{diagnosis:formatTaskDiagnosis(failure,msg),diagnosisChecked:true}:{})});
   state.task=null;$('#taskStatus').textContent='Failed';updateGenerate();
 }
 function finishSuccess(url){
@@ -239,6 +239,28 @@ function resolveHistoryAccountId(item){
   if(item.accountId)return item.accountId;
   return state.accounts.find(a=>a.name===item.account)?.id||null;
 }
+function formatTaskDiagnosis(failure,fallback='APIKEY_TASK_STATUS_ERROR'){
+  if(!failure)return 'RunningHub tidak menyertakan detail failedReason pada respons task ini.';
+  const position=[failure.nodeName,failure.nodeId?`ID ${failure.nodeId}`:''].filter(Boolean).join(' · ');
+  const kind=failure.exceptionType||'Error';
+  return [position,kind,failure.message].filter(Boolean).join(' | ')||fallback;
+}
+async function diagnoseFailedTask(item){
+  const accountId=resolveHistoryAccountId(item);
+  if(!accountId)throw new Error('Akun task tidak lagi ada di Account Pool.');
+  const result=await api(`/api/tasks/${encodeURIComponent(item.taskId)}`,{method:'POST',body:JSON.stringify({accountId})});
+  if(result.state!=='failed')throw new Error(`Status task sekarang: ${result.state||'tidak diketahui'}`);
+  const diagnosis=formatTaskDiagnosis(result.failure,result.message);
+  updateHistory(item.taskId,{accountId,diagnosis,diagnosisChecked:true});
+  return diagnosis;
+}
+async function inspectRecentFailedTasks(){
+  const candidates=history().filter(item=>item.status==='failed'&&item.taskId&&!item.diagnosisChecked).slice(0,3);
+  for(const item of candidates){
+    try{await diagnoseFailedTask(item);}
+    catch(error){console.warn('task diagnosis',String(item.taskId),error.message);}
+  }
+}
 function historyFilterMatches(item){
   const status=String(item?.status||'').toLowerCase();
   if(state.historyFilter==='success')return status==='success';
@@ -264,6 +286,9 @@ function renderHistory(){
     const statusClass=historyStatusClass(x.status);
     const statusLabel=historyStatusLabel(x.status);
     const error=x.error?`<small class="history-error" title="${escapeHtml(x.error)}">${escapeHtml(x.error)}</small>`:'';
+    const diagnosis=x.diagnosis?`<small class="history-diagnosis">${escapeHtml(x.diagnosis)}</small>`:'';
+    const inspect=x.status==='failed'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-diagnose-task="${escapeHtml(x.taskId)}">Periksa penyebab</button>`:'';
+
     const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
     const resolvedAccountId=resolveHistoryAccountId(x);
     const rawDownloadUrl=(resolvedAccountId&&x.taskId)
@@ -284,7 +309,7 @@ function renderHistory(){
       <td data-label="Account">${escapeHtml(x.account)}</td>
       <td data-label="Video" class="history-video-name">${escapeHtml(x.video)}</td>
       <td data-label="Generate time" class="history-runtime">${elapsed?fmtElapsed(elapsed):'—'}</td>
-      <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}</td>
+      <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}${diagnosis}${inspect}</td>
       <td data-label="Result">${result}</td>
     </tr>`;
   }).join('');
@@ -305,7 +330,7 @@ async function pollHistoryTasks(){
         }else if(data.state==='running'){
           updateHistory(item.taskId,{accountId,status:'processing',error:null});
         }else if(data.state==='failed'){
-          updateHistory(item.taskId,{accountId,status:'failed',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),error:data.message||'Task gagal.'});
+          updateHistory(item.taskId,{accountId,status:'failed',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),error:data.message||'Task gagal.',...(data.failure?{diagnosis:formatTaskDiagnosis(data.failure,data.message),diagnosisChecked:true}:{})});
         }else if(data.state==='success'){
           const video=data.outputs?.find(o=>String(o.fileType||'').toLowerCase().includes('video'))||data.outputs?.[0];
           updateHistory(item.taskId,{accountId,status:'success',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),resultUrl:video?.fileUrl||null,error:null});
@@ -346,7 +371,18 @@ function closeHistoryPreview(){
 function bindHistoryActions(){
   const body=$('#historyBody');
   if(body){
-    body.addEventListener('click',e=>{
+    body.addEventListener('click',async e=>{
+      const diagnostic=e.target.closest('[data-diagnose-task]');
+      if(diagnostic){
+        e.preventDefault();
+        const item=history().find(x=>String(x.taskId)===String(diagnostic.dataset.diagnoseTask));
+        if(!item)return;
+        diagnostic.disabled=true;diagnostic.textContent='Memeriksa…';
+        try{await diagnoseFailedTask(item);}
+        catch(error){toast('Tidak dapat mengambil detail task: '+error.message,true);}
+        finally{if(diagnostic.isConnected){diagnostic.disabled=false;diagnostic.textContent='Periksa penyebab';}}
+        return;
+      }
       const btn=e.target.closest('[data-preview-url]');
       if(!btn)return;
       e.preventDefault();
@@ -365,6 +401,7 @@ function startHistoryMonitor(){
   state.historyPollTimer=setInterval(pollHistoryTasks,5000);
   state.historyClockTimer=setInterval(()=>{if(state.view==='history')renderHistory()},1000);
   pollHistoryTasks();
+  inspectRecentFailedTasks();
 }
 
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}

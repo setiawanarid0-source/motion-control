@@ -470,3 +470,8 @@ button,input,select{font:inherit}button,a{touch-action:manipulation}.hidden{disp
   .history-retention-note{margin-top:-2px;margin-bottom:12px}
   .history-retention-note p{font-size:10px}
 }
+
+/* RunningHub failure details for already-failed tasks; querying does not generate a new task. */
+.history-diagnosis{display:block;font-size:10px;line-height:1.55;color:#f0b7a1;white-space:normal;overflow-wrap:anywhere;margin-top:9px;max-width:340px}
+.history-diagnose-btn{display:block;background:#161b22;border:1px solid #58636d;border-radius:7px;padding:7px 10px;font-size:10px;color:#e6edf3;cursor:pointer;margin-top:8px}
+.history-diagnose-btn:disabled{opacity:.6;cursor:wait}

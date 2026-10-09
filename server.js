@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import axios from 'axios';
 import FormData from 'form-data';
+import { extractTaskFailure } from './task-failure.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -474,7 +475,7 @@ app.post('/api/tasks/:taskId', async (req, res) => {
     if (code === 804 || code === 813 || code === 0) {
       return res.json({ state: code === 813 ? 'queued' : 'running', rawCode: code, message: data?.msg || '' });
     }
-    res.json({ state: 'failed', rawCode: code, message: data?.msg || 'Task gagal.' });
+    res.json({ state: 'failed', rawCode: code, message: data?.msg || 'Task gagal.', failure: extractTaskFailure(data) });
   } catch (error) {
     res.status(502).json({ error: error.message || 'Gagal mengambil status task.' });
   }
