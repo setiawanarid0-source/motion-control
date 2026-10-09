@@ -69,15 +69,15 @@ function setMedia(kind,file){
 }
 function lastSam3Diagnostic(){return history().filter(x=>x.outputKind==='diagnostic'&&x.status==='success'&&x.taskId&&resolveHistoryAccountId(x)).sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt))[0]||null;}
 function refreshLabNotice(){const item=lastSam3Diagnostic(),el=$('#r4LabMaskSource');if(el)el.textContent=item?`Mask dari task SAM3 #${item.taskId} (${new Date(item.startedAt).toLocaleString('id-ID')}). Gunakan gambar dan video kompensasi yang sama.`:'Belum ada hasil SAM3 berhasil di History browser ini. Jalankan tes SAM3 terlebih dahulu.';}
-function updateEstimates(){ if(['koh1AntiObject','r4Lab'].includes(state.workflow)){ ['liteCredits','liteTime','standardCredits','standardTime'].forEach(id=>$('#'+id).textContent='—');return;} const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
+function updateEstimates(){ if(['koh1AntiObject','r4Lab','r15'].includes(state.workflow)){ ['liteCredits','liteTime','standardCredits','standardTime'].forEach(id=>$('#'+id).textContent='—');return;} const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
 function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.some(a=>a.canGenerate!==false)&&!state.task&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()); $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion'; refreshLabNotice(); }
 function workflowName(){
-  if(state.workflow==='r15')return 'R15 Baseline';
+  if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
   if(state.workflow==='r4Lab')return 'MotionFly R4 · Full Controlled Test';
   return 'Current Workflow';
 }
-function estimateSeconds(){ if(['koh1AntiObject','r4Lab'].includes(state.workflow))return 0; if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
+function estimateSeconds(){ if(['koh1AntiObject','r4Lab','r15'].includes(state.workflow))return 0; if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
 function startVisibleTimer(){
   state.startedAt=Date.now();
   $('#taskElapsed').textContent='00:00';
@@ -152,13 +152,14 @@ async function pollTask(){
       updateHistory(state.task.taskId,{status:'queued',error:null});
     }
     if(data.state==='running'){
-      $('#taskStatus').textContent='Memproses';
+      $('#taskStatus').textContent=data.message?.includes('kamera')?'Memeriksa kamera':'Memproses';
       updateHistory(state.task.taskId,{status:'processing',error:null});
     }
     if(data.state==='failed') finishFailed(data.message||'Task gagal.',data.failure||null);
     if(data.state==='success'){
       const results=selectTaskOutputs(data.outputs, state.task.workflow.outputKind);
       if(!results.videoUrl) return finishFailed('RunningHub tidak mengembalikan video mask/generasi.');
+      results.cameraQA=data.cameraQA||null;
       finishSuccess(results);
     }
   }catch(e){
@@ -207,13 +208,13 @@ function finishSuccess(result){
   const diagnostic=state.task.workflow.outputKind==='diagnostic';
   $('#resultHeading').textContent=diagnostic?'Tes SAM3 selesai — hasil mask':'Generation completed';
   $('#resultMediaLabel').textContent=diagnostic?'Mask gerakan SAM3 (BUKAN hasil motion transfer)':'Video hasil generasi';
-  $('#resultCacheState').textContent=diagnostic?'Hasil diagnostik siap diperiksa':'Hasil siap diputar';
+  $('#resultCacheState').textContent=diagnostic?'Hasil diagnostik siap diperiksa':result.cameraQA?.corrected?'Kamera diperiksa · koreksi kecil diterapkan':result.cameraQA?'Kamera diperiksa · hasil asli dipertahankan':'Hasil siap diputar';
   $('#downloadBtn').textContent=diagnostic?'Download video mask':'Download video';
   $('#referenceMaskWrap').classList.toggle('hidden',!diagnostic||!result.referenceMaskUrl);
   if(result.referenceMaskUrl){$('#referenceMaskPreview').src=result.referenceMaskUrl;$('#referenceMaskDownload').href=result.referenceMaskUrl;}
   $('#resultWorkflow').textContent=state.task.workflow.name;
   $('#resultDuration').textContent=`Generate time ${fmtElapsed(elapsed)}`;
-  updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:result.videoUrl,referenceMaskUrl:result.referenceMaskUrl});
+  updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:result.videoUrl,referenceMaskUrl:result.referenceMaskUrl,cameraQA:result.cameraQA||null});
   state.task=null;updateGenerate();
   $('#resultSection').scrollIntoView({behavior:'smooth',block:'start'});
   toast(`${diagnostic?'Tes SAM3':'Video'} selesai dalam ${fmtElapsed(elapsed)}.`);
@@ -321,6 +322,7 @@ function renderHistory(){
     const statusLabel=historyStatusLabel(x.status);
     const error=x.error?`<small class="history-error" title="${escapeHtml(x.error)}">${escapeHtml(x.error)}</small>`:'';
     const diagnosis=x.diagnosis?`<small class="history-diagnosis">${escapeHtml(x.diagnosis)}</small>`:'';
+    const cameraInfo=x.cameraQA?`<small class="history-diagnosis">Kamera: ${escapeHtml(x.cameraQA.sourceCamera||'?')} → ${escapeHtml(x.cameraQA.generatedCamera||'?')} · ${x.cameraQA.corrected?'koreksi kecil diterapkan':'hasil asli'} (${escapeHtml(x.cameraQA.reason||'')})</small>`:'';
     const inspect=x.status==='failed'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-diagnose-task="${escapeHtml(x.taskId)}">Periksa penyebab</button>`:x.status==='unavailable'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-recover-task="${escapeHtml(x.taskId)}">Periksa lagi</button>`:'';
 
     const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
@@ -344,7 +346,7 @@ function renderHistory(){
       <td data-label="Account">${escapeHtml(x.account)}</td>
       <td data-label="Video" class="history-video-name">${escapeHtml(x.video)}</td>
       <td data-label="Generate time" class="history-runtime">${elapsed?fmtElapsed(elapsed):'—'}</td>
-      <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}${diagnosis}${inspect}</td>
+      <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}${diagnosis}${cameraInfo}${inspect}</td>
       <td data-label="Result">${result}</td>
     </tr>`;
   }).join('');
@@ -370,7 +372,7 @@ async function pollHistoryTasks(){
         }else if(data.state==='success'){
           const outputs=selectTaskOutputs(data.outputs,item.outputKind);
           if(!outputs.videoUrl)throw new Error('Output video tidak tersedia pada respons RunningHub.');
-          updateHistory(item.taskId,{accountId,status:'success',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),resultUrl:outputs.videoUrl,referenceMaskUrl:outputs.referenceMaskUrl,error:null});
+          updateHistory(item.taskId,{accountId,status:'success',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),resultUrl:outputs.videoUrl,referenceMaskUrl:outputs.referenceMaskUrl,cameraQA:data.cameraQA||null,error:null});
         }
       }catch(e){
         console.warn('history poll',item.taskId,e.message);

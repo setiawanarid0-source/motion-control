@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { extractTaskFailure } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode } from './account-eligibility.js';
+import { analyzeSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,7 +29,7 @@ const ACCOUNT_DIR = path.join(DATA_DIR, 'account-vaults');
 const GLOBAL_ACCOUNT_VAULT = path.join(DATA_DIR, 'accounts.enc');
 
 const workflowGraphs = {
-  r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
+  r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-camera-adaptive-api.json'), 'utf8')),
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
   koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-sam3-diagnostic-api.json'), 'utf8')),
   r4Lab: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-full-controlled-api.json'), 'utf8')),
@@ -37,9 +38,10 @@ const workflowGraphs = {
 const workflowMeta = {
   r15: {
     id: 'r15',
-    name: 'R15 Baseline',
-    subtitle: 'Motion baseline · 30 FPS · 6 steps · CFG 1.5',
-    detail: 'Raw driving motion path retained; recovered pre-R16 baseline.'
+    name: 'MotionFly R4 · Camera Engine (R15)',
+    subtitle: '35 FPS · 1080×1920 · 6 steps · CFG 1 · eksperimen',
+    detail: 'Kamera driving video diperiksa sebelum dan sesudah generasi. Koreksi 2D kecil hanya diterapkan jika aman; jika ragu, hasil asli dipertahankan.',
+    outputKind: 'video', experimental: true, cameraEngine: true
   },
   current: {
     id: 'current',
@@ -446,6 +448,8 @@ app.post('/api/generate', upload.fields([
     const diagnosticAccount=workflowKey==='r4Lab'?accounts.find(a=>a.id===diagnosticAccountId):null;
     if(workflowKey==='r4Lab'&&!diagnosticAccount)throw new Error('Akun tes SAM3 sebelumnya tidak tersedia pada sesi ini.');
 
+    // Analyze driving-video camera before a paid RunningHub submission.
+    const sourceCamera=workflowKey==='r15'?await analyzeSource(videoFile):null;
     let candidates=[];
     if(requestedAccountId!=='auto'){
       const chosen=accounts.find(a=>a.id===requestedAccountId);
@@ -477,6 +481,10 @@ app.post('/api/generate', upload.fields([
           diagnosticAccount,
           diagnosticTaskId,
         });
+        if(workflowKey==='r15'){
+          try{await saveSource(String(task.taskId),videoFile,sourceCamera);}
+          catch(cameraError){console.error('R15 source save failed',String(task.taskId),cameraError.message);}
+        }
         account.lastUsedAt = new Date().toISOString();
         saveVaultAccounts(deviceId, accounts);
         cleanup();
@@ -546,6 +554,11 @@ app.post('/api/tasks/:taskId', async (req, res) => {
     const code = Number(data?.code);
     if (code === 0 && Array.isArray(data?.data) && data.data.length) {
       const outputs = data.data.map(x => ({ fileUrl: x.fileUrl, fileType: x.fileType, nodeId: x.nodeId ?? null })).filter(x => x.fileUrl);
+      const rawVideo=outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
+      if(rawVideo){
+        const qa=await cameraStatus(req.params.taskId,rawVideo.fileUrl,accountId);
+        if(qa)return res.json({...qa,rawCode:code});
+      }
       return res.json({ state: 'success', outputs, rawCode: code });
     }
     if (code === 804 || code === 813 || code === 0) {
@@ -557,12 +570,21 @@ app.post('/api/tasks/:taskId', async (req, res) => {
   }
 });
 
+app.get('/api/camera-video/:taskId',(req,res)=>{
+  const accountId=String(req.query?.accountId||'');
+  if(!getPersistentAccounts(req).accounts.some(a=>a.id===accountId))return res.status(404).end();
+  const video=readCorrected(req.params.taskId);
+  if(!video)return res.status(404).end();
+  res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');res.sendFile(video);
+});
+
 app.get('/api/tasks/:taskId/preview', async (req, res) => {
   const { accounts } = getPersistentAccounts(req);
   const accountId = String(req.query?.accountId || '');
   const account = accounts.find(a => a.id === accountId);
   if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan.' });
-
+  const corrected=readCorrected(req.params.taskId);
+  if(corrected){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(corrected);}
   try {
     const fileUrl = await resolveTaskVideoUrl(account, req.params.taskId);
     const range = req.headers.range;
@@ -600,6 +622,8 @@ app.get('/api/tasks/:taskId/download', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = accounts.find(a => a.id === accountId);
   if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan dalam sesi.' });
+  const corrected=readCorrected(req.params.taskId);
+  if(corrected)return res.download(corrected,'motion-'+req.params.taskId+'-camera-checked.mp4');
   try {
     const fileUrl = await resolveTaskVideoUrl(account, req.params.taskId);
 
@@ -635,4 +659,5 @@ if (!startupGlobalAccounts.length && startupLegacyAccounts.length) {
   saveGlobalAccounts(startupLegacyAccounts);
 }
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
+pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 app.listen(PORT, '0.0.0.0', () => console.log(`VANTA Motion Studio listening on :${PORT}`));
