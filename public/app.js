@@ -73,7 +73,7 @@ function updateEstimates(){ const d=state.videoDuration;if(!d){$('#liteCredits')
 function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&!state.task; $('#generateBtn').disabled=!ready; }
 function workflowName(){
   if(state.workflow==='r15')return 'R15 Baseline';
-  if(state.workflow==='koh1AntiObject')return 'MotionFly · Static Camera 35 FPS';
+  if(state.workflow==='koh1AntiObject')return 'MotionFly R3 · Camera Stabilization';
   return 'Current Workflow';
 }
 function estimateSeconds(){ if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }

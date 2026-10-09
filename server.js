@@ -25,7 +25,7 @@ const GLOBAL_ACCOUNT_VAULT = path.join(DATA_DIR, 'accounts.enc');
 const workflowGraphs = {
   r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
-  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-camera-static-api.json'), 'utf8')),
+  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r3-driver-stabilization-api.json'), 'utf8')),
 };
 
 const workflowMeta = {
@@ -43,9 +43,9 @@ const workflowMeta = {
   },
   koh1AntiObject: {
     id: 'koh1AntiObject',
-    name: 'MotionFly · Static Camera 35 FPS',
-    subtitle: 'MotionFly · 35 FPS · 1080×1920 · 6 steps · CFG 1',
-    detail: 'Dua input: Reference Image (karakter dan lingkungan), Video Reference (gerakan). Target kamera statis; hasil masih perlu diuji.'
+    name: 'MotionFly R3 · Camera Stabilization',
+    subtitle: 'MotionFly R3 · 35 FPS · 1080×1920 · 6 steps · CFG 1',
+    detail: 'Stabilisasi driving video sebelum SCAIL-2. Dua input, tanpa clean background. Memerlukan node video_stabilizer_classic terpasang di RunningHub; kamera akhir belum terbukti statis.'
   }
 };
 
