@@ -25,12 +25,12 @@ function escapeHtml(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;',
 
 function switchView(view){ state.view=view; $$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`)); $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $('#pageTitle').textContent=view==='create'?'Motion Control':view==='history'?'History':'Account Pool'; $('#sidebar').classList.remove('open'); if(view==='history')renderHistory(); if(view==='accounts')refreshAccounts(); }
 
-async function api(url, options={}){ const r=await fetch(url,{...options,headers:{'X-Vanta-Device':getDeviceId(),...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(options.headers||{})}}); let data={}; try{data=await r.json()}catch{} if(!r.ok) throw new Error(data.error||`HTTP ${r.status}`); return data; }
+async function api(url, options={}){ const r=await fetch(url,{...options,headers:{'X-Vanta-Device':getDeviceId(),...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(options.headers||{})}}); let data={}; try{data=await r.json()}catch{} if(!r.ok){const error=new Error(data.error||`HTTP ${r.status}`);error.status=r.status;throw error;}return data; }
 
 async function loadSession(){
   state.session=await api('/api/session'); state.accounts=state.session.accounts||[]; renderAccountSelect(); updateGenerate(); await refreshAccounts();
 }
-function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic</option>'+state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join(''); sel.value=[...sel.options].some(o=>o.value===current)?current:'auto'; }
+function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic</option>'+state.accounts.map(a=>`<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)}${a.canGenerate===false?' (pemantauan saja)':''}</option>`).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
 
 async function refreshAccounts(){
   const refreshBtn=$('#refreshAccounts');
@@ -48,19 +48,17 @@ async function refreshAccounts(){
     renderAccounts();
     updatePoolSummary();
     renderAccountSelect();
-    if(Number(data.autoRemovedCount||0)>0){
-      toast(`${data.autoRemovedCount} akun dengan kredit di bawah ${data.minimumCredits||100} RH otomatis dihapus dari pool.`);
-    }
+    // Low-credit accounts remain stored for existing task monitoring; no auto-deletion.
   }catch(e){
     toast(e.message,true);
   }finally{
     if(refreshBtn){ refreshBtn.disabled=false; refreshBtn.classList.remove('refreshing'); }
   }
 }
-function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.status&&!a.status.error); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
+function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada API key di pool.<br>Tambahkan akun pertama dari panel di sebelah kiri.</div>';return;}
-  root.innerHTML=state.accounts.map(a=>{const s=a.status||{};const ok=!s.error&&a.status;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ok?'Ready':'Status belum dibaca'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
+  root.innerHTML=state.accounts.map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ready?'Ready':ok?'Pemantauan saja — kredit rendah':'Status belum dibaca'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
   $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{await api(`/api/accounts/${btn.dataset.delete}`,{method:'DELETE'});toast('Akun dihapus.');await loadSession();}catch(e){toast(e.message,true)}});
 }
 
@@ -72,7 +70,7 @@ function setMedia(kind,file){
 function lastSam3Diagnostic(){return history().filter(x=>x.outputKind==='diagnostic'&&x.status==='success'&&x.taskId&&resolveHistoryAccountId(x)).sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt))[0]||null;}
 function refreshLabNotice(){const item=lastSam3Diagnostic(),el=$('#r4LabMaskSource');if(el)el.textContent=item?`Mask dari task SAM3 #${item.taskId} (${new Date(item.startedAt).toLocaleString('id-ID')}). Gunakan gambar dan video kompensasi yang sama.`:'Belum ada hasil SAM3 berhasil di History browser ini. Jalankan tes SAM3 terlebih dahulu.';}
 function updateEstimates(){ if(['koh1AntiObject','r4Lab'].includes(state.workflow)){ ['liteCredits','liteTime','standardCredits','standardTime'].forEach(id=>$('#'+id).textContent='—');return;} const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
-function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&!state.task&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()); $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion'; refreshLabNotice(); }
+function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.some(a=>a.canGenerate!==false)&&!state.task&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()); $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion'; refreshLabNotice(); }
 function workflowName(){
   if(state.workflow==='r15')return 'R15 Baseline';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
@@ -165,6 +163,19 @@ async function pollTask(){
     }
   }catch(e){
     console.warn('poll',e.message);
+    if(e.status===404){
+      const task=state.task;
+      clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
+      $('#taskStatus').textContent='Pemantauan terputus';
+      $('#taskEstimate').textContent='Status RunningHub belum diketahui';
+      updateHistory(task.taskId,{status:'unavailable',error:e.message,runtimeMs:null});
+      state.task=null;updateGenerate();
+      toast('Status task tidak bisa diperiksa. Buka History lalu tekan Periksa lagi. Jangan generate ulang.',true);
+    }else{
+      $('#taskStatus').textContent='Gagal mengecek status';
+      $('#taskEstimate').textContent='Mencoba lagi';
+      updateHistory(state.task.taskId,{status:'check_error',error:e.message,runtimeMs:null});
+    }
   }
 }
 function selectTaskOutputs(outputs,kind){
@@ -230,10 +241,10 @@ function updateHistory(taskId,patch){
   setHistory(history().map(x=>x.taskId===taskId?{...x,...patch}:x));
   if(state.view==='history')renderHistory();
 }
-function isActiveHistoryStatus(status){return ['uploading','queued','running','processing'].includes(String(status||'').toLowerCase())}
+function isActiveHistoryStatus(status){return ['uploading','queued','running','processing','check_error'].includes(String(status||'').toLowerCase())}
 function historyElapsed(item){
   if(item.runtimeMs!=null) return Number(item.runtimeMs)||0;
-  if(isActiveHistoryStatus(item.status)&&item.startedAt){
+  if(['uploading','queued','running','processing'].includes(String(item.status||'').toLowerCase())&&item.startedAt){
     const start=Date.parse(item.startedAt);
     return Number.isFinite(start)?Math.max(0,Date.now()-start):0;
   }
@@ -245,6 +256,8 @@ function historyStatusLabel(status){
   if(s==='running'||s==='processing')return 'Memproses';
   if(s==='success')return 'Berhasil';
   if(s==='failed')return 'Gagal';
+  if(s==='unavailable')return 'Pemantauan terputus';
+  if(s==='check_error')return 'Gagal cek status';
   return status||'—';
 }
 function historyStatusClass(status){
@@ -253,6 +266,7 @@ function historyStatusClass(status){
   if(s==='failed')return 'failed';
   if(s==='queued')return 'queued';
   if(s==='running'||s==='processing')return 'processing';
+  if(s==='unavailable'||s==='check_error')return 'failed';
   return 'neutral';
 }
 function resolveHistoryAccountId(item){
@@ -285,7 +299,7 @@ function historyFilterMatches(item){
   const status=String(item?.status||'').toLowerCase();
   if(state.historyFilter==='success')return status==='success';
   if(state.historyFilter==='failed')return status==='failed';
-  if(state.historyFilter==='process')return ['uploading','queued','running','processing'].includes(status);
+  if(state.historyFilter==='process')return ['uploading','queued','running','processing','unavailable','check_error'].includes(status);
   return true;
 }
 function syncHistoryFilterUI(){
@@ -307,7 +321,7 @@ function renderHistory(){
     const statusLabel=historyStatusLabel(x.status);
     const error=x.error?`<small class="history-error" title="${escapeHtml(x.error)}">${escapeHtml(x.error)}</small>`:'';
     const diagnosis=x.diagnosis?`<small class="history-diagnosis">${escapeHtml(x.diagnosis)}</small>`:'';
-    const inspect=x.status==='failed'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-diagnose-task="${escapeHtml(x.taskId)}">Periksa penyebab</button>`:'';
+    const inspect=x.status==='failed'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-diagnose-task="${escapeHtml(x.taskId)}">Periksa penyebab</button>`:x.status==='unavailable'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-recover-task="${escapeHtml(x.taskId)}">Periksa lagi</button>`:'';
 
     const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
     const resolvedAccountId=resolveHistoryAccountId(x);
@@ -344,7 +358,7 @@ async function pollHistoryTasks(){
     for(const item of active){
       if(state.task&&String(state.task.taskId)===String(item.taskId))continue;
       const accountId=resolveHistoryAccountId(item);
-      if(!accountId)continue;
+      if(!accountId){updateHistory(item.taskId,{status:'unavailable',error:'Akun lama untuk task tidak ditemukan.',runtimeMs:null});continue;}
       try{
         const data=await api(`/api/tasks/${item.taskId}`,{method:'POST',body:JSON.stringify({accountId})});
         if(data.state==='queued'){
@@ -360,6 +374,8 @@ async function pollHistoryTasks(){
         }
       }catch(e){
         console.warn('history poll',item.taskId,e.message);
+        if(e.status===404)updateHistory(item.taskId,{status:'unavailable',error:e.message,runtimeMs:null});
+        else updateHistory(item.taskId,{status:'check_error',error:'Gagal memeriksa status: '+e.message,runtimeMs:null});
       }
     }
   }finally{
@@ -395,6 +411,21 @@ function bindHistoryActions(){
   const body=$('#historyBody');
   if(body){
     body.addEventListener('click',async e=>{
+      const recovery=e.target.closest('[data-recover-task]');
+      if(recovery){
+        e.preventDefault();recovery.disabled=true;recovery.textContent='Memeriksa…';
+        try{
+          const taskId=recovery.dataset.recoverTask;
+          const found=await api(`/api/tasks/${encodeURIComponent(taskId)}/recover`,{method:'POST',body:'{}'});
+          updateHistory(taskId,{accountId:found.accountId,account:found.accountName,status:'check_error',error:null});
+          await pollHistoryTasks();
+          toast('Akun task ditemukan. Status sedang diperiksa.');
+        }catch(error){
+          updateHistory(recovery.dataset.recoverTask,{status:'unavailable',error:error.message,runtimeMs:null});
+          toast(error.message,true);
+        }finally{if(recovery.isConnected){recovery.disabled=false;recovery.textContent='Periksa lagi';}}
+        return;
+      }
       const diagnostic=e.target.closest('[data-diagnose-task]');
       if(diagnostic){
         e.preventDefault();
