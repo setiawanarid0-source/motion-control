@@ -49,7 +49,7 @@
 
         <div class="workspace-grid">
           <div class="panel media-panel">
-            <div class="panel-head"><span>01</span><div><h3>Source media</h3><p>Kedua file wajib diisi</p></div></div>
+            <div class="panel-head"><span>01</span><div><h3>Source media</h3><p>Gambar dan video wajib · MotionFly R2 memerlukan clean background</p></div></div>
             <div class="upload-grid">
               <label class="dropzone" id="imageDrop">
                 <input id="referenceImage" type="file" accept="image/jpeg,image/png,image/webp" hidden />
@@ -64,6 +64,16 @@
                 <strong>Video Reference</strong>
                 <span>MP4, MOV, WEBM · maks. 100 MB</span>
                 <div class="media-preview" id="videoPreview"></div>
+              </label>
+            </div>
+            <div id="backgroundInputSection" class="background-input-section hidden">
+              <div class="background-explainer"><strong>MotionFly R2 — Clean Background wajib</strong><p>Unggah latar dari gambar referensi yang sama, tetapi tanpa karakter. Latar ini akan dikunci sebagai background semua frame. Jangan unggah gambar referensi yang masih berisi orang karena akan menimbulkan sosok ganda.</p></div>
+              <label class="dropzone background-dropzone" id="backgroundDrop">
+                <input id="cleanBackground" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+                <div class="drop-icon">▧</div>
+                <strong>Clean Background (tanpa orang)</strong>
+                <span>JPG, PNG, WEBP · maks. 20 MB</span>
+                <div class="media-preview" id="backgroundPreview"></div>
               </label>
             </div>
           </div>
@@ -84,9 +94,9 @@
                 <small>Current Workflow terbaru.</small>
               </button>
               <button class="workflow-card" data-workflow="koh1AntiObject">
-                <div class="workflow-row"><strong>KOH 1 V4 Pose</strong><span class="badge">03</span></div>
-                <p>KOH (1) · 30 FPS · 6 steps · CFG 1</p>
-                <small>Mask-only driving · tanpa RGB driver langsung.</small>
+                <div class="workflow-row"><strong>MotionFly R2 · Camera Lock</strong><span class="badge">03</span></div>
+                <p>35 FPS · 1080 × 1920 · 6 steps · CFG 1</p>
+                <small>Static clean-background composite · 3 files required.</small>
               </button>
             </div>
 

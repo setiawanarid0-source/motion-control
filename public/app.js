@@ -1,6 +1,6 @@
 const state = {
   view: 'create', workflow: 'r15', mode: 'lite', session: null, accounts: [],
-  image: null, video: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
+  image: null, video: null, cleanBackground: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false, historyFilter: 'all',
 };
 const $ = s => document.querySelector(s);
@@ -66,14 +66,16 @@ function renderAccounts(){
 
 function setMedia(kind,file){
   if(kind==='image'){state.image=file;const p=$('#imagePreview'); if(!file){p.innerHTML='';p.classList.remove('active');updateGenerate();return} const url=URL.createObjectURL(file);p.innerHTML=`<img src="${url}" alt="Reference preview"><div class="media-overlay"><div><strong>${escapeHtml(file.name)}</strong><small>${fileSize(file.size)}</small></div><button class="remove-media" data-remove="image">×</button></div>`;p.classList.add('active');}
+  else if(kind==='background'){state.cleanBackground=file;const p=$('#backgroundPreview');if(!file){p.innerHTML='';p.classList.remove('active');updateGenerate();return}const url=URL.createObjectURL(file);p.innerHTML=`<img src="${url}" alt="Clean background preview"><div class="media-overlay"><div><strong>${escapeHtml(file.name)}</strong><small>${fileSize(file.size)}</small></div><button class="remove-media" data-remove="background">×</button></div>`;p.classList.add('active');}
   else{state.video=file;const p=$('#videoPreview'); if(!file){p.innerHTML='';p.classList.remove('active');state.videoDuration=0;updateEstimates();updateGenerate();return} const url=URL.createObjectURL(file);p.innerHTML=`<video src="${url}" muted playsinline preload="metadata"></video><div class="media-overlay"><div><strong>${escapeHtml(file.name)}</strong><small id="videoFileMeta">${fileSize(file.size)}</small></div><button class="remove-media" data-remove="video">×</button></div>`;p.classList.add('active');const v=p.querySelector('video');v.onloadedmetadata=()=>{state.videoDuration=v.duration||0;$('#videoFileMeta').textContent=`${fileSize(file.size)} · ${fmtTime(v.duration)}`;updateEstimates();};}
   $$('[data-remove]').forEach(btn=>btn.onclick=e=>{e.preventDefault();e.stopPropagation();setMedia(btn.dataset.remove,null)});updateGenerate();
 }
 function updateEstimates(){ const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
-function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&!state.task; $('#generateBtn').disabled=!ready; }
+function updateGenerate(){ const ready=state.image&&state.video&&(state.workflow!=='koh1AntiObject'||state.cleanBackground)&&state.accounts.length&&!state.task; $('#generateBtn').disabled=!ready; }
+function updateWorkflowInputs(){const needsBackground=state.workflow==='koh1AntiObject';$('#backgroundInputSection').classList.toggle('hidden',!needsBackground);updateGenerate();}
 function workflowName(){
   if(state.workflow==='r15')return 'R15 Baseline';
-  if(state.workflow==='koh1AntiObject')return 'KOH 1 V4 Pose';
+  if(state.workflow==='koh1AntiObject')return 'MotionFly R2 · Camera Lock';
   return 'Current Workflow';
 }
 function estimateSeconds(){ if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
@@ -101,11 +103,12 @@ function showStartingTask(){
 
 async function generate(){
   if(!state.image||!state.video)return;
+  if(state.workflow==='koh1AntiObject'&&!state.cleanBackground){toast('MotionFly R2 memerlukan Clean Background tanpa karakter.',true);return;}
   const btn=$('#generateBtn');
   btn.disabled=true;
   btn.querySelector('span:first-child').textContent='Uploading…';
   showStartingTask();
-  const fd=new FormData();fd.append('referenceImage',state.image);fd.append('videoReference',state.video);fd.append('workflow',state.workflow);fd.append('mode',state.mode);fd.append('accountId',$('#accountSelect').value||'auto');
+  const fd=new FormData();fd.append('referenceImage',state.image);fd.append('videoReference',state.video);if(state.workflow==='koh1AntiObject')fd.append('cleanBackground',state.cleanBackground);fd.append('workflow',state.workflow);fd.append('mode',state.mode);fd.append('accountId',$('#accountSelect').value||'auto');
   try{
     const data=await api('/api/generate',{method:'POST',body:fd});
     state.task=data;
@@ -370,9 +373,9 @@ function startHistoryMonitor(){
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
 $$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');
-$$('.workflow-card').forEach(b=>b.onclick=()=>{$$('.workflow-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.workflow=b.dataset.workflow});
+$$('.workflow-card').forEach(b=>b.onclick=()=>{$$('.workflow-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.workflow=b.dataset.workflow;updateWorkflowInputs()});
 $$('.mode-card').forEach(b=>b.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode});
-initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');
+initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');initDropzone($('#backgroundDrop'),$('#cleanBackground'),'background');
 $('#generateBtn').onclick=generate;$('#refreshAccounts').onclick=refreshAccounts;
 const historyFilters=$('#historyFilters');
 if(historyFilters) historyFilters.onclick=e=>{
@@ -383,4 +386,4 @@ if(historyFilters) historyFilters.onclick=e=>{
 };
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
 
-bindHistoryActions();loadSession().then(()=>startHistoryMonitor()).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
+bindHistoryActions();loadSession().then(()=>startHistoryMonitor()).catch(e=>toast(e.message,true));updateEstimates();updateWorkflowInputs();renderHistory();
