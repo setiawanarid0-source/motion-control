@@ -687,7 +687,7 @@
       "strength": 1,
       "smooth": 1,
       "keep_fov": 0.6,
-      "padding_color": "#000000"
+      "padding_color": "0, 0, 0"
     },
     "class_type": "video_stabilizer_classic",
     "_meta": {

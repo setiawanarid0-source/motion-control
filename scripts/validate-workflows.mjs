@@ -14,15 +14,16 @@ for(const [name,graph] of Object.entries(graphs)){
 }
 const m=graphs.r3;
 assert.equal(m['492'].class_type,'video_stabilizer_classic');
+assert.match(m['492'].inputs.padding_color,/^\s*(?:0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\s*,\s*(?:0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\s*,\s*(?:0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\s*$/,'RunningHub node 492 needs decimal RGB; hex triggered ValueError');
 assert.deepEqual(m['492'].inputs.frames,['33',0]);
 assert.deepEqual(m['492'].inputs.frame_rate,['239',0]);
 assert.deepEqual(m['89'].inputs.image,['492',0]);
 assert.deepEqual(m['418'].inputs.pose_video,['89',0]);
 assert.deepEqual(m['490'].inputs.images,['489',0]);
-assert.deepEqual(m['492'].inputs,{frames:['33',0],frame_rate:['239',0],framing_mode:'crop_and_pad',transform_mode:'similarity',camera_lock:true,strength:1,smooth:1,keep_fov:0.6,padding_color:'#000000'});
+assert.deepEqual(m['492'].inputs,{frames:['33',0],frame_rate:['239',0],framing_mode:'crop_and_pad',transform_mode:'similarity',camera_lock:true,strength:1,smooth:1,keep_fov:0.6,padding_color:'0, 0, 0'});
 assert.equal(m['417'].inputs.retain_first_frame,true);
 assert.match(m['3'].inputs.text,/CAMERA LOCK/);
 assert.equal(Object.keys(m).length,40,'R3 API node count (exclude UI Note node and inactive graph)');
 assert.ok(!m['493'],'No clean background / placeholder input');
 assert.deepEqual(m['490'].inputs.audio,['33',2]);
-console.log('PASS: R15 and Current unchanged; MotionFly R3 two-input 35 FPS; stabilizer node 492 -> 89 -> SCAIL-2; 1080x1920; final video/audio wired.');
+console.log('PASS: R15 and Current unchanged; MotionFly R3 two-input 35 FPS; RGB padding accepted by RunningHub; stabilizer node 492 -> 89 -> SCAIL-2; 1080x1920; final video/audio wired.');
