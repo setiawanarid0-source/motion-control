@@ -25,7 +25,7 @@ const GLOBAL_ACCOUNT_VAULT = path.join(DATA_DIR, 'accounts.enc');
 const workflowGraphs = {
   r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
-  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/koh1-anti-object-api.json'), 'utf8')),
+  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/koh1-v4-pose-only-api.json'), 'utf8')),
 };
 
 const workflowMeta = {
@@ -43,9 +43,9 @@ const workflowMeta = {
   },
   koh1AntiObject: {
     id: 'koh1AntiObject',
-    name: 'KOH 1 V3 Mask',
-    subtitle: 'KOH (1) V3 Mask · 30 FPS · 6 steps · CFG 1',
-    detail: 'Mask-only driving pipeline tanpa RGB driver langsung.'
+    name: 'KOH 1 V4 Pose',
+    subtitle: 'KOH (1) V4 Pose-Only · 30 FPS · 6 steps · CFG 1',
+    detail: 'DWPose body, hands, face + SAM3 mask; RGB video untuk tracking saja. Kamera dan appearance dari reference.'
   }
 };
 
