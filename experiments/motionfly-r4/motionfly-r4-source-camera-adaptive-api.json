@@ -1,0 +1,674 @@
+{
+  "3": {
+    "inputs": {
+      "text": "A realistic, continuous motion-transfer video. The REFERENCE IMAGE defines the person's identity, face, hairstyle, body proportions, clothes, existing scene objects, light, and background; never import appearance or props from the driving video. The DRIVING VIDEO defines the timing and trajectory of the person's movements AND the camera's temporal behavior only.\n\nCRITICAL SOURCE CAMERA MATCHING: The camera in generated frames must reproduce the camera behavior observed in the driving video relative to the framing of the reference image. If the driving camera is fixed, keep the generated camera completely fixed throughout; only the person moves. If the driving camera deliberately pans, tilts, zooms, rolls or translates, transfer that same type, direction and temporal rhythm of camera movement to the reference scene, without adding independent movements or exaggerating it. Do not add motion based on the actor's movement when the source camera remains static. Do not mistake foreground person motion for camera movement. Preserve stable scene geometry, coherent perspective, and consistent scale except as dictated by the driving camera.\n\nMatch the driving body's pose, head, hands, gestures, rhythm and timing. Preserve reference identity, original clothing and the reference environment across frames. The source video supplies motion, not objects or background. Natural continuity and anatomy; no independent camera drift or unexpected reframing.",
+      "clip": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "TAMPILAN GAMBAR REFERENSI + GERAKAN VIDEO"
+    }
+  },
+  "4": {
+    "inputs": {
+      "text": "camera movement not present in driving video, invented camera pan, zoom, tilt, roll, dolly, camera following the subject when driver is stationary, background drift without corresponding source camera movement, wrong speed or direction of source camera movement, unintended perspective changes, frame-to-frame camera jitter, motion drift, wrong pose, wrong timing, extra hands, extra limbs, wrong face, wrong outfit, new objects, background copied from driving video, light flicker, deformed body, ghosting, crop artifacts, borders, watermark, text, logo, incorrect anatomy, low resolution",
+      "clip": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "NEGATIVE • ANTI DRIFT / ANTI CAMERA TRANSFER"
+    }
+  },
+  "7": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "9": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "11": {
+    "inputs": {
+      "lora_name": "lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "241",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Load LoRA"
+    }
+  },
+  "30": {
+    "inputs": {
+      "image": "7909cb1c0c09e81b93c55ff472c09fddf21d131b3854311cb30b7c88e8cff3ae.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "REFERENCE IMAGE"
+    }
+  },
+  "33": {
+    "inputs": {
+      "video": "22caab43238b782c1e2d5585b12ae21ffa281e1644bd715e6bca50e7657527e2.mp4",
+      "force_rate": 35,
+      "force_size": "Disabled",
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "Cosmos"
+    },
+    "class_type": "VHS_LoadVideo",
+    "_meta": {
+      "title": "DRIVING VIDEO — camera behavior and motion source (arbitrary duration, 35 FPS)"
+    }
+  },
+  "74": {
+    "inputs": {
+      "model_name": "wan2.1_14B_SCAIL_2_fp8_scaled.safetensors",
+      "weight_dtype": "default",
+      "compute_dtype": "default",
+      "patch_cublaslinear": false,
+      "sage_attention": "auto",
+      "enable_fp16_accumulation": true
+    },
+    "class_type": "DiffusionModelLoaderKJ",
+    "_meta": {
+      "title": "Diffusion Model Loader KJ"
+    }
+  },
+  "75": {
+    "inputs": {
+      "clip_name": "clip_vision_vit_h.safetensors"
+    },
+    "class_type": "CLIPVisionLoader",
+    "_meta": {
+      "title": "Load CLIP Vision"
+    }
+  },
+  "76": {
+    "inputs": {
+      "crop": "none",
+      "clip_vision": [
+        "75",
+        0
+      ],
+      "image": [
+        "447",
+        0
+      ]
+    },
+    "class_type": "CLIPVisionEncode",
+    "_meta": {
+      "title": "CLIP Vision Encode"
+    }
+  },
+  "85": {
+    "inputs": {
+      "detection_threshold": 0.5,
+      "max_objects": [
+        "320",
+        0
+      ],
+      "detect_interval": 2,
+      "images": [
+        "89",
+        0
+      ],
+      "model": [
+        "86",
+        0
+      ],
+      "conditioning": [
+        "275",
+        0
+      ]
+    },
+    "class_type": "SAM3_VideoTrack",
+    "_meta": {
+      "title": "Run SAM3 Video Track"
+    }
+  },
+  "86": {
+    "inputs": {
+      "ckpt_name": "sam3.1_multiplex_fp16.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "87": {
+    "inputs": {
+      "text": "person",
+      "clip": [
+        "86",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "SAM3 • reference person"
+    }
+  },
+  "89": {
+    "inputs": {
+      "width": [
+        "287",
+        0
+      ],
+      "height": [
+        "288",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "device": "cpu",
+      "image": [
+        "33",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "91": {
+    "inputs": {
+      "detection_threshold": 0.5,
+      "max_objects": [
+        "320",
+        0
+      ],
+      "detect_interval": 2,
+      "images": [
+        "447",
+        0
+      ],
+      "model": [
+        "86",
+        0
+      ],
+      "conditioning": [
+        "87",
+        0
+      ]
+    },
+    "class_type": "SAM3_VideoTrack",
+    "_meta": {
+      "title": "Run SAM3 Video Track"
+    }
+  },
+  "95": {
+    "inputs": {
+      "shift": 5,
+      "model": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3 • shift 5"
+    }
+  },
+  "104": {
+    "inputs": {
+      "object_indices": "",
+      "sort_by": "left_to_right",
+      "replacement_mode": [
+        "271",
+        0
+      ],
+      "driving_track_data": [
+        "85",
+        0
+      ],
+      "ref_track_data": [
+        "91",
+        0
+      ]
+    },
+    "class_type": "SCAIL2ColoredMask",
+    "_meta": {
+      "title": "Create SCAIL-2 Colored Mask"
+    }
+  },
+  "239": {
+    "inputs": {
+      "video_info": [
+        "33",
+        3
+      ]
+    },
+    "class_type": "VHS_VideoInfoLoaded",
+    "_meta": {
+      "title": "Video Info (Loaded) 🎥🅥🅗🅢"
+    }
+  },
+  "241": {
+    "inputs": {
+      "lora_name": "wan2.1_SCAIL_2_DPO_lora_bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "74",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Load LoRA"
+    }
+  },
+  "271": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "ANIMATION MODE (false)"
+    }
+  },
+  "275": {
+    "inputs": {
+      "text": "person",
+      "clip": [
+        "86",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "SAM3 • driving person"
+    }
+  },
+  "287": {
+    "inputs": {
+      "value": 640
+    },
+    "class_type": "easy int",
+    "_meta": {
+      "title": "Int"
+    }
+  },
+  "288": {
+    "inputs": {
+      "value": 1120
+    },
+    "class_type": "easy int",
+    "_meta": {
+      "title": "Int"
+    }
+  },
+  "298": {
+    "inputs": {
+      "rem_mode": "RMBG-2.0",
+      "image_output": "Preview",
+      "save_prefix": "ComfyUI",
+      "torchscript_jit": false,
+      "add_background": "black",
+      "refine_foreground": false,
+      "images": [
+        "308",
+        0
+      ]
+    },
+    "class_type": "easy imageRemBg",
+    "_meta": {
+      "title": "Image Remove Bg"
+    }
+  },
+  "308": {
+    "inputs": {
+      "width": [
+        "89",
+        1
+      ],
+      "height": [
+        "89",
+        2
+      ],
+      "upscale_method": "nvidia_rtx_vsr",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 16,
+      "device": "gpu",
+      "image": [
+        "30",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "REFERENSI - RESIZE LANCZOS"
+    }
+  },
+  "320": {
+    "inputs": {
+      "value": 1
+    },
+    "class_type": "easy int",
+    "_meta": {
+      "title": "Int"
+    }
+  },
+  "331": {
+    "inputs": {
+      "seed": 50,
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "417",
+        0
+      ],
+      "positive": [
+        "418",
+        0
+      ],
+      "negative": [
+        "418",
+        1
+      ],
+      "latent_image": [
+        "418",
+        2
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "SCAIL-2 • 6 steps / CFG 1"
+    }
+  },
+  "393": {
+    "inputs": {
+      "frame_rate": [
+        "239",
+        0
+      ],
+      "loop_count": 0,
+      "filename_prefix": "RH vd",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": false,
+      "no_preview": false,
+      "images": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "394": {
+    "inputs": {
+      "images": [
+        "104",
+        1
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "401": {
+    "inputs": {
+      "samples": [
+        "331",
+        0
+      ],
+      "vae": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "417": {
+    "inputs": {
+      "context_length": 101,
+      "context_overlap": 32,
+      "context_schedule": "standard_uniform",
+      "context_stride": 1,
+      "closed_loop": false,
+      "fuse_method": "pyramid",
+      "freenoise": true,
+      "retain_first_frame": true,
+      "split_conds_to_windows": false,
+      "model": [
+        "95",
+        0
+      ]
+    },
+    "class_type": "WanContextWindowsManual",
+    "_meta": {
+      "title": "Wan Context Windows"
+    }
+  },
+  "418": {
+    "inputs": {
+      "width": [
+        "89",
+        1
+      ],
+      "height": [
+        "89",
+        2
+      ],
+      "length": [
+        "239",
+        1
+      ],
+      "batch_size": 1,
+      "pose_strength": 1,
+      "pose_start": 0,
+      "pose_end": 1,
+      "video_frame_offset": 0,
+      "previous_frame_count": 5,
+      "replacement_mode": [
+        "271",
+        0
+      ],
+      "positive": [
+        "3",
+        0
+      ],
+      "negative": [
+        "4",
+        0
+      ],
+      "vae": [
+        "7",
+        0
+      ],
+      "pose_video": [
+        "89",
+        0
+      ],
+      "pose_video_mask": [
+        "104",
+        0
+      ],
+      "reference_image": [
+        "447",
+        0
+      ],
+      "reference_image_mask": [
+        "104",
+        1
+      ],
+      "clip_vision_output": [
+        "76",
+        0
+      ]
+    },
+    "class_type": "WanSCAILToVideo",
+    "_meta": {
+      "title": "WanSCAILToVideo"
+    }
+  },
+  "438": {
+    "inputs": {
+      "inputcount": 4,
+      "Update inputs": null,
+      "image_1": [
+        "449",
+        0
+      ]
+    },
+    "class_type": "ImageBatchMulti",
+    "_meta": {
+      "title": "Image Batch Multi"
+    }
+  },
+  "445": {
+    "inputs": {
+      "images": [
+        "438",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "447": {
+    "inputs": {
+      "switch": [
+        "454",
+        0
+      ],
+      "on_false": [
+        "449",
+        0
+      ],
+      "on_true": [
+        "438",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch"
+    }
+  },
+  "449": {
+    "inputs": {
+      "switch": [
+        "271",
+        0
+      ],
+      "on_false": [
+        "308",
+        0
+      ],
+      "on_true": [
+        "298",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch"
+    }
+  },
+  "454": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "开启多参考图"
+    }
+  },
+  "489": {
+    "inputs": {
+      "width": 1080,
+      "height": 1920,
+      "upscale_method": "nvidia_rtx_vsr",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 8,
+      "device": "gpu",
+      "image": [
+        "401",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "OUTPUT 1080x1920 — divisible_by 8"
+    }
+  },
+  "490": {
+    "inputs": {
+      "frame_rate": [
+        "239",
+        0
+      ],
+      "loop_count": 0,
+      "filename_prefix": "MotionFly_R4_SourceCameraAdaptive_Experimental_35FPS",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 14,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "no_preview": false,
+      "images": [
+        "489",
+        0
+      ],
+      "audio": [
+        "33",
+        2
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "FINAL HD OUTPUT - 30 FPS"
+    }
+  }
+}
