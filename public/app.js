@@ -69,14 +69,17 @@ function setMedia(kind,file){
   else{state.video=file;const p=$('#videoPreview'); if(!file){p.innerHTML='';p.classList.remove('active');state.videoDuration=0;updateEstimates();updateGenerate();return} const url=URL.createObjectURL(file);p.innerHTML=`<video src="${url}" muted playsinline preload="metadata"></video><div class="media-overlay"><div><strong>${escapeHtml(file.name)}</strong><small id="videoFileMeta">${fileSize(file.size)}</small></div><button class="remove-media" data-remove="video">×</button></div>`;p.classList.add('active');const v=p.querySelector('video');v.onloadedmetadata=()=>{state.videoDuration=v.duration||0;$('#videoFileMeta').textContent=`${fileSize(file.size)} · ${fmtTime(v.duration)}`;updateEstimates();};}
   $$('[data-remove]').forEach(btn=>btn.onclick=e=>{e.preventDefault();e.stopPropagation();setMedia(btn.dataset.remove,null)});updateGenerate();
 }
-function updateEstimates(){ if(state.workflow==='koh1AntiObject'){ ['liteCredits','liteTime','standardCredits','standardTime'].forEach(id=>$('#'+id).textContent='—');return;} const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
-function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&!state.task; $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':'Generate motion'; }
+function lastSam3Diagnostic(){return history().filter(x=>x.outputKind==='diagnostic'&&x.status==='success'&&x.taskId&&resolveHistoryAccountId(x)).sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt))[0]||null;}
+function refreshLabNotice(){const item=lastSam3Diagnostic(),el=$('#r4LabMaskSource');if(el)el.textContent=item?`Mask dari task SAM3 #${item.taskId} (${new Date(item.startedAt).toLocaleString('id-ID')}). Gunakan gambar dan video kompensasi yang sama.`:'Belum ada hasil SAM3 berhasil di History browser ini. Jalankan tes SAM3 terlebih dahulu.';}
+function updateEstimates(){ if(['koh1AntiObject','r4Lab'].includes(state.workflow)){ ['liteCredits','liteTime','standardCredits','standardTime'].forEach(id=>$('#'+id).textContent='—');return;} const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
+function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.length&&!state.task&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()); $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion'; refreshLabNotice(); }
 function workflowName(){
   if(state.workflow==='r15')return 'R15 Baseline';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
+  if(state.workflow==='r4Lab')return 'MotionFly R4 · Full Controlled Test';
   return 'Current Workflow';
 }
-function estimateSeconds(){ if(state.workflow==='koh1AntiObject')return 0; if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
+function estimateSeconds(){ if(['koh1AntiObject','r4Lab'].includes(state.workflow))return 0; if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
 function startVisibleTimer(){
   state.startedAt=Date.now();
   $('#taskElapsed').textContent='00:00';
@@ -106,6 +109,7 @@ async function generate(){
   btn.querySelector('span:first-child').textContent='Uploading…';
   showStartingTask();
   const fd=new FormData();fd.append('referenceImage',state.image);fd.append('videoReference',state.video);fd.append('workflow',state.workflow);fd.append('mode',state.mode);fd.append('accountId',$('#accountSelect').value||'auto');
+  if(state.workflow==='r4Lab'){const maskSource=lastSam3Diagnostic();if(!maskSource){toast('Tes SAM3 berhasil harus tersedia dahulu di History.',true);return;}fd.append('diagnosticTaskId',maskSource.taskId);fd.append('diagnosticAccountId',resolveHistoryAccountId(maskSource));}
   try{
     const data=await api('/api/generate',{method:'POST',body:fd});
     state.task=data;
@@ -123,7 +127,7 @@ async function generate(){
     state.task=null;
     updateGenerate();
   } finally {
-    btn.querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':'Generate motion';
+    btn.querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion';
     if(!state.task)updateGenerate();
   }
 }
@@ -330,6 +334,7 @@ function renderHistory(){
       <td data-label="Result">${result}</td>
     </tr>`;
   }).join('');
+  if(state.workflow==='r4Lab')refreshLabNotice();
 }
 async function pollHistoryTasks(){
   if(state.historyPollBusy)return;
@@ -425,7 +430,7 @@ function startHistoryMonitor(){
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
 $$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');
-$$('.workflow-card').forEach(b=>b.onclick=()=>{$$('.workflow-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.workflow=b.dataset.workflow;updateEstimates();updateGenerate();$('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');});
+$$('.workflow-card').forEach(b=>b.onclick=()=>{$$('.workflow-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.workflow=b.dataset.workflow;updateEstimates();updateGenerate();$('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');$('#fullLabNotice').classList.toggle('hidden',state.workflow!=='r4Lab');});
 $$('.mode-card').forEach(b=>b.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode});
 initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');
 $('#generateBtn').onclick=generate;$('#refreshAccounts').onclick=refreshAccounts;

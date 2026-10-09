@@ -3,6 +3,9 @@ import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import axios from 'axios';
 import FormData from 'form-data';
+import os from 'node:os';
+import { pipeline } from 'node:stream/promises';
+import { Transform } from 'node:stream';
 import { extractTaskFailure } from './task-failure.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -27,6 +30,7 @@ const workflowGraphs = {
   r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-api.json'), 'utf8')),
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
   koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-sam3-diagnostic-api.json'), 'utf8')),
+  r4Lab: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-full-controlled-api.json'), 'utf8')),
 };
 
 const workflowMeta = {
@@ -48,6 +52,14 @@ const workflowMeta = {
     subtitle: 'Diagnostik SAM3 · 35 FPS · tanpa generasi AI video',
     detail: 'Upload video driving yang SUDAH dikompensasi 35 FPS. Hasil: video mask orang + gambar mask referensi. Memakai kredit RunningHub; belum menguji kamera hasil generasi.',
     outputKind: 'diagnostic'
+  },
+  r4Lab: {
+    id: 'r4Lab',
+    name: 'MotionFly R4 · Full Controlled Test',
+    subtitle: 'Eksperimen full generation · 35 FPS · 337 frame · 6 steps · CFG 1',
+    detail: 'Menggunakan dua upload serta mask dari tes SAM3 berhasil di History. Mask masih mentah (belum refinement offline). Wajib memakai reference image dan video kompensasi yang SAMA dengan tes SAM3. Memerlukan kredit RunningHub.',
+    outputKind: 'video',
+    experimental: true
   }
 };
 
@@ -240,9 +252,55 @@ async function uploadToRunningHub(apiKey, file) {
   return data.data.fileName;
 }
 
-async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile }) {
+// Reuse previously saved SAM3 diagnostic masks, without adding new user media inputs.
+// Do not execute paid full generation unless both masks are retrievable and uploaded.
+async function fetchDiagnosticMasks(sourceAccount, sourceTaskId) {
+  if(!/^\d{10,25}$/.test(String(sourceTaskId||'')))throw new Error('Task ID diagnostik tidak valid.');
+  const result=await rhJson('/task/openapi/outputs',sourceAccount.key,{apiKey:sourceAccount.key,taskId:String(sourceTaskId)},30000);
+  if(Number(result?.code)!==0||!Array.isArray(result?.data))throw new Error('Mask diagnostik sudah tidak tersedia atau task belum selesai.');
+  const outputs=result.data.filter(x=>typeof x.fileUrl==='string'&&/^https:\/\//i.test(x.fileUrl));
+  const video=outputs.find(x=>String(x.nodeId)==='393');
+  const reference=outputs.find(x=>String(x.nodeId)==='394');
+  if(!video||!reference)throw new Error('Task diagnostik tidak memiliki kedua output mask dari node 393 dan 394.');
+  return {videoUrl:video.fileUrl,referenceUrl:reference.fileUrl};
+}
+async function downloadDiagnosticAsset(url,destination,maxBytes){
+  const u=new URL(url);
+  if(u.protocol!=='https:'||u.username||u.password||u.hostname==='localhost'||/^(?:\d+\.){3}\d+$/.test(u.hostname))
+    throw new Error('URL aset mask RunningHub tidak aman.');
+  const response=await axios.get(url,{responseType:'stream',timeout:120000,maxRedirects:4});
+  let read=0;
+  const limit=new Transform({transform(chunk,enc,cb){
+    read+=chunk.length;
+    if(read>maxBytes)cb(new Error('Aset mask melebihi batas ukuran.'));
+    else cb(null,chunk);
+  }});
+  try{await pipeline(response.data,limit,fs.createWriteStream(destination));}
+  catch(error){response.data.destroy();throw error;}
+  if(read<100)throw new Error('Aset mask RunningHub kosong.');
+  return read;
+}
+async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
+  const urls=await fetchDiagnosticMasks(sourceAccount,sourceTaskId);
+  const dir=await fs.promises.mkdtemp(path.join(os.tmpdir(),'r4-full-lab-'));
+  try{
+    const video=path.join(dir,'sam3-driving-mask.mp4');
+    const image=path.join(dir,'sam3-reference-mask.png');
+    const [videoSize,imageSize]=await Promise.all([
+      downloadDiagnosticAsset(urls.videoUrl,video,VIDEO_MAX),
+      downloadDiagnosticAsset(urls.referenceUrl,image,IMAGE_MAX)
+    ]);
+    const [videoName,imageName]=await Promise.all([
+      uploadToRunningHub(targetApiKey,{path:video,originalname:'r4-sam3-driving-mask.mp4',mimetype:'video/mp4',size:videoSize}),
+      uploadToRunningHub(targetApiKey,{path:image,originalname:'r4-sam3-reference-mask.png',mimetype:'image/png',size:imageSize})
+    ]);
+    return {videoName,imageName};
+  }finally{await fs.promises.rm(dir,{recursive:true,force:true});}
+}
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, diagnosticAccount, diagnosticTaskId }) {
   const imageName = await uploadToRunningHub(apiKey, imageFile);
   const videoName = await uploadToRunningHub(apiKey, videoFile);
+  const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
   const payload = {
     apiKey,
     workflowId,
@@ -250,6 +308,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
       { nodeId: '30', fieldName: 'image', fieldValue: imageName },
       { nodeId: '33', fieldName: 'video', fieldValue: videoName },
       ...(workflowKey === 'koh1AntiObject' ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
+      ...(masks ? [{ nodeId: '500', fieldName: 'image', fieldValue: masks.imageName }, { nodeId: '501', fieldName: 'video', fieldValue: masks.videoName }] : []),
     ],
     workflow: JSON.stringify(workflowGraphs[workflowKey]),
     addMetadata: true,
@@ -388,11 +447,17 @@ app.post('/api/generate', upload.fields([
     const mode = String(req.body?.mode || 'lite');
     const requestedAccountId = String(req.body?.accountId || 'auto');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
+    const diagnosticTaskId=String(req.body?.diagnosticTaskId||'');
+    const diagnosticAccountId=String(req.body?.diagnosticAccountId||'');
+    if(workflowKey==='r4Lab' && (!/^\d{10,25}$/.test(diagnosticTaskId)||!diagnosticAccountId))
+      throw new Error('R4 Full membutuhkan tes SAM3 berhasil di History untuk memakai ulang mask.');
     if (!['lite', 'standard'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
 
     const { deviceId, accounts } = getPersistentAccounts(req);
     if (!deviceId) throw new Error('Device session tidak tersedia. Reload halaman.');
     if (!accounts.length) throw new Error('Belum ada RunningHub API key di Account Pool.');
+    const diagnosticAccount=workflowKey==='r4Lab'?accounts.find(a=>a.id===diagnosticAccountId):null;
+    if(workflowKey==='r4Lab'&&!diagnosticAccount)throw new Error('Akun tes SAM3 sebelumnya tidak tersedia pada sesi ini.');
 
     let candidates = accounts;
     if (requestedAccountId !== 'auto') {
@@ -417,6 +482,8 @@ app.post('/api/generate', upload.fields([
           mode,
           imageFile,
           videoFile,
+          diagnosticAccount,
+          diagnosticTaskId,
         });
         account.lastUsedAt = new Date().toISOString();
         saveVaultAccounts(deviceId, accounts);

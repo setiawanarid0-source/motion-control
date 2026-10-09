@@ -42,7 +42,7 @@
 
       <section id="view-create" class="view active">
         <div class="hero-copy">
-          <div class="hero-kicker"><span class="pulse"></span>3 WORKFLOWS</div>
+          <div class="hero-kicker"><span class="pulse"></span>3 WORKFLOWS + 1 TEST</div>
           <h2>Direct motion.<br><span>Choose the pipeline.</span></h2>
           <p>Gunakan gambar karakter dan video gerakan yang sama, lalu pilih workflow yang ingin diuji. Ketiga workflow berjalan terpisah tanpa saling mengubah.</p>
         </div>
@@ -88,9 +88,15 @@
                 <p>35 FPS · Tes tracking dan mask · tanpa sampler</p>
                 <small>Hasil: video mask gerakan + gambar mask referensi. BUKAN video motion-transfer akhir.</small>
               </button>
+              <button class="workflow-card" data-workflow="r4Lab">
+                <div class="workflow-row"><strong>MotionFly R4 · Full Controlled Test</strong><span class="badge">TEST</span></div>
+                <p>35 FPS · 337 frame · 1080 × 1920 · 6 steps / CFG 1</p>
+                <small>Gunakan kembali mask tes SAM3 berhasil. Ini tes generasi penuh, bukan workflow final.</small>
+              </button>
             </div>
 
             <div id="diagnosticNotice" class="diagnostic-notice hidden" role="note"><strong>Mode diagnosis SAM3</strong><p>Wajib upload driving video yang sudah dikompensasi ke 35 FPS, bukan video mentah. Tes ini menghasilkan mask saja dan tetap dapat menggunakan kredit RunningHub. Belum ada estimasi biaya yang tervalidasi.</p></div>
+            <div id="fullLabNotice" class="diagnostic-notice hidden" role="note"><strong>R4 Full Controlled · Tes berbayar</strong><p id="r4LabMaskSource"></p><p>Upload kembali gambar referensi dan driving video hasil kompensasi 35 FPS yang sama dengan tes SAM3. Dua mask akan dipakai ulang otomatis dari task tersebut. Mask belum menjalani refinement offline. Proses 337 frame dengan RunningHub dan membutuhkan kredit. Kamera statis belum terbukti.</p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
             <div class="mode-grid">
               <button class="mode-card selected" data-mode="lite">
@@ -180,6 +186,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261009-1305" defer></script>
+  <script src="/app.js?v=20261009-r4fulltest" defer></script>
 </body>
 </html>

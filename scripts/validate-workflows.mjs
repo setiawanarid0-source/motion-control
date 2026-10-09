@@ -29,3 +29,20 @@ assert.deepEqual(g['104'].inputs.driving_track_data,['85',0]);
 assert.deepEqual(g['104'].inputs.ref_track_data,['91',0]);
 assert.ok(Object.keys(g).length<40);
 console.log('PASS: R15 & Current remain full generation, R4 mask-only API graph has dual outputs and no sampler or stabilizer.');
+
+// R4 Full Controlled Test: only the two public media inputs; masks are reused from a completed SAM3 task.
+const full=read('motionfly-r4-full-controlled-api.json');
+for(const [id,node] of Object.entries(full))for(const [field,v] of Object.entries(node.inputs||{}))if(Array.isArray(v)&&v.length===2&&typeof v[0]==='string'&&Number.isInteger(v[1]))assert.ok(full[v[0]],'R4 Full broken reference '+id+'.'+field);
+for(const id of ['30','33','331','418','489','490','500','501'])assert.ok(full[id], 'R4 Full missing '+id);
+assert.deepEqual(full['418'].inputs.pose_video_mask,['501',0]);
+assert.deepEqual(full['418'].inputs.reference_image_mask,['500',0]);
+assert.equal(full['33'].inputs.frame_load_cap,337);
+assert.equal(full['501'].inputs.frame_load_cap,337);
+assert.equal(full['33'].inputs.force_rate,35);
+assert.equal(full['489'].inputs.divisible_by,8);
+assert.equal(full['489'].inputs.width,1080);
+assert.equal(full['489'].inputs.height,1920);
+assert.equal(full['331'].inputs.steps,6);
+assert.equal(full['331'].inputs.cfg,1);
+assert.ok(!full['492'],'Stabilizer must not be included');
+console.log('PASS: R4 Full Controlled Test has 337 synchronized frames, two cached masks, 6-step CFG1 and 1080×1920 output.');
