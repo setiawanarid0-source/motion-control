@@ -7,6 +7,7 @@ import os from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { extractTaskFailure } from './task-failure.js';
+import { canStartNewTask, isTrackableTaskCode } from './account-eligibility.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -199,6 +200,7 @@ function publicAccount(account, status = null) {
     addedAt: account.addedAt,
     lastUsedAt: account.lastUsedAt || null,
     status,
+    canGenerate: canStartNewTask(status, MIN_POOL_CREDITS),
   };
 }
 
@@ -366,9 +368,8 @@ app.post('/api/accounts', async (req, res) => {
   if (accounts.some(a => a.fingerprint === fingerprint)) return res.status(409).json({ error: 'API key ini sudah ada di pool.' });
   try {
     const status = await accountStatus(apiKey);
-    if (Number(status.remainCoins || 0) < MIN_POOL_CREDITS) {
-      return res.status(400).json({ error: `Akun tidak ditambahkan karena kredit di bawah ${MIN_POOL_CREDITS} RH.` });
-    }
+    // Keep low-credit keys for recovering old tasks. Do not allow new generation with them.
+    const pollingOnly=!canStartNewTask(status,MIN_POOL_CREDITS);
     const account = {
       id: crypto.randomUUID(),
       name: `Account ${String(accounts.length + 1).padStart(2, '0')}`,
@@ -379,7 +380,7 @@ app.post('/api/accounts', async (req, res) => {
     };
     accounts.push(account);
     saveVaultAccounts(deviceId, accounts);
-    res.json({ account: publicAccount(account, status), storage: 'persistent' });
+    res.json({ account: publicAccount(account, status), storage: 'persistent', pollingOnly });
   } catch (error) {
     res.status(400).json({ error: error.message || 'API key tidak dapat divalidasi.' });
   }
@@ -399,30 +400,16 @@ app.post('/api/accounts/refresh', async (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);
   if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
 
-  const checked = await Promise.all(accounts.map(async account => {
-    try {
-      const status = await accountStatus(account.key);
-      return { account, status, remove: Number(status.remainCoins || 0) < MIN_POOL_CREDITS };
-    } catch (error) {
-      return { account, status: { error: error.message }, remove: false };
-    }
+  const checked=await Promise.all(accounts.map(async account=>{
+    try{return {account,status:await accountStatus(account.key)};}
+    catch(error){return {account,status:{error:error.message}};}
   }));
-
-  const kept = checked.filter(x => !x.remove).map(x => x.account);
-  const removed = checked.filter(x => x.remove).map(x => x.account.name);
-
-  if (removed.length) {
-    saveVaultAccounts(deviceId, kept);
-  }
-
-  const publicAccounts = checked
-    .filter(x => !x.remove)
-    .map(x => publicAccount(x.account, x.status));
-
+  // Never remove keys here. A low-credit account may still own a RunningHub task.
   res.json({
-    accounts: publicAccounts,
-    autoRemovedCount: removed.length,
-    minimumCredits: MIN_POOL_CREDITS,
+    accounts:checked.map(x=>publicAccount(x.account,x.status)),
+    autoRemovedCount:0,
+    pollingOnlyCount:checked.filter(x=>!canStartNewTask(x.status,MIN_POOL_CREDITS)).length,
+    minimumCredits:MIN_POOL_CREDITS
   });
 });
 
@@ -459,19 +446,24 @@ app.post('/api/generate', upload.fields([
     const diagnosticAccount=workflowKey==='r4Lab'?accounts.find(a=>a.id===diagnosticAccountId):null;
     if(workflowKey==='r4Lab'&&!diagnosticAccount)throw new Error('Akun tes SAM3 sebelumnya tidak tersedia pada sesi ini.');
 
-    let candidates = accounts;
-    if (requestedAccountId !== 'auto') {
-      candidates = accounts.filter(a => a.id === requestedAccountId);
-      if (!candidates.length) throw new Error('Akun yang dipilih tidak ditemukan.');
-    } else {
-      const ranked = await Promise.all(accounts.map(async a => {
-        try { return { a, s: await accountStatus(a.key) }; }
-        catch { return { a, s: { currentTaskCounts: 999999, remainCoins: -1 } }; }
+    let candidates=[];
+    if(requestedAccountId!=='auto'){
+      const chosen=accounts.find(a=>a.id===requestedAccountId);
+      if(!chosen)throw new Error('Akun yang dipilih tidak ditemukan.');
+      const status=await accountStatus(chosen.key);
+      if(!canStartNewTask(status,MIN_POOL_CREDITS))
+        throw new Error('Akun hanya untuk pemantauan task lama: kredit di bawah 100 RH.');
+      candidates=[chosen];
+    }else{
+      const ranked=await Promise.all(accounts.map(async a=>{
+        try{return {a,s:await accountStatus(a.key)};}
+        catch(error){return {a,s:{error:error.message}};}
       }));
-      ranked.sort((x, y) => (x.s.currentTaskCounts - y.s.currentTaskCounts) || (y.s.remainCoins - x.s.remainCoins));
-      candidates = ranked.map(x => x.a);
+      candidates=ranked.filter(x=>canStartNewTask(x.s,MIN_POOL_CREDITS))
+        .sort((x,y)=>(x.s.currentTaskCounts-y.s.currentTaskCounts)||(y.s.remainCoins-x.s.remainCoins))
+        .map(x=>x.a);
+      if(!candidates.length)throw new Error('Tidak ada akun dengan kredit minimal 100 RH untuk membuat task baru.');
     }
-
     let lastError = null;
     for (const account of candidates) {
       try {
@@ -528,11 +520,27 @@ async function resolveTaskVideoUrl(account, taskId) {
   return fileUrl;
 }
 
+// On-demand lookup of an existing task. It NEVER creates a new paid RunningHub job.
+app.post('/api/tasks/:taskId/recover',async(req,res)=>{
+  const {deviceId,accounts}=getPersistentAccounts(req);
+  if(!deviceId)return res.status(400).json({error:'Device session tidak tersedia.'});
+  const taskId=String(req.params.taskId||'');
+  if(!/^\d{10,25}$/.test(taskId))return res.status(400).json({error:'Task ID tidak valid.'});
+  for(const account of accounts.slice(0,25)){
+    try{
+      const result=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},15000);
+      if(isTrackableTaskCode(result?.code,result))
+        return res.json({ok:true,accountId:account.id,accountName:account.name});
+    }catch(_error){/* Try next stored account; no new task submitted. */}
+  }
+  res.status(404).json({error:'API key pembuat task tidak ditemukan. Tambahkan kembali API key tersebut di Account Pool (jangan kirim ke chat), kemudian tekan Periksa lagi.'});
+});
+
 app.post('/api/tasks/:taskId', async (req, res) => {
   const { accounts } = getPersistentAccounts(req);
   const accountId = String(req.body?.accountId || '');
   const account = accounts.find(a => a.id === accountId);
-  if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan dalam sesi.' });
+  if (!account) return res.status(404).json({ error: 'Akun pembuat task tidak ada di Account Pool. Status RunningHub belum diketahui. Jangan generate ulang; pilih Periksa lagi di History.' });
   try {
     const data = await rhJson('/task/openapi/outputs', account.key, { apiKey: account.key, taskId: req.params.taskId }, 30000);
     const code = Number(data?.code);
