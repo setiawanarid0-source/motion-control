@@ -33,7 +33,7 @@ export function cameraDecision(source,output,{maxCorrectionPx=35,qualityRequired
   let maxError=0, samples=0;
   const cap=Math.min(...ends);
   for(let t=0;t<=cap;t+=Math.max(.12,cap/70)){
-    const src=source.classification==='STATIC'?{dx:0,dy:0,degrees:0,scale:1}:sample(source.trajectory,t);
+    const src=sample(source.trajectory,t); // STATIC may still contain real subpixel shake to preserve.
     const out=sample(output.trajectory,t);
     const dx=(src.dx-out.dx)*w/work[0],dy=(src.dy-out.dy)*h/work[1];
     const rotate=(src.degrees-out.degrees)*Math.PI/180;

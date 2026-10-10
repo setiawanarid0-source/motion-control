@@ -89,7 +89,7 @@ function showStartingTask(){
   clearInterval(state.elapsedTimer);
   $('#taskSection').classList.remove('hidden');
   $('#resultSection').classList.add('hidden');
-  $('#taskStatus').textContent='Mengupload input';
+  $('#taskStatus').textContent=state.workflow==='r15'?'Menyiapkan gerakan 35 FPS':'Mengupload input';
   $('#taskWorkflow').textContent=workflowName();
   $('#taskAccount').textContent=$('#accountSelect').value==='auto'?'Automatic':'Akun dipilih';
   $('#taskMode').textContent=state.mode==='standard'?'Standard':'Lite';

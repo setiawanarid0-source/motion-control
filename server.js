@@ -8,7 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { extractTaskFailure } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode } from './account-eligibility.js';
-import { analyzeSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
+import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,7 +40,7 @@ const workflowMeta = {
     id: 'r15',
     name: 'MotionFly R4 · Camera Engine (R15)',
     subtitle: '35 FPS · 1080×1920 · 6 steps · CFG 1 · eksperimen',
-    detail: 'Kamera driving video diperiksa sebelum dan sesudah generasi. Koreksi 2D kecil hanya diterapkan jika aman; jika ragu, hasil asli dipertahankan.',
+    detail: 'Gerakan sumber dinormalisasi ke 35 FPS tanpa frame duplikat. Kamera diperiksa sebelum dan sesudah generate; tidak ada warp seluruh tubuh. Eksperimental, belum terbukti bebas jitter AI.',
     outputKind: 'video', experimental: true, cameraEngine: true
   },
   current: {
@@ -421,7 +421,9 @@ app.post('/api/generate', upload.fields([
 ]), async (req, res) => {
   const imageFile = req.files?.referenceImage?.[0];
   const videoFile = req.files?.videoReference?.[0];
+  let preparedMotion=null;
   const cleanup = () => {
+    if(preparedMotion)preparedMotion.release().catch(e=>console.warn('R15 temporary file cleanup',e.message));
     for (const f of [imageFile, videoFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
   };
 
@@ -468,6 +470,7 @@ app.post('/api/generate', upload.fields([
         .map(x=>x.a);
       if(!candidates.length)throw new Error('Tidak ada akun dengan kredit minimal 100 RH untuk membuat task baru.');
     }
+    if(workflowKey==='r15')preparedMotion=await prepareMotionSource(videoFile);
     let lastError = null;
     for (const account of candidates) {
       try {
@@ -477,7 +480,7 @@ app.post('/api/generate', upload.fields([
           workflowKey,
           mode,
           imageFile,
-          videoFile,
+          videoFile:preparedMotion?.file||videoFile,
           diagnosticAccount,
           diagnosticTaskId,
         });

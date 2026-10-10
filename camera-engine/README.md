@@ -3,7 +3,7 @@ The previous R15 graph remains stored in workflows/r15-api.json as a rollback re
 
 - Every R15 video upload is analyzed before any paid RunningHub task is created.
 - After the task returns video, a Railway CPU job measures the source/output background camera paths. The browser sees a "checking camera" status during this step.
-- Only when source/output camera measurements are reliable AND the estimated 2-D correction is within 8 pixels is conservative correction attempted; verified improvement is required to serve it.
+- Whole-frame camera correction is DISABLED because it moves the subject with the background; only measurement/report QA is active. New R15 non-35 FPS driving videos are first prepared via motion_timebase.py to avoid VHS repeat-frame sampling.
 - If confidence is low or correction fails, the original RunningHub output is served with a recorded warning. No claim of a locked camera is made.
 - Test on several real videos. 2-D camera correction **cannot** repair 3-D perspective shifts, generated object/identity hallucinations, or make the SCAIL-2 model inherently camera controllable.
 - This uses a Dockerfile with system OpenCV/FFmpeg. CPU QA time adds to generation and stores the source file in /data for up to 3 days.

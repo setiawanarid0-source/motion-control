@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/app.js && node scripts/validate-workflows.mjs && node scripts/test-task-failure.mjs && node scripts/test-account-eligibility.mjs"
+    "check": "node --check server.js && node --check public/app.js && node scripts/validate-workflows.mjs && node scripts/test-task-failure.mjs && node scripts/test-account-eligibility.mjs && node scripts/test-motion-timebase.mjs"
   },
   "dependencies": {
     "axios": "^1.12.2",

@@ -2,6 +2,7 @@
 // All expensive operations are child processes and never run on the Node event loop.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
@@ -20,6 +21,37 @@ const write=async(file,data)=>{const name=file+'.tmp-'+process.pid;await fs.prom
 async function python(args,timeout=150000){
   return exec('/usr/bin/python3',[SCRIPT,...args],{timeout,maxBuffer:1024*1024,env:{...process.env,OPENBLAS_NUM_THREADS:'1',OMP_NUM_THREADS:'1'}});
 }
+
+// Normalize R15 motion video to 35FPS with optical interpolation BEFORE any paid job.
+// VHS_LoadVideo force_rate=35 otherwise duplicates 30FPS input frames.
+async function sourceFPS(filePath){
+ const {stdout}=await exec('ffprobe',['-v','error','-select_streams','v:0','-show_entries','stream=avg_frame_rate',
+  '-of','default=noprint_wrappers=1:nokey=1',filePath],{timeout:25000});
+ const match=String(stdout).trim().match(/^(\d+)(?:\/(\d+))?$/);
+ if(!match)throw Error('FPS video tidak dapat dibaca.');
+ const fps=Number(match[1])/Number(match[2]||1);
+ if(!(fps>=8&&fps<=120))throw Error('FPS sumber harus antara 8 dan 120.');
+ return fps;
+}
+export async function prepareMotionSource(file){
+ const fps=await sourceFPS(file.path);
+ if(Math.abs(fps-35)<.015)return {file,sourceFPS:fps,prepared:false,release:async()=>{}};
+ const tmp=await fs.promises.mkdtemp(path.join(os.tmpdir(),'r15-motion-fps-'));
+ const out=path.join(tmp,'driving35.mp4');
+ try{
+  await exec('/usr/bin/python3',[path.join(process.cwd(),'camera-engine','motion_timebase.py'),file.path,out],
+    {timeout:180000,maxBuffer:4096,env:{...process.env,OPENBLAS_NUM_THREADS:'1',OMP_NUM_THREADS:'2'}});
+  if(Math.abs(await sourceFPS(out)-35)>.015)throw Error('Video hasil bukan 35 FPS.');
+  const size=(await fs.promises.stat(out)).size;
+  if(size<5000||size>100*1024*1024)throw Error('Ukuran hasil sinkronisasi video tidak valid.');
+  return {file:{...file,path:out,originalname:'r15-driving35.mp4',mimetype:'video/mp4',size},
+   sourceFPS:fps,prepared:true,release:()=>fs.promises.rm(tmp,{recursive:true,force:true})};
+ }catch(err){
+  await fs.promises.rm(tmp,{recursive:true,force:true}).catch(()=>{});
+  throw Error('Penyiapan gerakan 35 FPS gagal sebelum menggunakan kredit: '+err.message);
+ }
+}
+
 export async function analyzeSource(input){
   const reportName=input.path+'.r4-report.json';
   try{
@@ -65,29 +97,9 @@ async function executeQa(id,url){
    const out=json(outReport);
    const decision=cameraDecision(source,out,{maxCorrectionPx:35,qualityRequired:.65});
    details={stage:'done',sourceCamera:source.classification,generatedCamera:out.classification,decision:decision.action,reason:decision.reason,corrected:false};
-   if(decision.action==='candidate' && decision.maxEstimatedCorrectionPx<=8){
-     try{
-       const temp=path.join(dir,'corrected-noaudio.mp4');
-       const target=path.join(dir,'corrected.mp4');
-       await python(['correct','--source-report',path.join(dir,'source.json'),'--output-report',outReport,'--video',outputPath,'--out',temp],180000);
-       // Restore output audio; never add driving-video audio unless generated video already had it.
-       await exec('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',temp,'-i',outputPath,
-         '-map','0:v:0','-map','1:a?','-c:v','libx264','-preset','veryfast','-crf','18','-c:a','copy',
-         '-shortest','-movflags','+faststart',target],{timeout:240000,maxBuffer:1024*1024});
-       // Verify the corrected video before offering it as the result.
-       const afterName=path.join(dir,'after.json');
-       await python(['analyze','--video',target,'--out',afterName],180000);
-       const after=cameraDecision(source,json(afterName),{maxCorrectionPx:35});
-       if(after.action==='pass' || (after.maxEstimatedCorrectionPx!=null &&
-          after.maxEstimatedCorrectionPx<decision.maxEstimatedCorrectionPx && after.action!=='hold')){
-         details.corrected=true;details.reason='SMALL_CORRECTION_VERIFIED';
-       }else{
-         details.reason='CORRECTION_UNVERIFIED_RAW_PRESERVED';
-         await fs.promises.rm(target,{force:true});
-       }
-       await fs.promises.rm(temp,{force:true});
-     }catch(err){details.reason='CORRECTION_FAILED_RAW_PRESERVED';details.note=String(err.message||err).slice(0,170);}
-   }
+   // Do not warp the entire subject to compensate a background-camera error.
+   // Wait for a validated output-person segmentation mask before allowing correction.
+   if(decision.action==='candidate')details.reason='RAW_PRESERVED_NO_WHOLE_SUBJECT_WARP';
    await write(statusFile,details);
  }catch(error){
    details={stage:'done',sourceCamera:'UNKNOWN',decision:'hold',reason:'QA_UNAVAILABLE_RAW_PRESERVED',corrected:false,note:String(error.message||error).slice(0,180)};
