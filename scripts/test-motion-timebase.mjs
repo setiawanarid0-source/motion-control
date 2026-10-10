@@ -9,9 +9,9 @@ import { prepareMotionSource } from '../camera-runtime.js';
 const exec=promisify(execFile);
 const dir=await fs.mkdtemp(path.join(os.tmpdir(),'r15-fps-test-'));
 try{
- const video=path.join(dir,'30fps.mp4');
+ const video=path.join(dir,'30fps');
  await exec('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y','-f','lavfi',
-   '-i','testsrc2=size=96x160:rate=30:duration=1.4','-c:v','libx264','-pix_fmt','yuv420p',video],{timeout:20000});
+   '-i','testsrc2=size=96x160:rate=30:duration=1.4','-c:v','libx264','-pix_fmt','yuv420p','-f','mp4',video],{timeout:20000});
  const stat=await fs.stat(video);
  const converted=await prepareMotionSource({path:video,size:stat.size,originalname:'video.mp4',mimetype:'video/mp4'});
  try{
@@ -25,5 +25,5 @@ try{
   const noChange=await prepareMotionSource(converted.file);
   assert.equal(noChange.prepared,false);
  }finally{await converted.release();}
- console.log('PASS: time-accurate R15 motion preconditioning: 30FPS to 35FPS, without repeated resampling.');
+ console.log('PASS: extensionless 30FPS upload to 35FPS 49 frames; file-first motion processing.');
 }finally{await fs.rm(dir,{recursive:true,force:true});}

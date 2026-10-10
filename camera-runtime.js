@@ -40,7 +40,7 @@ export async function prepareMotionSource(file){
  const out=path.join(tmp,'driving35.mp4');
  try{
   await exec('/usr/bin/python3',[path.join(process.cwd(),'camera-engine','motion_timebase.py'),file.path,out],
-    {timeout:180000,maxBuffer:4096,env:{...process.env,OPENBLAS_NUM_THREADS:'1',OMP_NUM_THREADS:'2'}});
+    {timeout:230000,maxBuffer:16384,env:{...process.env,OPENBLAS_NUM_THREADS:'1',OMP_NUM_THREADS:'2'}});
   if(Math.abs(await sourceFPS(out)-35)>.015)throw Error('Video hasil bukan 35 FPS.');
   const size=(await fs.promises.stat(out)).size;
   if(size<5000||size>100*1024*1024)throw Error('Ukuran hasil sinkronisasi video tidak valid.');

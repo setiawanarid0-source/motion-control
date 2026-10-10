@@ -6,12 +6,12 @@ at the original timestamps; this does not stabilize/shake-suppress any camera mo
 This is preconditioning only: generated subject jitter and 3-D camera errors remain
 model-dependent and must be checked against actual RunningHub outputs.
 """
-import argparse,json,math,subprocess,sys,time
+import argparse,json,math,os,shutil,subprocess,sys,tempfile,time
 import cv2,numpy as np
 cv2.setNumThreads(2)
 TARGET_FPS=35
 
-def convert(input_path,out_path,max_width=720):
+def convert(input_path,out_path,max_width=576):
     cap=cv2.VideoCapture(input_path)
     if not cap.isOpened():raise ValueError('Cannot read source video')
     fps=float(cap.get(cv2.CAP_PROP_FPS));count=int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -33,12 +33,15 @@ def convert(input_path,out_path,max_width=720):
     sw=160;sh=max(2,int(round(sw*h/w/2)*2))
     x,y=np.meshgrid(np.arange(w,dtype=np.float32),np.arange(h,dtype=np.float32))
     f=b=None;synth=0;started=time.monotonic()
-    cmd=['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-y',
-         '-f','rawvideo','-pixel_format','bgr24','-video_size',f'{w}x{h}',
-         '-framerate',str(TARGET_FPS),'-i','pipe:0','-i',input_path,
-         '-map','0:v:0','-map','1:a?','-c:v','libx264','-preset','veryfast','-crf','18',
-         '-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',out_path]
-    ff=subprocess.Popen(cmd,stdin=subprocess.PIPE,stderr=subprocess.PIPE)
+    # File-first lossless intermediate. No Python→FFmpeg stdin pipe, so
+    # encoder startup/early exit cannot masquerade as "[Errno 32] Broken pipe".
+    work=tempfile.mkdtemp(prefix='r15-ffv1-',dir=os.path.dirname(os.path.abspath(out_path)))
+    staged=os.path.join(work,'motion-frames.mkv')
+    writer=cv2.VideoWriter(staged,cv2.VideoWriter_fourcc(*'FFV1'),TARGET_FPS,(w,h))
+    if not writer.isOpened():
+        cap.release()
+        shutil.rmtree(work,ignore_errors=True)
+        raise RuntimeError('Cannot open lossless intermediate video writer')
     try:
         for i in range(target_count):
             t=i*fps/TARGET_FPS
@@ -49,7 +52,6 @@ def convert(input_path,out_path,max_width=720):
             alpha=t-desired
             if alpha<.005 or B is A:frame=A
             elif fps>=TARGET_FPS:
-                # For >35fps inputs pick a genuine captured frame; don't invent motion.
                 frame=A if alpha<.5 else B
             else:
                 if f is None:
@@ -63,17 +65,22 @@ def convert(input_path,out_path,max_width=720):
                 G=cv2.remap(B,x-(1-alpha)*b[:,:,0],y-(1-alpha)*b[:,:,1],cv2.INTER_LINEAR,borderMode=cv2.BORDER_REPLICATE)
                 frame=cv2.addWeighted(F,1-alpha,G,alpha,0)
                 synth+=1
-            ff.stdin.write(frame.tobytes())
-        ff.stdin.close()
-        stderr=ff.stderr.read().decode(errors='replace')
-        if ff.wait(timeout=90):raise RuntimeError('Video encoding failed: '+stderr[-400:])
-    except Exception:
-        try:ff.kill()
-        except:pass
-        try:ff.wait(timeout=5)
-        except:pass
-        raise
-    finally:cap.release()
+            writer.write(frame)
+        writer.release()
+        cap.release()
+        cmd=['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-y','-threads','2',
+             '-i',staged,'-i',input_path,'-map','0:v:0','-map','1:a?',
+             '-c:v','libx264','-preset','veryfast','-crf','18',
+             '-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',out_path]
+        result=subprocess.run(cmd,capture_output=True,text=True,timeout=160)
+        if result.returncode:
+            raise RuntimeError('FFmpeg encode/mux failed: '+result.stderr[-700:])
+        if not os.path.isfile(out_path) or os.path.getsize(out_path)<5000:
+            raise RuntimeError('Encoded 35 FPS video is empty')
+    finally:
+        writer.release()
+        cap.release()
+        shutil.rmtree(work,ignore_errors=True)
     return dict(original_fps=round(fps,4),output_fps=TARGET_FPS,source_frames=count,
         output_frames=target_count,interpolated_frames=synth,
         source_resolution=[w0,h0],output_resolution=[w,h],
@@ -82,7 +89,7 @@ def convert(input_path,out_path,max_width=720):
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('source');parser.add_argument('output')
-    parser.add_argument('--width',type=int,default=720)
+    parser.add_argument('--width',type=int,default=576)
     args=parser.parse_args()
     try:print(json.dumps(convert(args.source,args.output,args.width)))
     except Exception as ex:
