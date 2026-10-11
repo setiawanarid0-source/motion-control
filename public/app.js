@@ -446,7 +446,6 @@ async function pollHistoryTasks(){
     state.historyPollBusy=false;
   }
 }
-let historyPreviewContext=null;
 function referenceLink(taskId,kind,accountId){
   return '/api/task-references/'+encodeURIComponent(taskId)+'/'+kind+
     '?accountId='+encodeURIComponent(accountId)+'&deviceId='+encodeURIComponent(getDeviceId());
@@ -462,79 +461,61 @@ async function renderReferenceDetails(taskId,version){
   }
   if(version!==previewVersion)return;
   const entries=[
-    {kind:'image',id:'historyPreviewImage',empty:'historyPreviewImageEmpty',attach:'historyPreviewImageAttach',blob:stored?.image},
-    {kind:'video',id:'historyPreviewSourceVideo',empty:'historyPreviewSourceEmpty',attach:'historyPreviewVideoAttach',blob:stored?.video}
+    {kind:'image',id:'historyPreviewImage',empty:'historyPreviewImageEmpty',blob:stored?.image},
+    {kind:'video',id:'historyPreviewSourceVideo',empty:'historyPreviewSourceEmpty',blob:stored?.video}
   ];
+  let available=0;
   for(const entry of entries){
-    const element=$('#'+entry.id),empty=$('#'+entry.empty),attach=$('#'+entry.attach);
-    element.hidden=true;empty.hidden=false;attach.hidden=true;
+    const element=$('#'+entry.id),empty=$('#'+entry.empty);
+    element.hidden=true;empty.hidden=false;
     element.removeAttribute('src');
     if(entry.kind==='video'){element.pause();element.load();}
     const foundServer=!!onServer[entry.kind]&&!!accountId;
     if(foundServer){
+      available++;
       element.src=referenceLink(taskId,entry.kind,accountId);
       element.hidden=false;empty.hidden=true;
       if(entry.kind==='video')element.load();
-      element.onerror=()=>{if(version===previewVersion){element.hidden=true;empty.hidden=false;empty.textContent='Referensi gagal dimuat dari server.';attach.hidden=false;}};
+      element.onerror=()=>{if(version===previewVersion){element.hidden=true;empty.hidden=false;
+        empty.textContent='Referensi tidak dapat diputar dari penyimpanan.';}};
     }else if(entry.blob){
+      available++;
       const objectUrl=URL.createObjectURL(entry.blob);
       previewUrls.push(objectUrl);element.src=objectUrl;element.hidden=false;empty.hidden=true;
       if(entry.kind==='video')element.load();
     }else{
-      empty.textContent=accountId?
-        'Referensi lama tidak tersimpan. Tambahkan kembali file asli ke task ini.':
-        'Referensi belum tersedia. Akun pembuat task tidak lagi ada di Account Pool.';
-      attach.hidden=!accountId;
+      empty.textContent='Referensi tidak tersedia pada riwayat lama ini.';
     }
   }
+  $('#historyPreviewReferences').hidden=available===0;
+  $('#historyPreviewLegacyNotice').hidden=available!==0;
+  $('#historyPreviewLayout').classList.toggle('refs-unavailable',available===0);
 }
 async function openHistoryPreview(url,taskId='',downloadUrl=''){
   const modal=$('#historyPreviewModal'),result=$('#historyPreviewVideo');
   if(!modal||!result)return;
   const version=++previewVersion;
   releasePreviewMedia();
-  historyPreviewContext={url,taskId,downloadUrl};
   $('#historyPreviewTitle').textContent=taskId?'Task #'+taskId:'Detail generasi';
   $('#historyPreviewDownload').href=downloadUrl||url;
   $('#historyPreviewDownload').removeAttribute('download');
-  for(const [empty,attach] of [['historyPreviewImageEmpty','historyPreviewImageAttach'],['historyPreviewSourceEmpty','historyPreviewVideoAttach']]){
+  for(const empty of ['historyPreviewImageEmpty','historyPreviewSourceEmpty']){
     $('#'+empty).textContent='Memeriksa referensi…';
-    $('#'+empty).hidden=false;$('#'+attach).hidden=true;
+    $('#'+empty).hidden=false;
   }
   $('#historyPreviewImage').hidden=true;
   $('#historyPreviewSourceVideo').hidden=true;
+  $('#historyPreviewReferences').hidden=false;
+  $('#historyPreviewLegacyNotice').hidden=true;
+  $('#historyPreviewLayout').classList.remove('refs-unavailable');
   modal.classList.remove('hidden');document.body.classList.add('modal-open');
   result.preload='metadata';result.src=url;result.load();
   result.onerror=()=>{if(version===previewVersion)toast('Video hasil tidak dapat dimuat.',true);};
   result.oncanplay=()=>{if(version===previewVersion)result.play().catch(()=>{});};
   if(taskId)await renderReferenceDetails(taskId,version);
 }
-async function reattachHistoryReference(kind,file){
-  const ctx=historyPreviewContext;
-  if(!ctx?.taskId||!file)return;
-  const item=history().find(x=>String(x.taskId)===String(ctx.taskId));
-  const accountId=item?resolveHistoryAccountId(item):null;
-  if(!accountId)return toast('Akun pembuat task tidak ada di Account Pool.',true);
-  const input=$('#'+(kind==='image'?'historyPreviewImageInput':'historyPreviewVideoInput'));
-  const wrapper=$('#'+(kind==='image'?'historyPreviewImageAttach':'historyPreviewVideoAttach'));
-  const label=wrapper.querySelector('label'),original=label.textContent;
-  input.disabled=true;label.textContent='Menyimpan referensi…';
-  try{
-    const form=new FormData();
-    form.append('accountId',accountId);
-    form.append('file',file);
-    await api('/api/task-references/'+encodeURIComponent(ctx.taskId)+'/'+kind,{method:'POST',body:form});
-    if(historyPreviewContext!==ctx)return;
-    toast('Referensi berhasil disimpan untuk task ini.');
-    // Refresh only the reference tiles, without restarting the output video.
-    previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];
-    await renderReferenceDetails(ctx.taskId,previewVersion);
-  }catch(error){toast(error.message||'Tidak dapat menyimpan referensi.',true);}
-  finally{input.disabled=false;input.value='';label.textContent=original;}
-}
 function closeHistoryPreview(){
   ++previewVersion;
-  historyPreviewContext=null;
   releasePreviewMedia();
   $('#historyPreviewModal')?.classList.add('hidden');
   document.body.classList.remove('modal-open');
@@ -575,8 +556,6 @@ function bindHistoryActions(){
       openHistoryPreview(btn.dataset.previewUrl,btn.dataset.previewTask||'',btn.dataset.downloadUrl||'');
     });
   }
-  $('#historyPreviewImageInput')?.addEventListener('change',e=>reattachHistoryReference('image',e.target.files?.[0]));
-  $('#historyPreviewVideoInput')?.addEventListener('change',e=>reattachHistoryReference('video',e.target.files?.[0]));
   $('#historyPreviewClose')?.addEventListener('click',closeHistoryPreview);
   $('#historyPreviewCloseBottom')?.addEventListener('click',closeHistoryPreview);
   $$('[data-close-preview]').forEach(el=>el.addEventListener('click',closeHistoryPreview));
