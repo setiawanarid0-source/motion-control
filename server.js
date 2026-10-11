@@ -9,6 +9,7 @@ import { Transform } from 'node:stream';
 import { extractTaskFailure } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
+import { referenceAvailability, referenceFile, saveReference, pruneReferences } from './history-references.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -487,10 +488,19 @@ app.post('/api/generate', upload.fields([
           diagnosticAccount,
           diagnosticTaskId,
         });
+        let sourceSaved=false;
         if(workflowKey==='r15'){
-          try{await saveSource(String(task.taskId),videoFile,sourceCamera);}
+          try{await saveSource(String(task.taskId),videoFile,sourceCamera);sourceSaved=true;}
           catch(cameraError){console.error('R15 source save failed',String(task.taskId),cameraError.message);}
         }
+        // Persist both references without relying on browser IndexedDB.
+        // Never treat media-preview storage errors as a failed paid RunningHub task.
+        const mediaWrites=[saveReference(String(task.taskId),'image',imageFile)];
+        if(!sourceSaved)mediaWrites.push(saveReference(String(task.taskId),'video',videoFile));
+        const mediaResults=await Promise.allSettled(mediaWrites);
+        const referencesStored=mediaResults.every(result=>result.status==='fulfilled');
+        if(!referencesStored)console.warn('Reference preview storage incomplete for task',String(task.taskId),
+          mediaResults.filter(x=>x.status==='rejected').map(x=>x.reason?.message||'unknown').join('; '));
         // Never restore a deleted account from this request's earlier in-memory snapshot.
         const newestAccounts=loadGlobalAccounts();
         const currentAccount=newestAccounts.find(x=>x.id===account.id);
@@ -502,6 +512,7 @@ app.post('/api/generate', upload.fields([
         return res.json({
           ok: true,
           taskId: String(task.taskId),
+          referencesStored,
           taskStatus: task.taskStatus || 'QUEUED',
           accountId: account.id,
           accountName: account.name,
@@ -578,6 +589,50 @@ app.post('/api/tasks/:taskId', async (req, res) => {
     res.json({ state: 'failed', rawCode: code, message: data?.msg || 'Task gagal.', failure: extractTaskFailure(data) });
   } catch (error) {
     res.status(502).json({ error: error.message || 'Gagal mengambil status task.' });
+  }
+});
+
+// The Account Pool provides the same account-scoped access used by task preview.
+// No public static directory or direct filesystem paths are exposed.
+function referenceAccess(req){
+  const id=String(req.params.taskId||'');
+  const accountId=String(req.query?.accountId||req.body?.accountId||'');
+  if(!/^\d{10,25}$/.test(id))return false;
+  return getPersistentAccounts(req).accounts.some(a=>a.id===accountId);
+}
+app.get('/api/task-references/:taskId', (req,res)=>{
+  if(!referenceAccess(req))return res.status(404).json({error:'Referensi tidak tersedia untuk akun ini.'});
+  res.setHeader('Cache-Control','private, no-store');
+  res.json(referenceAvailability(req.params.taskId));
+});
+app.get('/api/task-references/:taskId/:kind', (req,res)=>{
+  if(!referenceAccess(req))return res.status(404).end();
+  const kind=String(req.params.kind);
+  if(!['image','video'].includes(kind))return res.status(404).end();
+  const file=referenceFile(req.params.taskId,kind);
+  if(!file)return res.status(404).end();
+  res.setHeader('Cache-Control','private, no-store');
+  res.type(kind==='image'?'image/jpeg':'video/mp4');
+  // Use sendFile's range support for HTML5 video seeking.
+  res.sendFile(file);
+});
+app.post('/api/task-references/:taskId/:kind',upload.single('file'),async(req,res)=>{
+  const file=req.file,kind=String(req.params.kind);
+  try{
+    if(!referenceAccess(req))return res.status(404).json({error:'Akun task tidak ditemukan di Account Pool.'});
+    if(!['image','video'].includes(kind))return res.status(400).json({error:'Jenis referensi tidak valid.'});
+    if(!file) return res.status(400).json({error:'Pilih file referensi terlebih dahulu.'});
+    if(kind==='image'&&(!/^image\/(png|jpeg|webp)$/i.test(file.mimetype)||file.size>IMAGE_MAX))
+      return res.status(400).json({error:'Gambar referensi harus JPG, PNG, atau WEBP maksimal 20 MB.'});
+    if(kind==='video'&&(!/^video\/(mp4|webm|quicktime|x-matroska)$/i.test(file.mimetype)||file.size>VIDEO_MAX))
+      return res.status(400).json({error:'Video referensi harus MP4, MOV, atau WEBM maksimal 100 MB.'});
+    await saveReference(req.params.taskId,kind,file);
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({ok:true,media:referenceAvailability(req.params.taskId)});
+  }catch(error){
+    res.status(500).json({error:'Gagal menyimpan referensi: '+String(error.message||error).slice(0,120)});
+  }finally{
+    if(file?.path)fs.promises.rm(file.path,{force:true}).catch(()=>{});
   }
 });
 
@@ -671,4 +726,6 @@ if (!startupGlobalAccounts.length && startupLegacyAccounts.length) {
 }
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
+pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
+setInterval(()=>pruneReferences().catch(error=>console.warn('Reference cleanup',error.message)),60*60*1000).unref();
 app.listen(PORT, '0.0.0.0', () => console.log(`VANTA Motion Studio listening on :${PORT}`));
