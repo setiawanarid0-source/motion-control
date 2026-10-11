@@ -7,7 +7,7 @@ import os from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { extractTaskFailure } from './task-failure.js';
-import { canStartNewTask, isTrackableTaskCode } from './account-eligibility.js';
+import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -162,7 +162,8 @@ function saveVaultAccounts(_deviceId, accounts) {
 function getPersistentAccounts(req) {
   let accounts = loadGlobalAccounts();
 
-  if (!accounts.length) {
+  // An intentionally emptied global vault must never re-import deleted legacy keys.
+  if (!accounts.length && !fs.existsSync(GLOBAL_ACCOUNT_VAULT)) {
     const recovered = recoverLegacyVaultAccounts();
     const legacyCookieAccounts = getSession(req).accounts;
     accounts = normalizeAccounts([...recovered, ...legacyCookieAccounts]);
@@ -370,8 +371,8 @@ app.post('/api/accounts', async (req, res) => {
   if (accounts.some(a => a.fingerprint === fingerprint)) return res.status(409).json({ error: 'API key ini sudah ada di pool.' });
   try {
     const status = await accountStatus(apiKey);
-    // Keep low-credit keys for recovering old tasks. Do not allow new generation with them.
-    const pollingOnly=!canStartNewTask(status,MIN_POOL_CREDITS);
+    if (!canStartNewTask(status,MIN_POOL_CREDITS))
+      return res.status(400).json({ error: 'Akun harus memiliki minimal 100 RH untuk ditambahkan ke Account Pool.' });
     const account = {
       id: crypto.randomUUID(),
       name: `Account ${String(accounts.length + 1).padStart(2, '0')}`,
@@ -382,7 +383,7 @@ app.post('/api/accounts', async (req, res) => {
     };
     accounts.push(account);
     saveVaultAccounts(deviceId, accounts);
-    res.json({ account: publicAccount(account, status), storage: 'persistent', pollingOnly });
+    res.json({ account: publicAccount(account, status), storage: 'persistent' });
   } catch (error) {
     res.status(400).json({ error: error.message || 'API key tidak dapat divalidasi.' });
   }
@@ -400,17 +401,19 @@ app.delete('/api/accounts/:id', (req, res) => {
 
 app.post('/api/accounts/refresh', async (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);
-  if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
+  if (!deviceId) return res.status(400).json({ error: 'Sesi perangkat tidak tersedia. Muat ulang halaman.' });
 
   const checked=await Promise.all(accounts.map(async account=>{
     try{return {account,status:await accountStatus(account.key)};}
     catch(error){return {account,status:{error:error.message}};}
   }));
-  // Never remove keys here. A low-credit account may still own a RunningHub task.
+  // Delete only accounts with a VERIFIED sub-100 balance.
+  // A transient API error or absent balance must never trigger destructive removal.
+  const {retained,removed}=partitionAccountRefresh(checked,MIN_POOL_CREDITS);
+  if(removed.length)saveVaultAccounts(deviceId,retained.map(x=>x.account));
   res.json({
-    accounts:checked.map(x=>publicAccount(x.account,x.status)),
-    autoRemovedCount:0,
-    pollingOnlyCount:checked.filter(x=>!canStartNewTask(x.status,MIN_POOL_CREDITS)).length,
+    accounts:retained.map(x=>publicAccount(x.account,x.status)),
+    autoRemovedCount:removed.length,
     minimumCredits:MIN_POOL_CREDITS
   });
 });
@@ -458,7 +461,7 @@ app.post('/api/generate', upload.fields([
       if(!chosen)throw new Error('Akun yang dipilih tidak ditemukan.');
       const status=await accountStatus(chosen.key);
       if(!canStartNewTask(status,MIN_POOL_CREDITS))
-        throw new Error('Akun hanya untuk pemantauan task lama: kredit di bawah 100 RH.');
+        throw new Error('Saldo akun di bawah 100 RH. Perbarui Account Pool untuk menghapus akun tersebut.');
       candidates=[chosen];
     }else{
       const ranked=await Promise.all(accounts.map(async a=>{
