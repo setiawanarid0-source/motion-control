@@ -9,7 +9,7 @@ import { Transform } from 'node:stream';
 import { extractTaskFailure } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
-import { referenceAvailability, referenceFile, saveReference, pruneReferences } from './history-references.js';
+import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences } from './history-references.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -426,7 +426,9 @@ app.post('/api/generate', upload.fields([
   const imageFile = req.files?.referenceImage?.[0];
   const videoFile = req.files?.videoReference?.[0];
   let preparedMotion=null;
+  let stagedReferences=null;
   const cleanup = () => {
+    if(stagedReferences)discardReferences(stagedReferences).catch(e=>console.warn('Reference staging cleanup',e.message));
     if(preparedMotion)preparedMotion.release().catch(e=>console.warn('R15 temporary file cleanup',e.message));
     for (const f of [imageFile, videoFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
   };
@@ -475,6 +477,8 @@ app.post('/api/generate', upload.fields([
       if(!candidates.length)throw new Error('Tidak ada akun dengan kredit minimal 100 RH untuk membuat task baru.');
     }
     if(workflowKey==='r15')preparedMotion=await prepareMotionSource(videoFile);
+    // Both previews must be persisted to the Railway volume before RunningHub is charged.
+    stagedReferences=await stageReferences(imageFile,videoFile);
     let lastError = null;
     for (const account of candidates) {
       try {
@@ -488,19 +492,20 @@ app.post('/api/generate', upload.fields([
           diagnosticAccount,
           diagnosticTaskId,
         });
-        let sourceSaved=false;
+        // Associate the staged input pair with the paid task via an atomic directory rename.
+        // This operation must not trigger another paid task if media storage has an issue.
+        let referencesStored=false;
+        try{
+          const stored=await commitReferences(stagedReferences,String(task.taskId));
+          referencesStored=stored.image&&stored.video;
+          stagedReferences=null;
+        }catch(mediaError){
+          console.error('Reference preview commit failed',String(task.taskId),mediaError.message);
+        }
         if(workflowKey==='r15'){
-          try{await saveSource(String(task.taskId),videoFile,sourceCamera);sourceSaved=true;}
+          try{await saveSource(String(task.taskId),videoFile,sourceCamera);}
           catch(cameraError){console.error('R15 source save failed',String(task.taskId),cameraError.message);}
         }
-        // Persist both references without relying on browser IndexedDB.
-        // Never treat media-preview storage errors as a failed paid RunningHub task.
-        const mediaWrites=[saveReference(String(task.taskId),'image',imageFile)];
-        if(!sourceSaved)mediaWrites.push(saveReference(String(task.taskId),'video',videoFile));
-        const mediaResults=await Promise.allSettled(mediaWrites);
-        const referencesStored=mediaResults.every(result=>result.status==='fulfilled');
-        if(!referencesStored)console.warn('Reference preview storage incomplete for task',String(task.taskId),
-          mediaResults.filter(x=>x.status==='rejected').map(x=>x.reason?.message||'unknown').join('; '));
         // Never restore a deleted account from this request's earlier in-memory snapshot.
         const newestAccounts=loadGlobalAccounts();
         const currentAccount=newestAccounts.find(x=>x.id===account.id);
@@ -616,26 +621,6 @@ app.get('/api/task-references/:taskId/:kind', (req,res)=>{
   // Use sendFile's range support for HTML5 video seeking.
   res.sendFile(file);
 });
-app.post('/api/task-references/:taskId/:kind',upload.single('file'),async(req,res)=>{
-  const file=req.file,kind=String(req.params.kind);
-  try{
-    if(!referenceAccess(req))return res.status(404).json({error:'Akun task tidak ditemukan di Account Pool.'});
-    if(!['image','video'].includes(kind))return res.status(400).json({error:'Jenis referensi tidak valid.'});
-    if(!file) return res.status(400).json({error:'Pilih file referensi terlebih dahulu.'});
-    if(kind==='image'&&(!/^image\/(png|jpeg|webp)$/i.test(file.mimetype)||file.size>IMAGE_MAX))
-      return res.status(400).json({error:'Gambar referensi harus JPG, PNG, atau WEBP maksimal 20 MB.'});
-    if(kind==='video'&&(!/^video\/(mp4|webm|quicktime|x-matroska)$/i.test(file.mimetype)||file.size>VIDEO_MAX))
-      return res.status(400).json({error:'Video referensi harus MP4, MOV, atau WEBM maksimal 100 MB.'});
-    await saveReference(req.params.taskId,kind,file);
-    res.setHeader('Cache-Control','private, no-store');
-    res.json({ok:true,media:referenceAvailability(req.params.taskId)});
-  }catch(error){
-    res.status(500).json({error:'Gagal menyimpan referensi: '+String(error.message||error).slice(0,120)});
-  }finally{
-    if(file?.path)fs.promises.rm(file.path,{force:true}).catch(()=>{});
-  }
-});
-
 app.get('/api/camera-video/:taskId',(req,res)=>{
   const accountId=String(req.query?.accountId||'');
   if(!getPersistentAccounts(req).accounts.some(a=>a.id===accountId))return res.status(404).end();
