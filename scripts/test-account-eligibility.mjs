@@ -11,7 +11,8 @@ const checks=[
   {account:{id:'low'},status:{remainCoins:99}},
   {account:{id:'offline'},status:{error:'timeout'}},
   {account:{id:'unknown'},status:null},
+  {account:{id:'active-low'},status:{remainCoins:12,currentTaskCounts:1}},
 ];
 const partition=partitionAccountRefresh(checks);
 assert.deepEqual(partition.removed.map(x=>x.account.id),['low']);
-assert.deepEqual(partition.retained.map(x=>x.account.id),['ready','offline','unknown']);
+assert.deepEqual(partition.retained.map(x=>x.account.id),['ready','offline','unknown','active-low']);
