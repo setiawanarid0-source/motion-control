@@ -482,3 +482,30 @@ button,input,select{font:inherit}button,a{touch-action:manipulation}.hidden{disp
 .diagnostic-mask{padding:14px 0;display:flex;gap:11px;flex-direction:column;align-items:flex-start}
 .diagnostic-mask.hidden{display:none}.diagnostic-mask img{max-width:100%;max-height:480px;border-radius:12px;object-fit:contain}
 .result-media-label{font-size:12px;opacity:.75;margin:8px 0}
+
+/* Generation detail: result + both user inputs, responsive without nested scroll traps. */
+.preview-card{width:min(990px,100%);padding:20px;overscroll-behavior:contain}
+.preview-media-layout{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,1fr);gap:14px}
+.preview-media-panel{min-width:0;padding:12px;background:#111821;border:1px solid rgba(192,212,232,.10);border-radius:14px}
+.preview-section-heading{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px}
+.preview-section-heading h4{font:600 12px Manrope,sans-serif;margin:0;color:#ebf0f5}
+.preview-section-heading span{font-size:9px;letter-spacing:.13em;color:#8795a3}
+.preview-media-layout .preview-video-frame{max-height:58vh;aspect-ratio:9/16;background:#050709}
+.preview-reference-grid{display:grid;grid-template-rows:1fr 1fr;gap:14px;min-width:0}
+.preview-reference-frame{display:grid;place-items:center;background:#060a10;border-radius:10px;min-height:0;height:100%;max-height:29vh;overflow:hidden}
+.preview-reference-frame img,.preview-reference-frame video{display:block;width:100%;height:100%;object-fit:contain}
+.preview-reference-frame [hidden]{display:none!important}
+.preview-empty{font-size:11px;line-height:1.5;color:#95a4b5;text-align:center;margin:0;padding:18px}
+.preview-actions{position:sticky;bottom:-20px;z-index:2;padding-top:14px;padding-bottom:2px;background:linear-gradient(0deg,#0e1319 85%,rgba(14,19,25,0));margin-top:0}
+@media(max-width:780px){
+  .preview-card{padding:14px;max-height:calc(100dvh - 102px - env(safe-area-inset-bottom));}
+  .preview-media-layout{grid-template-columns:1fr;gap:11px}
+  .preview-media-layout .preview-video-frame{max-height:41vh;aspect-ratio:9/13}
+  .preview-reference-grid{grid-template-columns:1fr 1fr;grid-template-rows:auto;gap:9px}
+  .preview-media-panel{padding:10px}
+  .preview-reference-frame{height:170px;max-height:none}
+  .preview-section-heading h4{font-size:11px}
+  .preview-section-heading span{font-size:8px}
+  .preview-actions{grid-template-columns:1fr 1fr;bottom:-14px;padding-top:12px}
+  .preview-actions .ghost-btn,.preview-actions .download-btn{min-height:42px;font-size:11px}
+}
