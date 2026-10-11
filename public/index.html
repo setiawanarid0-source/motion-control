@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20261011-media-detail" />
+  <link rel="stylesheet" href="/styles.css?v=20261011-reference-recovery" />
 </head>
 <body>
   <div class="app-shell">
@@ -141,7 +141,7 @@
           <button type="button" class="history-filter" data-history-filter="failed">Gagal</button>
           <button type="button" class="history-filter" data-history-filter="process">Proses</button>
         </div>
-        <div class="history-retention-note" role="note"><span aria-hidden="true">◷</span><p>Riwayat disimpan 3 hari. Media referensi generasi baru tersimpan di browser ini.</p></div>
+        <div class="history-retention-note" role="note"><span aria-hidden="true">◷</span><p>Riwayat disimpan 3 hari. Referensi generasi baru tersedia di server dan browser selama masa penyimpanan.</p></div>
         <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Generate time</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
       </section>
 
@@ -188,6 +188,10 @@
             <div class="preview-reference-frame">
               <img id="historyPreviewImage" alt="Gambar referensi yang digunakan untuk generasi" hidden>
               <p id="historyPreviewImageEmpty" class="preview-empty">Memuat referensi…</p>
+              <div id="historyPreviewImageAttach" class="preview-attach" hidden>
+                <label for="historyPreviewImageInput">Tambahkan gambar referensi</label>
+                <input id="historyPreviewImageInput" type="file" accept="image/png,image/jpeg,image/webp">
+              </div>
             </div>
           </section>
           <section class="preview-media-panel" aria-label="Video referensi">
@@ -195,6 +199,10 @@
             <div class="preview-reference-frame">
               <video id="historyPreviewSourceVideo" controls playsinline preload="metadata" hidden></video>
               <p id="historyPreviewSourceEmpty" class="preview-empty">Memuat referensi…</p>
+              <div id="historyPreviewVideoAttach" class="preview-attach" hidden>
+                <label for="historyPreviewVideoInput">Tambahkan video referensi</label>
+                <input id="historyPreviewVideoInput" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska">
+              </div>
             </div>
           </section>
         </div>
@@ -207,6 +215,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261011-media-detail" defer></script>
+  <script src="/app.js?v=20261011-reference-recovery" defer></script>
 </body>
 </html>
