@@ -13,7 +13,7 @@ export function partitionAccountRefresh(checked, minimum=MIN_NEW_TASK_CREDITS){
   for(const entry of checked){
     const status=entry?.status;
     const credits=Number(status?.remainCoins);
-    if(status && !status.error && status.remainCoins!=null && Number.isFinite(credits) && credits<minimum)
+    if(status && !status.error && status.remainCoins!=null && Number.isFinite(credits) && credits<minimum && Number(status.currentTaskCounts||0)===0)
       removed.push(entry);
     else retained.push(entry);
   }
