@@ -727,5 +727,9 @@ if (!startupGlobalAccounts.length && startupLegacyAccounts.length) {
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
+if(/^\d{10,25}$/.test(process.env.VANTA_REFERENCE_AUDIT_TASK||'')){
+  console.log('Reference availability audit',process.env.VANTA_REFERENCE_AUDIT_TASK,
+    JSON.stringify(referenceAvailability(process.env.VANTA_REFERENCE_AUDIT_TASK)));
+}
 setInterval(()=>pruneReferences().catch(error=>console.warn('Reference cleanup',error.message)),60*60*1000).unref();
 app.listen(PORT, '0.0.0.0', () => console.log(`VANTA Motion Studio listening on :${PORT}`));
