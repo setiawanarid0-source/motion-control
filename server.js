@@ -491,8 +491,13 @@ app.post('/api/generate', upload.fields([
           try{await saveSource(String(task.taskId),videoFile,sourceCamera);}
           catch(cameraError){console.error('R15 source save failed',String(task.taskId),cameraError.message);}
         }
-        account.lastUsedAt = new Date().toISOString();
-        saveVaultAccounts(deviceId, accounts);
+        // Never restore a deleted account from this request's earlier in-memory snapshot.
+        const newestAccounts=loadGlobalAccounts();
+        const currentAccount=newestAccounts.find(x=>x.id===account.id);
+        if(currentAccount){
+          currentAccount.lastUsedAt=new Date().toISOString();
+          saveVaultAccounts(deviceId,newestAccounts);
+        }
         cleanup();
         return res.json({
           ok: true,
