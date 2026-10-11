@@ -38,9 +38,9 @@ export async function saveReference(id,kind,input){
   const dest=target(id,kind),tmp=dest+'.tmp-'+process.pid+'-'+Date.now();
   try{
     const args=kind==='image'
-      ?['-hide_banner','-loglevel','error','-nostdin','-y','-i',input.path,'-frames:v','1','-vf','scale=if(gt(iw,1280),1280,iw):-2','-q:v','4','-f','image2',tmp]
+      ?['-hide_banner','-loglevel','error','-nostdin','-y','-i',input.path,'-frames:v','1','-vf','scale=1280:-2','-q:v','4','-update','1','-f','image2',tmp]
       :['-hide_banner','-loglevel','error','-nostdin','-y','-threads','2','-i',input.path,
-        '-map','0:v:0','-map','0:a?','-vf','scale=if(gt(iw,576),576,iw):-2',
+        '-map','0:v:0','-map','0:a?','-vf','scale=576:-2',
         '-c:v','libx264','-preset','ultrafast','-crf','30','-pix_fmt','yuv420p',
         '-c:a','aac','-b:a','64k','-movflags','+faststart','-f','mp4',tmp];
     await run('ffmpeg',args,{timeout:kind==='video'?180000:40000,maxBuffer:32768});
