@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20261011-reference-recovery" />
+  <link rel="stylesheet" href="/styles.css?v=20261011-auto-reference-v3" />
 </head>
 <body>
   <div class="app-shell">
@@ -177,21 +177,18 @@
         </div>
         <button id="historyPreviewClose" class="preview-close" type="button" aria-label="Close preview">×</button>
       </div>
-      <div class="preview-media-layout">
+      <div class="preview-media-layout" id="historyPreviewLayout">
         <section class="preview-media-panel preview-output-panel" aria-label="Video hasil">
           <div class="preview-section-heading"><h4>Hasil generasi</h4><span>OUTPUT</span></div>
           <div class="preview-video-frame"><video id="historyPreviewVideo" controls playsinline preload="metadata"></video></div>
         </section>
-        <div class="preview-reference-grid">
+        <div class="preview-reference-grid" id="historyPreviewReferences">
           <section class="preview-media-panel" aria-label="Gambar referensi">
             <div class="preview-section-heading"><h4>Gambar referensi</h4><span>INPUT</span></div>
             <div class="preview-reference-frame">
               <img id="historyPreviewImage" alt="Gambar referensi yang digunakan untuk generasi" hidden>
               <p id="historyPreviewImageEmpty" class="preview-empty">Memuat referensi…</p>
-              <div id="historyPreviewImageAttach" class="preview-attach" hidden>
-                <label for="historyPreviewImageInput">Tambahkan gambar referensi</label>
-                <input id="historyPreviewImageInput" type="file" accept="image/png,image/jpeg,image/webp">
-              </div>
+
             </div>
           </section>
           <section class="preview-media-panel" aria-label="Video referensi">
@@ -199,13 +196,11 @@
             <div class="preview-reference-frame">
               <video id="historyPreviewSourceVideo" controls playsinline preload="metadata" hidden></video>
               <p id="historyPreviewSourceEmpty" class="preview-empty">Memuat referensi…</p>
-              <div id="historyPreviewVideoAttach" class="preview-attach" hidden>
-                <label for="historyPreviewVideoInput">Tambahkan video referensi</label>
-                <input id="historyPreviewVideoInput" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska">
-              </div>
+
             </div>
           </section>
         </div>
+        <p id="historyPreviewLegacyNotice" class="preview-missing-note" hidden>Referensi tidak tersedia untuk generasi lama ini karena file input belum disimpan saat task dibuat.</p>
       </div>
       <div class="preview-actions">
         <button id="historyPreviewCloseBottom" class="ghost-btn" type="button">Tutup</button>
@@ -215,6 +210,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261011-reference-recovery" defer></script>
+  <script src="/app.js?v=20261011-auto-reference-v3" defer></script>
 </body>
 </html>
