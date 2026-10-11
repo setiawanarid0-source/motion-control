@@ -8,7 +8,7 @@ import {promisify} from 'node:util';
 const run=promisify(execFile);
 const dir=await fs.promises.mkdtemp(path.join(os.tmpdir(),'vanta-media-test-'));
 process.env.VANTA_DATA_DIR=dir;
-const {saveReference,referenceAvailability,referenceFile,pruneReferences}=await import('../history-references.js');
+const {saveReference,stageReferences,commitReferences,discardReferences,referenceAvailability,referenceFile,pruneReferences}=await import('../history-references.js');
 const id='2109000000000000001',legacyId='2109000000000000002';
 try{
   const image=path.join(dir,'input.png'),video=path.join(dir,'input.mp4');
@@ -22,7 +22,20 @@ try{
   assert.equal(referenceAvailability(id).video,true);
   assert.equal(referenceAvailability(id).legacy,false);
   assert.ok((await fs.promises.stat(referenceFile(id,'video'))).size>500);
-  const legacyDir=path.join(dir,'camera-r15',legacyId);
+  // Both media inputs must be staged and atomically linked before History can show them.
+  const generatedTask='2109000000000000003';
+  const staged=await stageReferences({path:image},{path:video});
+  assert.equal(referenceAvailability(generatedTask).image,false);
+  const committed=await commitReferences(staged,generatedTask);
+  assert.equal(committed.image,true);
+  assert.equal(committed.video,true);
+  assert.equal(referenceAvailability(generatedTask).image,true);
+  const unused=await stageReferences({path:image},{path:video});
+  await discardReferences(unused);
+  assert.equal(fs.existsSync(unused),false);
+  await assert.rejects(stageReferences({path:'/not/a/real/image.png'},{path:video}),
+    /Referensi gagal disimpan sebelum generate/);
+    const legacyDir=path.join(dir,'camera-r15',legacyId);
   await fs.promises.mkdir(legacyDir,{recursive:true});
   await fs.promises.copyFile(video,path.join(legacyDir,'source.mp4'));
   assert.equal(referenceAvailability(legacyId).video,true);
@@ -36,7 +49,7 @@ try{
   await fs.promises.utimes(mediaDir,old,old);
   await pruneReferences();
   assert.equal(referenceAvailability(id).image,false);
-  console.log('PASS: server reference previews, legacy R15 video recovery, expiry, and path safety');
+  console.log('PASS: automatic staged references, legacy recovery, expiration, and input path safety');
 }finally{
   await fs.promises.rm(dir,{recursive:true,force:true});
 }
