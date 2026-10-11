@@ -30,7 +30,7 @@ async function api(url, options={}){ const r=await fetch(url,{...options,headers
 async function loadSession(){
   state.session=await api('/api/session'); state.accounts=state.session.accounts||[]; renderAccountSelect(); updateGenerate(); await refreshAccounts();
 }
-function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic</option>'+state.accounts.map(a=>`<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)}${a.canGenerate===false?' (pemantauan saja)':''}</option>`).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
+function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic</option>'+state.accounts.map(a=>`<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)}${a.canGenerate===false?' (status belum tersedia)':''}</option>`).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
 
 async function refreshAccounts(){
   const refreshBtn=$('#refreshAccounts');
@@ -48,7 +48,7 @@ async function refreshAccounts(){
     renderAccounts();
     updatePoolSummary();
     renderAccountSelect();
-    // Low-credit accounts remain stored for existing task monitoring; no auto-deletion.
+    if(data.autoRemovedCount>0)toast(`${data.autoRemovedCount} akun dengan saldo di bawah 100 RH dihapus dari Account Pool.`);
   }catch(e){
     toast(e.message,true);
   }finally{
@@ -58,7 +58,7 @@ async function refreshAccounts(){
 function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada API key di pool.<br>Tambahkan akun pertama dari panel di sebelah kiri.</div>';return;}
-  root.innerHTML=state.accounts.map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ready?'Ready':ok?'Pemantauan saja — kredit rendah':'Status belum dibaca'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
+  root.innerHTML=state.accounts.map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ready?'Siap digunakan':ok?'Saldo tidak memenuhi syarat':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
   $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{await api(`/api/accounts/${btn.dataset.delete}`,{method:'DELETE'});toast('Akun dihapus.');await loadSession();}catch(e){toast(e.message,true)}});
 }
 
@@ -116,6 +116,9 @@ async function generate(){
     state.startedAt=Number.isFinite(submittedMs)?submittedMs:Date.now();
     showTask(data);
     saveHistory({taskId:data.taskId,accountId:data.accountId,workflow:data.workflow.name,outputKind:data.workflow.outputKind||'video',mode:data.mode,account:data.accountName,video:state.video.name,videoSeconds:state.videoDuration,status:data.taskStatus==='RUNNING'?'processing':'queued',startedAt:submittedIso,runtimeMs:null,resultUrl:null,referenceMaskUrl:null,error:null});
+    // Store original uploaded references locally for this task's History detail.
+    saveReferenceMedia(String(data.taskId),state.image,state.video)
+      .catch(()=>toast('Task berjalan, tetapi referensi tidak dapat disimpan di browser ini.',true));
     startPolling();
   }catch(e){
     clearInterval(state.elapsedTimer);
@@ -221,6 +224,62 @@ function finishSuccess(result){
 }
 
 const HISTORY_RETENTION_MS=3*24*60*60*1000;
+const MEDIA_DB_NAME='vanta-history-references-v1';
+function openReferenceDB(){
+  return new Promise((resolve,reject)=>{
+    if(!globalThis.indexedDB)return reject(new Error('Penyimpanan browser tidak didukung.'));
+    const req=indexedDB.open(MEDIA_DB_NAME,1);
+    req.onupgradeneeded=()=>{
+      const store=req.result.createObjectStore('media',{keyPath:'taskId'});
+      store.createIndex('createdAt','createdAt');
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error||new Error('Tidak dapat membuka penyimpanan referensi.'));
+  });
+}
+async function saveReferenceMedia(taskId,image,video){
+  if(!taskId||!image||!video)return;
+  const db=await openReferenceDB();
+  try{
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction('media','readwrite');
+      tx.objectStore('media').put({taskId:String(taskId),image,video,createdAt:Date.now()});
+      tx.oncomplete=()=>resolve();
+      tx.onerror=()=>reject(tx.error||new Error('Gagal menyimpan referensi.'));
+      tx.onabort=()=>reject(tx.error||new Error('Penyimpanan penuh.'));
+    });
+  }finally{db.close();}
+}
+async function loadReferenceMedia(taskId){
+  const db=await openReferenceDB();
+  try{return await new Promise((resolve,reject)=>{
+    const req=db.transaction('media','readonly').objectStore('media').get(String(taskId));
+    req.onsuccess=()=>resolve(req.result||null);
+    req.onerror=()=>reject(req.error);
+  });}finally{db.close();}
+}
+async function cleanupReferenceMedia(){
+  const db=await openReferenceDB();
+  try{await new Promise((resolve,reject)=>{
+    const tx=db.transaction('media','readwrite');
+    const index=tx.objectStore('media').index('createdAt');
+    const cursor=index.openCursor(IDBKeyRange.upperBound(Date.now()-HISTORY_RETENTION_MS));
+    cursor.onsuccess=()=>{if(cursor.result){cursor.result.delete();cursor.result.continue();}};
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });}finally{db.close();}
+}
+let previewVersion=0;
+let previewUrls=[];
+function releasePreviewMedia(){
+  for(const media of ['historyPreviewVideo','historyPreviewSourceVideo']){
+    const el=$('#'+media);
+    if(el){el.pause();el.removeAttribute('src');el.load();}
+  }
+  $('#historyPreviewImage')?.removeAttribute('src');
+  previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];
+}
+
 function history(){
   try{
     const raw=JSON.parse(localStorage.getItem('vantaHistoryV2')||'[]');
@@ -327,17 +386,18 @@ function renderHistory(){
 
     const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
     const resolvedAccountId=resolveHistoryAccountId(x);
-    const rawDownloadUrl=(resolvedAccountId&&x.taskId)
+    const accountStillAvailable=state.accounts.some(a=>a.id===resolvedAccountId);
+    const rawDownloadUrl=(accountStillAvailable&&x.taskId)
       ? `/api/tasks/${encodeURIComponent(x.taskId)}/download?accountId=${encodeURIComponent(resolvedAccountId)}&deviceId=${encodeURIComponent(getDeviceId())}`
       : (x.resultUrl||'');
-    const rawPreviewUrl=(resolvedAccountId&&x.taskId)
+    const rawPreviewUrl=(accountStillAvailable&&x.taskId)
       ? `/api/tasks/${encodeURIComponent(x.taskId)}/preview?accountId=${encodeURIComponent(resolvedAccountId)}&deviceId=${encodeURIComponent(getDeviceId())}`
       : (x.resultUrl||'');
     const safeDownloadUrl=escapeHtml(rawDownloadUrl);
     const safePreviewUrl=escapeHtml(rawPreviewUrl);
     const extraMask=x.referenceMaskUrl?`<a class="history-action-btn download" href="${escapeHtml(x.referenceMaskUrl)}" target="_blank" rel="noopener noreferrer">Mask referensi</a>`:'';
     const result=x.resultUrl
-      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safePreviewUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Preview ${x.outputKind==='diagnostic'?'mask':'video'}</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a>${extraMask}</div>`
+      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safePreviewUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Lihat detail</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a>${extraMask}</div>`
       : (isActiveHistoryStatus(x.status)?'<span class="history-pending"><span class="history-live-dot"></span>Menunggu hasil</span>':'—');
     return `<tr data-task-id="${escapeHtml(x.taskId||'')}">
       <td data-label="Time">${new Date(x.startedAt).toLocaleString('id-ID')}</td>
@@ -384,29 +444,55 @@ async function pollHistoryTasks(){
     state.historyPollBusy=false;
   }
 }
-function openHistoryPreview(url,taskId='',downloadUrl=''){
+async function openHistoryPreview(url,taskId='',downloadUrl=''){
   const modal=$('#historyPreviewModal');
-  const video=$('#historyPreviewVideo');
-  const download=$('#historyPreviewDownload');
-  const title=$('#historyPreviewTitle');
-  if(!modal||!video||!download)return;
-  video.pause();
-  video.preload='auto';
-  video.src=url;
-  video.load();
-  video.onerror=()=>toast('Preview video gagal dimuat. Coba tutup lalu buka Preview lagi.',true);
-  video.oncanplay=()=>{ video.play().catch(()=>{}); };
-  download.href=downloadUrl||url;
-  download.removeAttribute('download');
-  if(title) title.textContent=taskId?`Preview #${taskId}`:'Video preview';
+  const result=$('#historyPreviewVideo');
+  if(!modal||!result)return;
+  const version=++previewVersion;
+  releasePreviewMedia();
+  $('#historyPreviewTitle').textContent=taskId?`Task #${taskId}`:'Detail generasi';
+  $('#historyPreviewDownload').href=downloadUrl||url;
+  $('#historyPreviewDownload').removeAttribute('download');
+  for(const [media,placeholder] of [['historyPreviewImage','historyPreviewImageEmpty'],['historyPreviewSourceVideo','historyPreviewSourceEmpty']]){
+    const element=$('#'+media), empty=$('#'+placeholder);
+    element.hidden=true;
+    empty.hidden=false;
+    empty.textContent='Memuat referensi…';
+  }
   modal.classList.remove('hidden');
   document.body.classList.add('modal-open');
+  result.preload='metadata';
+  result.src=url;
+  result.load();
+  result.onerror=()=>{if(version===previewVersion)toast('Video hasil tidak dapat dimuat. Coba buka kembali.',true);};
+  result.oncanplay=()=>{if(version===previewVersion)result.play().catch(()=>{});};
+  try{
+    const stored=taskId?await loadReferenceMedia(taskId):null;
+    if(version!==previewVersion)return;
+    const entries=[
+      {id:'historyPreviewImage',empty:'historyPreviewImageEmpty',blob:stored?.image},
+      {id:'historyPreviewSourceVideo',empty:'historyPreviewSourceEmpty',blob:stored?.video}
+    ];
+    for(const entry of entries){
+      const element=$('#'+entry.id),empty=$('#'+entry.empty);
+      if(!entry.blob){empty.textContent='Referensi tidak tersimpan untuk generasi ini.';continue;}
+      const objectUrl=URL.createObjectURL(entry.blob);
+      previewUrls.push(objectUrl);
+      element.src=objectUrl;
+      element.hidden=false;
+      empty.hidden=true;
+      if(element.tagName==='VIDEO')element.load();
+    }
+  }catch{
+    if(version!==previewVersion)return;
+    $('#historyPreviewImageEmpty').textContent='Referensi tidak tersedia di browser ini.';
+    $('#historyPreviewSourceEmpty').textContent='Referensi tidak tersedia di browser ini.';
+  }
 }
 function closeHistoryPreview(){
-  const modal=$('#historyPreviewModal');
-  const video=$('#historyPreviewVideo');
-  if(video){video.pause();video.removeAttribute('src');video.load();}
-  if(modal)modal.classList.add('hidden');
+  ++previewVersion;
+  releasePreviewMedia();
+  $('#historyPreviewModal')?.classList.add('hidden');
   document.body.classList.remove('modal-open');
 }
 function bindHistoryActions(){
@@ -476,4 +562,4 @@ if(historyFilters) historyFilters.onclick=e=>{
 };
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
 
-bindHistoryActions();loadSession().then(()=>startHistoryMonitor()).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
+bindHistoryActions();loadSession().then(()=>{startHistoryMonitor();cleanupReferenceMedia().catch(()=>{});}).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
