@@ -325,10 +325,18 @@ async function generate(){
       const found=await api('/api/generate/jobs/'+encodeURIComponent(id));
       if(found?.jobId){trackSubmission(id);return;}
     }catch{}
-    $('#taskStatus').textContent='Upload belum berhasil';
-    $('#taskEstimate').textContent='Belum ada Task ID RunningHub';
-    toast(error.message,true);
-    clearSubmission();
+    if(error.status>=400&&error.status<500){
+      $('#taskStatus').textContent='Upload belum berhasil';
+      $('#taskEstimate').textContent='File belum diterima server';
+      toast(error.message,true);
+      clearSubmission();
+    }else{
+      // Unknown transport failure: first verify the immutable request ID.
+      // Never create another paid request just because an HTTP acknowledgement was lost.
+      trackSubmission(id);
+      $('#taskStatus').textContent='Memeriksa status unggahan…';
+      $('#taskEstimate').textContent='Tidak mengirim ulang file atau task';
+    }
   }
 }
 
