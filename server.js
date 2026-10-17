@@ -12,6 +12,7 @@ import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorre
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences } from './history-references.js';
 import {createTaskRegistry} from './task-registry.js';
 import {createGenerationQueue} from './generation-queue.js';
+import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -399,7 +400,9 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     addMetadata: true,
     retainSeconds: 259200,
   };
-  if (mode === 'standard') payload.instanceType = 'default';
+  // Match the RunningHub instance selected by the user; keep queued legacy Lite unchanged.
+  const instanceType=runningHubInstanceType(mode);
+  if(instanceType)payload.instanceType=instanceType;
 
   const submittedAt = new Date().toISOString();
   if(onBeforeSubmit)onBeforeSubmit();
@@ -532,14 +535,15 @@ async function handleGeneration(req,res){
     if (!/^video\/(mp4|quicktime|webm|x-matroska)$/i.test(videoFile.mimetype)) throw new Error('Format video harus MP4, MOV, atau WEBM.');
 
     const workflowKey = String(req.body?.workflow || 'r15');
-    const mode = String(req.body?.mode || 'lite');
+    const mode = String(req.body?.mode || 'standard');
     const requestedAccountId = String(req.body?.accountId || 'auto');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
     const diagnosticTaskId=String(req.body?.diagnosticTaskId||'');
     const diagnosticAccountId=String(req.body?.diagnosticAccountId||'');
     if(workflowKey==='r4Lab' && (!/^\d{10,25}$/.test(diagnosticTaskId)||!diagnosticAccountId))
       throw new Error('R4 Full membutuhkan tes SAM3 berhasil di History untuk memakai ulang mask.');
-    if (!['lite', 'standard'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
+    if (!['standard','plus','lite'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
+    // Lite accepted here only to let already-queued legacy tasks finish.
 
     const { deviceId, accounts } = getPersistentAccounts(req);
     if (!deviceId) throw new Error('Device session tidak tersedia. Reload halaman.');
@@ -701,6 +705,8 @@ app.post('/api/generate', upload.fields([
     const deviceId=getDeviceId(req);
     if(!deviceId)return res.status(400).json({error:'Sesi perangkat tidak tersedia. Muat ulang halaman.'});
     if(!image||!video)return res.status(400).json({error:'Gambar dan video referensi wajib diunggah.'});
+    if(!canSubmitMachineMode(String(req.body?.mode||'standard')))
+      return res.status(400).json({error:'Pilih mesin RunningHub Standard atau Plus.'});
     if(image.size>IMAGE_MAX||video.size>VIDEO_MAX)return res.status(413).json({error:'Gambar maksimal 20 MB dan video maksimal 100 MB.'});
     if(!/^image\/(jpeg|png|webp)$/i.test(image.mimetype)||!/^video\/(mp4|quicktime|webm|x-matroska)$/i.test(video.mimetype))
       return res.status(415).json({error:'Format gambar atau video tidak didukung.'});
@@ -774,7 +780,7 @@ app.post('/api/tasks/claim',async(req,res)=>{
       taskRegistry.add({taskId,accountId:account.id,accountName:account.name,key:account.key,
         workflow:String(item.workflow||'Legacy task').slice(0,140),
         outputKind:item.outputKind==='diagnostic'?'diagnostic':'video',
-        mode:item.mode==='standard'?'standard':'lite',video:String(item.video||'').slice(0,140),
+        mode:['standard','plus','lite'].includes(item.mode)?item.mode:'standard',video:String(item.video||'').slice(0,140),
         submittedAt:Number.isFinite(Date.parse(item.startedAt))?item.startedAt:new Date().toISOString(),
         status:code===813?'queued':'running'});
       restored.push(taskId);
