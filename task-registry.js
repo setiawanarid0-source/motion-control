@@ -32,6 +32,15 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
       fs.renameSync(tmp,file);
     }finally{try{fs.rmSync(tmp,{force:true});}catch{}}
   }
+  function ensureWritable(){
+    fs.mkdirSync(dir,{recursive:true,mode:0o700});
+    const probe=path.join(dir,'.task-registry-write-test-'+process.pid);
+    try{
+      fs.writeFileSync(probe,'ok',{mode:0o600});
+      fs.rmSync(probe,{force:true});
+      all(); // Never silently overwrite a vault that cannot be decrypted.
+    }finally{try{fs.rmSync(probe,{force:true});}catch{}}
+  }
   function add(task){
     if(!VALID_ID.test(String(task?.taskId||''))||!task?.key||!task?.accountId)
       throw Error('Task registry requires accepted task ID and original account credential');
@@ -74,5 +83,5 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     if(keep.length!==tasks.length)commit(keep);
     return tasks.length-keep.length;
   }
-  return {add,get,update,publicList,active,purgeExpired,file};
+  return {ensureWritable,add,get,update,publicList,active,purgeExpired,file};
 }
