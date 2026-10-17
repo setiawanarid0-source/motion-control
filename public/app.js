@@ -79,13 +79,12 @@ async function loadSession(){
   state.session=await api('/api/session');
   state.accounts=state.session.accounts||[];
   renderAccountSelect();renderAccounts();updatePoolSummary();
-  const legacySafe=await claimBrowserHistory();
+  // Account retirement first stores credentials in the encrypted task escrow.
+  // Claiming legacy tasks may take several seconds; never block the studio UI on it.
+  await refreshAccounts();
   await syncServerHistory();
-  if(legacySafe)await refreshAccounts();
-  else{
-    renderAccounts();updatePoolSummary();
-    toast('Pemantauan task lama sedang dipulihkan. Pembersihan akun ditunda.');
-  }
+  claimBrowserHistory().then(syncServerHistory)
+    .catch(error=>console.warn('Background History recovery',error.message));
 }
 function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic</option>'+state.accounts.map(a=>`<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)}${a.canGenerate===false?' (status belum tersedia)':''}</option>`).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
 
