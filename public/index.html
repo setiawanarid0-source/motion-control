@@ -120,14 +120,14 @@
         <section id="taskSection" class="panel task-panel hidden">
           <div class="task-head">
             <div><div class="eyebrow">LIVE TASK</div><h3 id="taskStatus">Menyiapkan</h3></div>
-            <div class="eta"><small>Generate time</small><strong id="taskElapsed">00:00</strong><span id="taskEstimate">Estimasi —</span></div>
+            <div class="eta"><span id="taskEstimate">—</span></div>
           </div>
           <div class="progress-track indeterminate"><div class="progress-bar"></div></div>
           <div class="task-meta"><span id="taskWorkflow">—</span><span id="taskAccount">—</span><span id="taskMode">—</span><span id="taskId">—</span></div>
         </section>
 
         <section id="resultSection" class="panel result-panel hidden">
-          <div class="result-head"><div><div class="eyebrow">RESULT</div><h3 id="resultHeading">Generation completed</h3></div><div class="result-stats"><span id="resultWorkflow">—</span><span id="resultDuration">Generate time —</span></div></div>
+          <div class="result-head"><div><div class="eyebrow">RESULT</div><h3 id="resultHeading">Generation completed</h3></div><div class="result-stats"><span id="resultWorkflow">—</span></div></div>
           <p id="resultMediaLabel" class="result-media-label">Video hasil generasi</p><div class="video-frame"><video id="resultVideo" controls playsinline></video></div><div id="referenceMaskWrap" class="hidden diagnostic-mask"><p>Mask referensi SAM3</p><img id="referenceMaskPreview" alt="Hasil mask referensi SAM3" loading="lazy"><a id="referenceMaskDownload" class="download-btn" target="_blank" rel="noopener noreferrer" href="#">Buka gambar mask</a></div>
           <div class="result-actions"><div class="cache-state"><span class="status-dot online"></span><span id="resultCacheState">Hasil siap diputar</span></div><a id="downloadBtn" class="download-btn" href="#" download>Download</a></div>
         </section>
@@ -142,7 +142,7 @@
           <button type="button" class="history-filter" data-history-filter="process">Proses</button>
         </div>
         <div class="history-retention-note" role="note"><span aria-hidden="true">◷</span><p>Riwayat disimpan 3 hari. Referensi generasi baru tersedia di server dan browser selama masa penyimpanan.</p></div>
-        <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Generate time</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+        <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
       </section>
 
       <section id="view-accounts" class="view">
@@ -210,6 +210,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261017-async-preflight-v2" defer></script>
+  <script src="/app.js?v=20261017-remove-timer-v1" defer></script>
 </body>
 </html>
