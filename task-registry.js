@@ -24,11 +24,17 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     if(!data||!Array.isArray(data.tasks))throw Error('Encrypted task registry could not be read; refusing to overwrite');
     return data.tasks;
   }
-  function commit(tasks){
+  function retired(){
+    if(!fs.existsSync(file))return [];
+    const data=decrypt(fs.readFileSync(file,'utf8').trim());
+    if(!data||!Array.isArray(data.tasks))throw Error('Task registry decryption failed');
+    return Array.isArray(data.retiredAccounts)?data.retiredAccounts:[];
+  }
+  function commit(tasks,retiredAccounts=retired()){
     fs.mkdirSync(dir,{recursive:true,mode:0o700});
     const tmp=file+'.tmp-'+process.pid+'-'+now();
     try{
-      fs.writeFileSync(tmp,encrypt({version:1,tasks}),{mode:0o600});
+      fs.writeFileSync(tmp,encrypt({version:2,tasks,retiredAccounts}),{mode:0o600});
       fs.renameSync(tmp,file);
     }finally{try{fs.rmSync(tmp,{force:true});}catch{}}
   }
@@ -60,6 +66,18 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     commit(tasks);
     return publicEntry(entry);
   }
+  function retireAccount(account){
+    if(!account?.id||!account?.key)throw Error('Retired account requires encrypted credentials');
+    const accounts=retired().filter(x=>x.id!==account.id);
+    accounts.push({id:account.id,key:account.key,name:account.name,
+      retiredAt:new Date(now()).toISOString()});
+    commit(all(),accounts);
+  }
+  function getRetiredAccount(accountId){
+    const acc=retired().find(x=>x.id===String(accountId));
+    return acc?{id:acc.id,name:acc.name,key:acc.key}:null;
+  }
+  function retiredAccounts(){return retired().map(a=>({id:a.id,name:a.name}));}
   function get(taskId){return all().find(t=>t.taskId===String(taskId))||null;}
   function update(taskId,patch){
     const tasks=all();const t=tasks.find(x=>x.taskId===String(taskId));if(!t)return null;
@@ -80,8 +98,15 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
       const stopped=Date.parse(t.finishedAt||t.submittedAt||'');
       return !Number.isFinite(stopped)||current-stopped<=TASK_HISTORY_RETENTION_MS;
     });
-    if(keep.length!==tasks.length)commit(keep);
+    const activeAccountIds=new Set(keep.map(x=>x.accountId));
+    const escrows=retired();
+    const recent=escrows.filter(a=>{
+      if(activeAccountIds.has(a.id))return true;
+      const ts=Date.parse(a.retiredAt||'');
+      return !Number.isFinite(ts)||current-ts<=TASK_HISTORY_RETENTION_MS;
+    });
+    if(keep.length!==tasks.length||recent.length!==escrows.length)commit(keep,recent);
     return tasks.length-keep.length;
   }
-  return {ensureWritable,add,get,update,publicList,active,purgeExpired,file};
+  return {ensureWritable,add,get,update,retireAccount,getRetiredAccount,retiredAccounts,publicList,active,purgeExpired,file};
 }
