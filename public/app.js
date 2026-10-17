@@ -41,8 +41,9 @@ async function claimBrowserHistory(){
     }))})});
     // When a legacy task is still active, never retire its account until the
     // server has safely captured its credential for independent monitoring.
-    const activeCount=selected.filter(x=>isActiveHistoryStatus(x.status)).length;
-    if(activeCount&&claimed.restored<activeCount)return false;
+    const accepted=new Set((claimed.restoredIds||[]).map(String));
+    const activePending=selected.filter(x=>isActiveHistoryStatus(x.status));
+    if(activePending.some(x=>!accepted.has(String(x.taskId))))return false;
     return true;
   }catch(error){
     console.warn('History claim will retry',error.message);
@@ -77,7 +78,7 @@ async function syncServerHistory(){
 async function loadSession(){
   state.session=await api('/api/session');
   state.accounts=state.session.accounts||[];
-  renderAccountSelect();updateGenerate();
+  renderAccountSelect();renderAccounts();updatePoolSummary();
   const legacySafe=await claimBrowserHistory();
   await syncServerHistory();
   if(legacySafe)await refreshAccounts();
