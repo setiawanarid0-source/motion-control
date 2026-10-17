@@ -21,6 +21,7 @@ function getDeviceId(){
 function toast(message, error=false){ const el=$('#toast'); el.textContent=message; el.classList.toggle('error',error); el.classList.add('show'); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove('show'),4200); }
 function fmtTime(seconds){ seconds=Math.max(0,Math.round(seconds||0)); const m=Math.floor(seconds/60),s=seconds%60; return m?`${m}m ${String(s).padStart(2,'0')}s`:`${s}s`; }
 function fmtElapsed(ms){ const sec=Math.floor(ms/1000),m=Math.floor(sec/60),s=sec%60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+function machineLabel(mode){return mode==='plus'?'Plus':mode==='lite'?'Lite':'Standard';}
 function fileSize(n){ if(!n)return '0 B'; const u=['B','KB','MB','GB']; let i=0,v=n; while(v>=1024&&i<u.length-1){v/=1024;i++} return `${v.toFixed(i?1:0)} ${u[i]}`; }
 function escapeHtml(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 
@@ -154,7 +155,7 @@ function showStartingTask(){
   $('#taskStatus').textContent='Mengunggah referensi…';
   $('#taskWorkflow').textContent=workflowName();
   $('#taskAccount').textContent=$('#accountSelect').value==='auto'?'Automatic':'Akun dipilih';
-  $('#taskMode').textContent=state.mode==='plus'?'Plus':'Standard';
+  $('#taskMode').textContent=machineLabel(state.mode);
   $('#taskId').textContent='Menunggu task ID';
   const est=estimateSeconds();
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
@@ -342,7 +343,7 @@ function showTask(data){
   $('#taskStatus').textContent=data.taskStatus==='RUNNING'?'Memproses':'Dalam antrean';
   $('#taskWorkflow').textContent=data.workflow.name;
   $('#taskAccount').textContent=data.accountName;
-  $('#taskMode').textContent=data.mode==='plus'?'Plus':data.mode==='lite'?'Lite':'Standard';
+  $('#taskMode').textContent=machineLabel(data.mode);
   $('#taskId').textContent=`#${data.taskId}`;
   const est=estimateSeconds();
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
@@ -597,7 +598,7 @@ function renderHistory(){
     return `<tr data-task-id="${escapeHtml(x.taskId||'')}">
       <td data-label="Time">${new Date(x.startedAt).toLocaleString('id-ID')}</td>
       <td data-label="Workflow">${escapeHtml(x.workflow)}</td>
-      <td data-label="Mode">${escapeHtml(x.mode)}</td>
+      <td data-label="Mode">${escapeHtml(machineLabel(x.mode))}</td>
       <td data-label="Account">${escapeHtml(x.account)}</td>
       <td data-label="Video" class="history-video-name">${escapeHtml(x.video)}</td>
       <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}${diagnosis}${cameraInfo}${inspect}</td>
