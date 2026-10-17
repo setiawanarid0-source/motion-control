@@ -406,7 +406,12 @@ function finishSuccess(result){
   $('#taskEstimate').textContent='Selesai';
   $('#taskStatus').textContent='Selesai';
   $('#resultSection').classList.remove('hidden');
-  $('#resultVideo').src=result.videoUrl;$('#downloadBtn').href=result.videoUrl;
+  $('#resultVideo').src=result.videoUrl;
+  // Final 40 FPS files are served through separate inline-preview and attachment endpoints.
+  const finalDownload=(typeof result.videoUrl==='string'&&
+    /^\/api\/tasks\/\d+\/preview\?accountId=/.test(result.videoUrl))
+      ?result.videoUrl.replace('/preview?','/download?'):result.videoUrl;
+  $('#downloadBtn').href=finalDownload;
   const diagnostic=state.task.workflow.outputKind==='diagnostic';
   $('#resultHeading').textContent=diagnostic?'Tes SAM3 selesai — hasil mask':'Generation completed';
   $('#resultMediaLabel').textContent=diagnostic?'Mask gerakan SAM3 (BUKAN hasil motion transfer)':'Video hasil generasi';
