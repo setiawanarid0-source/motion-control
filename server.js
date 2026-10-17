@@ -13,6 +13,7 @@ import { referenceAvailability, referenceFile, stageReferences, commitReferences
 import {createTaskRegistry} from './task-registry.js';
 import {createGenerationQueue} from './generation-queue.js';
 import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance.js';
+import {requiresFinal40,ensureFinal40,readFinal40,pruneFinal40} from './final-fps.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -140,7 +141,19 @@ async function runningHubTaskState(taskId,account,accountId){
   const code=Number(data?.code);
   if(code===0&&Array.isArray(data?.data)&&data.data.length){
     const outputs=data.data.map(x=>({fileUrl:x.fileUrl,fileType:x.fileType,nodeId:x.nodeId??null})).filter(x=>x.fileUrl);
-    const video=outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
+    // Convert *only* the completed Current / R4 Full output to 40fps.
+    // Keep the original diffusion/pose/driving frame rate and duration untouched.
+    const video=outputs.find(x=>String(x.nodeId)==='490')
+      ||outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
+    const registered=taskRegistry.get(taskId);
+    if(video&&registered&&requiresFinal40(registered.workflow)){
+      const result=ensureFinal40(taskId,video.fileUrl);
+      if(!result.ready)return {state:'running',message:'Menyiapkan video akhir'};
+      return {state:'success',rawCode:code,outputs:[{
+        nodeId:'490',fileType:'video/mp4',
+        fileUrl:'/api/tasks/'+encodeURIComponent(taskId)+'/preview?accountId='+encodeURIComponent(accountId)
+      }]};
+    }
     if(video){
       const qa=await cameraStatus(taskId,video.fileUrl,accountId);
       if(qa)return {...qa,rawCode:code};
@@ -865,6 +878,8 @@ app.get('/api/tasks/:taskId/preview', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
+  const final40=readFinal40(req.params.taskId);
+  if(final40){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(final40);}
   const corrected=readCorrected(req.params.taskId);
   if(corrected){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(corrected);}
   try {
@@ -904,6 +919,8 @@ app.get('/api/tasks/:taskId/download', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
+  const final40=readFinal40(req.params.taskId);
+  if(final40)return res.download(final40,'motion-'+req.params.taskId+'-40fps.mp4');
   const corrected=readCorrected(req.params.taskId);
   if(corrected)return res.download(corrected,'motion-'+req.params.taskId+'-camera-checked.mp4');
   try {
@@ -956,6 +973,8 @@ if (!fs.existsSync(GLOBAL_ACCOUNT_VAULT) && !startupGlobalAccounts.length && sta
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
+pruneFinal40().catch(error=>console.warn('Final FPS cleanup',error.message));
+setInterval(()=>pruneFinal40().catch(error=>console.warn('Final FPS cleanup',error.message)),60*60*1000).unref();
 generationQueue.resume();
 setInterval(()=>generationQueue.purge(),60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
