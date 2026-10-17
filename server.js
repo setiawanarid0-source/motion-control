@@ -924,6 +924,19 @@ app.get('/api/tasks/:taskId/download', async (req, res) => {
   }
 });
 
+// Handle mobile upload interruptions as input errors, not opaque HTTP 500 HTML pages.
+app.use((error,req,res,next)=>{
+  if(req.path!=='/api/generate')return next(error);
+  if(res.headersSent)return next(error);
+  const tooLarge=error?.code==='LIMIT_FILE_SIZE'||error?.code==='LIMIT_FILE_COUNT';
+  const message=tooLarge?
+    'Ukuran referensi terlalu besar. Gambar maksimal 20 MB dan video maksimal 100 MB.':
+    error?.code==='LIMIT_UNEXPECTED_FILE'?'Gunakan satu gambar dan satu video referensi.':
+    'Upload referensi terputus sebelum selesai. Periksa koneksi lalu coba kembali.';
+  console.warn('Upload rejected before paid task',String(error.code||error.message||'interrupted').slice(0,100));
+  res.status(tooLarge?413:400).json({error:message});
+});
+
 app.use((req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   res.sendFile(path.join(__dirname, 'public/index.html'));
