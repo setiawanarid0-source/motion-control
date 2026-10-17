@@ -334,8 +334,13 @@ async function generate(){
 
 function showTask(data){
   clearInterval(state.elapsedTimer);
-  $('#taskSection').classList.add('hidden');
+  $('#taskSection').classList.remove('hidden');
   $('#resultSection').classList.add('hidden');
+  $('#taskElapsed').textContent=fmtElapsed(Math.max(0,Date.now()-state.startedAt));
+  state.elapsedTimer=setInterval(()=>{
+    if(state.task&&state.startedAt)
+      $('#taskElapsed').textContent=fmtElapsed(Math.max(0,Date.now()-state.startedAt));
+  },1000);
   $('#taskStatus').textContent=data.taskStatus==='RUNNING'?'Memproses':'Dalam antrean';
   $('#taskWorkflow').textContent=data.workflow.name;
   $('#taskAccount').textContent=data.accountName;
