@@ -1,5 +1,5 @@
 const state = {
-  view: 'create', workflow: 'r15', mode: 'lite', session: null, accounts: [],
+  view: 'create', workflow: 'r15', mode: 'standard', session: null, accounts: [],
   image: null, video: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false, historyFilter: 'all',
   registeredTaskIds: new Set(), submission:null, submissionTimer:null, submissionPolling:false,
@@ -125,7 +125,15 @@ function setMedia(kind,file){
 }
 function lastSam3Diagnostic(){return history().filter(x=>x.outputKind==='diagnostic'&&x.status==='success'&&x.taskId&&resolveHistoryAccountId(x)).sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt))[0]||null;}
 function refreshLabNotice(){const item=lastSam3Diagnostic(),el=$('#r4LabMaskSource');if(el)el.textContent=item?`Mask dari task SAM3 #${item.taskId} (${new Date(item.startedAt).toLocaleString('id-ID')}). Gunakan gambar dan video kompensasi yang sama.`:'Belum ada hasil SAM3 berhasil di History browser ini. Jalankan tes SAM3 terlebih dahulu.';}
-function updateEstimates(){ if(['koh1AntiObject','r4Lab','r15'].includes(state.workflow)){ ['liteCredits','liteTime','standardCredits','standardTime'].forEach(id=>$('#'+id).textContent='—');return;} const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
+function updateEstimates(){
+  // Plus runtime/credit estimates are not validated for these custom workflows.
+  // Preserve the existing Standard estimate for Current only; do not invent a Plus value.
+  for(const id of ['standardCredits','standardTime','plusCredits','plusTime'])$('#'+id).textContent='—';
+  if(state.workflow!=='current'||!state.videoDuration)return;
+  const standardRuntime=state.videoDuration*21.2;
+  $('#standardTime').textContent=`± ${fmtTime(standardRuntime)}`;
+  $('#standardCredits').textContent=`~ ${(standardRuntime*.20).toFixed(1)} RH`;
+}
 function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.some(a=>a.canGenerate!==false)&&!state.task&&!state.submission&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()); $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion'; refreshLabNotice(); }
 function workflowName(){
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
@@ -133,7 +141,7 @@ function workflowName(){
   if(state.workflow==='r4Lab')return 'MotionFly R4 · Full Controlled Test';
   return 'Current Workflow';
 }
-function estimateSeconds(){ if(['koh1AntiObject','r4Lab','r15'].includes(state.workflow))return 0; if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
+function estimateSeconds(){ if(state.workflow!=='current'||state.mode!=='standard'||!state.videoDuration)return 0; return state.videoDuration*21.2; }
 function startVisibleTimer(){
   // Internal task timestamps are retained for History; no unsolicited duration UI.
   state.startedAt=Date.now();
@@ -143,10 +151,10 @@ function showStartingTask(){
   clearInterval(state.elapsedTimer);
   $('#taskSection').classList.remove('hidden');
   $('#resultSection').classList.add('hidden');
-  $('#taskStatus').textContent='Mengunggah gambar dan video referensi';
+  $('#taskStatus').textContent='Mengunggah referensi…';
   $('#taskWorkflow').textContent=workflowName();
   $('#taskAccount').textContent=$('#accountSelect').value==='auto'?'Automatic':'Akun dipilih';
-  $('#taskMode').textContent=state.mode==='standard'?'Standard':'Lite';
+  $('#taskMode').textContent=state.mode==='plus'?'Plus':'Standard';
   $('#taskId').textContent='Menunggu task ID';
   const est=estimateSeconds();
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
@@ -187,25 +195,15 @@ function clearSubmission(){
   updateGenerate();
 }
 function stageDescription(stage){
-  const names={
-    queued:'Menunggu giliran persiapan',
-    analyzing:'Menganalisis video referensi',
-    checking_account:'Memeriksa akun RunningHub',
-    preparing_motion:'Menyiapkan gerakan 35 FPS',
-    saving_references:'Menyimpan media referensi',
-    uploading_inputs:'Mengunggah input ke RunningHub',
-    submitting:'Mengirim task ke RunningHub',
-    uncertain:'Memeriksa status pengiriman'
-  };
-  return names[stage]||'Menyiapkan generasi';
+  // Internal preprocessing steps must not clutter the user's flow.
+  return stage==='submitting'?'Mengirim task…':'Memulai generate…';
 }
 function showSubmissionStage(data){
   $('#taskSection').classList.remove('hidden');
   $('#taskStatus').textContent=stageDescription(data.stage);
-  $('#taskId').textContent='Task ID tersedia setelah RunningHub menerima';
-  $('#taskEstimate').textContent=data.stage==='submitting'?
-    'Menunggu konfirmasi RunningHub':'Persiapan berlangsung di server';
-  $('#generateBtn').querySelector('span:first-child').textContent='Sedang diproses…';
+  $('#taskId').textContent='Menunggu task ID';
+  $('#taskEstimate').textContent=data.stage==='submitting'?'Menunggu konfirmasi':'Sedang diproses';
+  $('#generateBtn').querySelector('span:first-child').textContent='Memproses…';
 }
 function completedSubmission(data){
   const task=data.task;
@@ -309,7 +307,7 @@ async function generate(){
   try{
     const data=await uploadReferences(fd,id,percent=>{
       if(!state.submission||state.submission.jobId!==id)return;
-      $('#taskStatus').textContent='Mengunggah gambar dan video referensi';
+      $('#taskStatus').textContent='Mengunggah referensi…';
       $('#taskEstimate').textContent=percent+'% terkirim';
       $('#generateBtn').querySelector('span:first-child').textContent='Mengunggah '+percent+'%';
     });
@@ -331,7 +329,7 @@ async function generate(){
       // Unknown transport failure: first verify the immutable request ID.
       // Never create another paid request just because an HTTP acknowledgement was lost.
       trackSubmission(id);
-      $('#taskStatus').textContent='Memeriksa status unggahan…';
+      $('#taskStatus').textContent='Menghubungkan kembali…';
       $('#taskEstimate').textContent='Tidak mengirim ulang file atau task';
     }
   }
@@ -344,7 +342,7 @@ function showTask(data){
   $('#taskStatus').textContent=data.taskStatus==='RUNNING'?'Memproses':'Dalam antrean';
   $('#taskWorkflow').textContent=data.workflow.name;
   $('#taskAccount').textContent=data.accountName;
-  $('#taskMode').textContent=data.mode==='standard'?'Standard':'Lite';
+  $('#taskMode').textContent=data.mode==='plus'?'Plus':data.mode==='lite'?'Lite':'Standard';
   $('#taskId').textContent=`#${data.taskId}`;
   const est=estimateSeconds();
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
