@@ -52,6 +52,7 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
       task:x.stage==='accepted'?x.task||null:null,error:x.error||null};
   }
   function owned(id,deviceId){
+    if(!UUID.test(String(id||'')))return null;
     const x=read(id);
     return x&&x.deviceId===deviceId?view(x):null;
   }
@@ -73,6 +74,7 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
       return view(old); // idempotent retry never starts a second paid task
     }
     const dest=folder(jobId);
+    if(fs.existsSync(dest))throw Error('Penyimpanan pengiriman sebelumnya tidak lengkap; tidak aman mengulang otomatis');
     try{
       await fs.promises.mkdir(dest,{recursive:true,mode:0o700});
       const imageDest=path.join(dest,'reference.bin'),videoDest=path.join(dest,'driving.bin');
@@ -111,6 +113,7 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
       const report=(stage,message)=>{
         if(!LABELS[stage])throw Error('Unknown generation state '+stage);
         update(next.jobId,{stage,message:message||LABELS[stage]});
+        console.info('Media preflight stage',next.jobId,stage);
       };
       try{
         await executor(read(next.jobId),report);
