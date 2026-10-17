@@ -99,13 +99,13 @@
             <div id="fullLabNotice" class="diagnostic-notice hidden" role="note"><strong>R4 Full Controlled · Tes berbayar</strong><p id="r4LabMaskSource"></p><p>Upload kembali gambar referensi dan driving video hasil kompensasi 35 FPS yang sama dengan tes SAM3. Dua mask akan dipakai ulang otomatis dari task tersebut. Mask belum menjalani refinement offline. Proses 337 frame dengan RunningHub dan membutuhkan kredit. Kamera statis belum terbukti.</p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
             <div class="mode-grid">
-              <button class="mode-card selected" data-mode="lite">
-                <div class="mode-row"><strong>Lite</strong><span>Auto schedule</span></div>
-                <div class="mode-metrics"><div><small>Estimated credits</small><b id="liteCredits">—</b></div><div><small>Estimated time</small><b id="liteTime">—</b></div></div>
-              </button>
-              <button class="mode-card" data-mode="standard">
+              <button class="mode-card selected" data-mode="standard" type="button">
                 <div class="mode-row"><strong>Standard</strong><span>24 GB · default</span></div>
                 <div class="mode-metrics"><div><small>Estimated credits</small><b id="standardCredits">—</b></div><div><small>Estimated time</small><b id="standardTime">—</b></div></div>
+              </button>
+              <button class="mode-card" data-mode="plus" type="button">
+                <div class="mode-row"><strong>Plus</strong><span>48 GB · plus</span></div>
+                <div class="mode-metrics"><div><small>Estimated credits</small><b id="plusCredits">—</b></div><div><small>Estimated time</small><b id="plusTime">—</b></div></div>
               </button>
             </div>
 
@@ -210,6 +210,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261017-remove-timer-v1" defer></script>
+  <script src="/app.js?v=20261017-standard-plus-simple-v1" defer></script>
 </body>
 </html>
