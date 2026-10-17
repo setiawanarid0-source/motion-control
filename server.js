@@ -660,27 +660,29 @@ app.post('/api/tasks/claim',async(req,res)=>{
   const input=Array.isArray(req.body?.tasks)?req.body.tasks.slice(0,30):[];
   const accounts=getPersistentAccounts(req).accounts;
   const restored=[];
-  for(const item of input){
+  const attempt=async item=>{
     const taskId=String(item.taskId||''),accountId=String(item.accountId||'');
-    if(!/^\d{10,25}$/.test(taskId))continue;
-    if(taskRegistry.get(taskId)){restored.push(taskId);continue;}
+    if(!/^\d{10,25}$/.test(taskId))return;
+    if(taskRegistry.get(taskId)){restored.push(taskId);return;}
     const account=accounts.find(x=>x.id===accountId);
-    if(!account)continue;
+    if(!account)return;
     try{
-      const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},12000);
-      if(!isTrackableTaskCode(data?.code,data))continue;
+      const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},9000);
+      if(!isTrackableTaskCode(data?.code,data))return;
       const code=Number(data.code);
       taskRegistry.add({taskId,accountId:account.id,accountName:account.name,key:account.key,
         workflow:String(item.workflow||'Legacy task').slice(0,140),
         outputKind:item.outputKind==='diagnostic'?'diagnostic':'video',
-        mode:item.mode==='standard'?'standard':'lite',
-        video:String(item.video||'').slice(0,140),
+        mode:item.mode==='standard'?'standard':'lite',video:String(item.video||'').slice(0,140),
         submittedAt:Number.isFinite(Date.parse(item.startedAt))?item.startedAt:new Date().toISOString(),
         status:code===813?'queued':'running'});
       restored.push(taskId);
     }catch(error){console.warn('Legacy task claim deferred',taskId,error.message);}
-  }
-  res.json({restored:restored.length});
+  };
+  // Bounded concurrency protects RunningHub and avoids stalling the interface on 30 serial requests.
+  for(let i=0;i<input.length;i+=5)
+    await Promise.all(input.slice(i,i+5).map(attempt));
+  res.json({restored:restored.length,restoredIds:restored});
 });
 app.post('/api/tasks/:taskId/recover',async(req,res)=>{
   const taskId=String(req.params.taskId||'');
@@ -836,7 +838,7 @@ pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
 setInterval(()=>monitorRegisteredTasks(),25000).unref();
 setTimeout(()=>monitorRegisteredTasks(),1200).unref();
-setInterval(()=>refreshPool({headers:{},query:{}}).catch(error=>console.warn('Background Account Pool refresh',error.message)),120000).unref();
+// Account Pool retirement runs after browser History recovery or an explicit refresh.
 if(/^\d{10,25}$/.test(process.env.VANTA_REFERENCE_AUDIT_TASK||'')){
   console.log('Reference availability audit',process.env.VANTA_REFERENCE_AUDIT_TASK,
     JSON.stringify(referenceAvailability(process.env.VANTA_REFERENCE_AUDIT_TASK)));
