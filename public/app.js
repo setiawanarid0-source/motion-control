@@ -2,7 +2,7 @@ const state = {
   view: 'create', workflow: 'r15', mode: 'lite', session: null, accounts: [],
   image: null, video: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false, historyFilter: 'all',
-  registeredTaskIds: new Set(),
+  registeredTaskIds: new Set(), submission:null, submissionTimer:null, submissionPolling:false,
 };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -126,7 +126,7 @@ function setMedia(kind,file){
 function lastSam3Diagnostic(){return history().filter(x=>x.outputKind==='diagnostic'&&x.status==='success'&&x.taskId&&resolveHistoryAccountId(x)).sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt))[0]||null;}
 function refreshLabNotice(){const item=lastSam3Diagnostic(),el=$('#r4LabMaskSource');if(el)el.textContent=item?`Mask dari task SAM3 #${item.taskId} (${new Date(item.startedAt).toLocaleString('id-ID')}). Gunakan gambar dan video kompensasi yang sama.`:'Belum ada hasil SAM3 berhasil di History browser ini. Jalankan tes SAM3 terlebih dahulu.';}
 function updateEstimates(){ if(['koh1AntiObject','r4Lab','r15'].includes(state.workflow)){ ['liteCredits','liteTime','standardCredits','standardTime'].forEach(id=>$('#'+id).textContent='—');return;} const d=state.videoDuration;if(!d){$('#liteCredits').textContent=$('#liteTime').textContent=$('#standardCredits').textContent=$('#standardTime').textContent='—';return} const liteRuntime=d*38.6,stdRuntime=d*21.2;$('#liteTime').textContent=`± ${fmtTime(liteRuntime)}`;$('#standardTime').textContent=`± ${fmtTime(stdRuntime)}`;$('#liteCredits').textContent=`~ ${(liteRuntime*.02).toFixed(1)} RH`;$('#standardCredits').textContent=`~ ${(stdRuntime*.20).toFixed(1)} RH`; }
-function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.some(a=>a.canGenerate!==false)&&!state.task&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()); $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion'; refreshLabNotice(); }
+function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.some(a=>a.canGenerate!==false)&&!state.task&&!state.submission&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()); $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion'; refreshLabNotice(); }
 function workflowName(){
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
@@ -145,7 +145,7 @@ function showStartingTask(){
   clearInterval(state.elapsedTimer);
   $('#taskSection').classList.remove('hidden');
   $('#resultSection').classList.add('hidden');
-  $('#taskStatus').textContent=state.workflow==='r15'?'Menyiapkan gerakan 35 FPS':'Mengupload input';
+  $('#taskStatus').textContent='Mengunggah gambar dan video referensi';
   $('#taskWorkflow').textContent=workflowName();
   $('#taskAccount').textContent=$('#accountSelect').value==='auto'?'Automatic':'Akun dipilih';
   $('#taskMode').textContent=state.mode==='standard'?'Standard':'Lite';
@@ -156,43 +156,172 @@ function showStartingTask(){
   $('#taskSection').scrollIntoView({behavior:'smooth',block:'center'});
 }
 
-async function generate(){
-  if(!state.image||!state.video)return;
-  const btn=$('#generateBtn');
-  btn.disabled=true;
-  btn.querySelector('span:first-child').textContent='Uploading…';
-  showStartingTask();
-  const fd=new FormData();fd.append('referenceImage',state.image);fd.append('videoReference',state.video);fd.append('workflow',state.workflow);fd.append('mode',state.mode);fd.append('accountId',$('#accountSelect').value||'auto');
-  if(state.workflow==='r4Lab'){const maskSource=lastSam3Diagnostic();if(!maskSource){toast('Tes SAM3 berhasil harus tersedia dahulu di History.',true);return;}fd.append('diagnosticTaskId',maskSource.taskId);fd.append('diagnosticAccountId',resolveHistoryAccountId(maskSource));}
+const ACTIVE_UPLOAD_KEY='vantaActiveUploadV1';
+function uploadReferences(fd,requestId,progress){
+  return new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST','/api/generate',true);
+    xhr.setRequestHeader('X-Vanta-Device',getDeviceId());
+    xhr.setRequestHeader('X-Vanta-Request-Id',requestId);
+    xhr.responseType='json';
+    xhr.timeout=7*60*1000; // Transport timeout only; media processing runs separately on the server.
+    xhr.upload.onprogress=e=>{
+      if(e.lengthComputable)progress(Math.min(100,Math.round(e.loaded/e.total*100)));
+    };
+    xhr.onload=()=>{
+      const data=xhr.response||{};
+      if(xhr.status>=200&&xhr.status<300)return resolve(data);
+      const err=new Error(data.error||'Upload belum berhasil. Periksa koneksi lalu coba kembali.');
+      err.status=xhr.status;reject(err);
+    };
+    xhr.onerror=()=>reject(new Error('Koneksi terputus ketika mengunggah referensi.'));
+    xhr.ontimeout=()=>reject(new Error('Upload belum mendapat respons dari server. Memeriksa apakah file sudah diterima.'));
+    xhr.onabort=()=>reject(new Error('Upload terputus sebelum selesai.'));
+    xhr.send(fd);
+  });
+}
+function clearSubmission(){
+  clearInterval(state.submissionTimer);
+  state.submissionTimer=null;
+  state.submission=null;
+  state.submissionPolling=false;
+  localStorage.removeItem(ACTIVE_UPLOAD_KEY);
+  clearInterval(state.elapsedTimer);
+  updateGenerate();
+}
+function stageDescription(stage){
+  const names={
+    queued:'Menunggu giliran persiapan',
+    analyzing:'Menganalisis video referensi',
+    checking_account:'Memeriksa akun RunningHub',
+    preparing_motion:'Menyiapkan gerakan 35 FPS',
+    saving_references:'Menyimpan media referensi',
+    uploading_inputs:'Mengunggah input ke RunningHub',
+    submitting:'Mengirim task ke RunningHub',
+    uncertain:'Memeriksa status pengiriman'
+  };
+  return names[stage]||'Menyiapkan generasi';
+}
+function showSubmissionStage(data){
+  $('#taskSection').classList.remove('hidden');
+  $('#taskStatus').textContent=stageDescription(data.stage);
+  $('#taskId').textContent='Task ID tersedia setelah RunningHub menerima';
+  $('#taskEstimate').textContent=data.stage==='submitting'?
+    'Menunggu konfirmasi RunningHub':'Persiapan berlangsung di server';
+  $('#generateBtn').querySelector('span:first-child').textContent='Sedang diproses…';
+}
+function completedSubmission(data){
+  const task=data.task;
+  if(!task?.taskId)return;
+  // A completed submission is processed once even after a refresh.
+  const already=history().some(x=>String(x.taskId)===String(task.taskId));
+  state.task=task;
+  const iso=task.submittedAt||new Date().toISOString();
+  const ms=Date.parse(iso);state.startedAt=Number.isFinite(ms)?ms:Date.now();
+  clearSubmission();
+  showTask(task);
+  if(!already)saveHistory({taskId:task.taskId,accountId:task.accountId,
+    workflow:task.workflow.name,outputKind:task.workflow.outputKind||'video',
+    mode:task.mode,account:task.accountName,video:state.video?.name||'Video referensi',
+    videoSeconds:state.videoDuration,status:task.taskStatus==='RUNNING'?'processing':'queued',
+    startedAt:iso,runtimeMs:null,resultUrl:null,referenceMaskUrl:null,error:null});
+  if(state.image&&state.video)saveReferenceMedia(String(task.taskId),state.image,state.video).catch(()=>{});
+  if(task.trackingRegistered!==false)state.registeredTaskIds.add(String(task.taskId));
+  startPolling();
+}
+async function checkSubmission(){
+  const current=state.submission;
+  if(!current||state.submissionPolling)return;
+  state.submissionPolling=true;
   try{
-    const data=await api('/api/generate',{method:'POST',body:fd});
-    state.task=data;
-    const submittedIso=data.submittedAt||new Date().toISOString();
-    const submittedMs=Date.parse(submittedIso);
-    state.startedAt=Number.isFinite(submittedMs)?submittedMs:Date.now();
-    showTask(data);
-    saveHistory({taskId:data.taskId,accountId:data.accountId,workflow:data.workflow.name,outputKind:data.workflow.outputKind||'video',mode:data.mode,account:data.accountName,video:state.video.name,videoSeconds:state.videoDuration,status:data.taskStatus==='RUNNING'?'processing':'queued',startedAt:submittedIso,runtimeMs:null,resultUrl:null,referenceMaskUrl:null,error:null});
-    // Store original uploaded references locally for this task's History detail.
-    saveReferenceMedia(String(data.taskId),state.image,state.video)
-      .catch(()=>toast('Task berjalan, tetapi salinan referensi di browser ini tidak tersimpan.',true));
-    if(data.referencesStored===false)
-      toast('Task sudah diterima. Media referensi sedang diperiksa.',true);
-    if(data.trackingRegistered===false)
-      toast('Task sudah diterima RunningHub. Pemantauan sedang disambungkan kembali.',true);
-    else state.registeredTaskIds.add(String(data.taskId));
-    startPolling();
-  }catch(e){
-    clearInterval(state.elapsedTimer);
-    $('#taskStatus').textContent='Gagal memulai';
-    $('#taskEstimate').textContent='Tidak selesai';
-    toast(e.message,true);
-    state.task=null;
-    updateGenerate();
-  } finally {
-    btn.querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion';
-    if(!state.task)updateGenerate();
+    const data=await api('/api/generate/jobs/'+encodeURIComponent(current.jobId));
+    if(state.submission?.jobId!==current.jobId)return;
+    if(data.stage==='accepted'){
+      completedSubmission(data);
+    }else if(data.stage==='error'){
+      $('#taskStatus').textContent='Persiapan belum berhasil';
+      $('#taskEstimate').textContent='Task belum dikirim ke RunningHub';
+      toast(data.error||'Persiapan gagal sebelum task dikirim.',true);
+      clearSubmission();
+    }else if(data.stage==='uncertain'){
+      $('#taskStatus').textContent='Status pengiriman belum pasti';
+      $('#taskEstimate').textContent='Periksa History sebelum mencoba lagi';
+      toast(data.error||'Status pengiriman perlu diperiksa sebelum mencoba ulang.',true);
+      clearSubmission();
+    }else{
+      showSubmissionStage(data);
+    }
+  }catch(error){
+    if(state.submission?.jobId!==current.jobId)return;
+    $('#taskStatus').textContent='Menghubungkan kembali…';
+    $('#taskEstimate').textContent='Memeriksa status upload tanpa mengirim ulang';
+  }finally{state.submissionPolling=false;}
+}
+function trackSubmission(jobId){
+  clearInterval(state.submissionTimer);
+  state.submission={jobId};
+  localStorage.setItem(ACTIVE_UPLOAD_KEY,jobId);
+  showStartingTask();
+  startVisibleTimer();
+  $('#generateBtn').disabled=true;
+  checkSubmission();
+  state.submissionTimer=setInterval(checkSubmission,3500);
+}
+async function resumeSubmission(){
+  if(state.task||state.submission)return;
+  let id=localStorage.getItem(ACTIVE_UPLOAD_KEY);
+  if(!id){
+    try{
+      const data=await api('/api/generate/jobs');
+      const active=(data.jobs||[]).find(x=>!['accepted','error','uncertain'].includes(x.stage));
+      id=active?.jobId||null;
+    }catch(error){console.warn('Submission restore deferred',error.message);}
+  }
+  if(id)trackSubmission(id);
+}
+async function generate(){
+  if(!state.image||!state.video||state.submission||state.task)return;
+  const fd=new FormData();
+  fd.append('referenceImage',state.image);
+  fd.append('videoReference',state.video);
+  fd.append('workflow',state.workflow);
+  fd.append('mode',state.mode);
+  fd.append('accountId',$('#accountSelect').value||'auto');
+  if(state.workflow==='r4Lab'){
+    const maskSource=lastSam3Diagnostic();
+    if(!maskSource)return toast('Jalankan tes SAM3 terlebih dahulu.',true);
+    fd.append('diagnosticTaskId',maskSource.taskId);
+    fd.append('diagnosticAccountId',resolveHistoryAccountId(maskSource));
+  }
+  const id=crypto.randomUUID();
+  state.submission={jobId:id};
+  localStorage.setItem(ACTIVE_UPLOAD_KEY,id);
+  $('#generateBtn').disabled=true;
+  showStartingTask();
+  startVisibleTimer();
+  try{
+    const data=await uploadReferences(fd,id,percent=>{
+      if(!state.submission||state.submission.jobId!==id)return;
+      $('#taskStatus').textContent='Mengunggah gambar dan video referensi';
+      $('#taskEstimate').textContent=percent+'% terkirim';
+      $('#generateBtn').querySelector('span:first-child').textContent='Mengunggah '+percent+'%';
+    });
+    if(state.submission?.jobId!==id)return;
+    trackSubmission(data.jobId);
+  }catch(error){
+    if(state.submission?.jobId!==id)return;
+    // If acknowledgement was lost, query by the same immutable request ID.
+    try{
+      const found=await api('/api/generate/jobs/'+encodeURIComponent(id));
+      if(found?.jobId){trackSubmission(id);return;}
+    }catch{}
+    $('#taskStatus').textContent='Upload belum berhasil';
+    $('#taskEstimate').textContent='Belum ada Task ID RunningHub';
+    toast(error.message,true);
+    clearSubmission();
   }
 }
+
 function showTask(data){
   clearInterval(state.elapsedTimer);
   $('#taskSection').classList.add('hidden');
@@ -473,7 +602,9 @@ async function pollHistoryTasks(){
   if(state.historyPollBusy)return;
   state.historyPollBusy=true;
   try{
-    const active=history().filter(item=>isActiveHistoryStatus(item.status)&&item.taskId);
+    // Server registry independently monitors registered jobs. Avoid hammering removed/legacy accounts.
+    const legacy=history().filter(item=>isActiveHistoryStatus(item.status)&&item.taskId&&!state.registeredTaskIds.has(String(item.taskId)));
+    const active=legacy.slice(0,2);
     for(const item of active){
       if(state.task&&String(state.task.taskId)===String(item.taskId))continue;
       const accountId=resolveHistoryAccountId(item);
@@ -646,4 +777,4 @@ if(historyFilters) historyFilters.onclick=e=>{
 };
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
 
-bindHistoryActions();loadSession().then(()=>{startHistoryMonitor();cleanupReferenceMedia().catch(()=>{});}).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
+bindHistoryActions();loadSession().then(()=>{startHistoryMonitor();cleanupReferenceMedia().catch(()=>{});resumeSubmission().catch(()=>{});}).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
