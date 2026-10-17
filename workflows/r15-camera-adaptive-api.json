@@ -354,12 +354,12 @@
         "89",
         2
       ],
-      "upscale_method": "nvidia_rtx_vsr",
+      "upscale_method": "lanczos",
       "keep_proportion": "crop",
       "pad_color": "0, 0, 0",
       "crop_position": "center",
       "divisible_by": 16,
-      "device": "gpu",
+      "device": "cpu",
       "image": [
         "30",
         0
@@ -625,12 +625,12 @@
     "inputs": {
       "width": 1080,
       "height": 1920,
-      "upscale_method": "nvidia_rtx_vsr",
+      "upscale_method": "lanczos",
       "keep_proportion": "crop",
       "pad_color": "0, 0, 0",
       "crop_position": "center",
       "divisible_by": 8,
-      "device": "gpu",
+      "device": "cpu",
       "image": [
         "401",
         0
