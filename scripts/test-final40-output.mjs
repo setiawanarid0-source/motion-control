@@ -48,5 +48,8 @@ try{
   assert.ok(server.includes("fileUrl:'/api/tasks/'+encodeURIComponent(taskId)+'/preview?accountId='+encodeURIComponent(accountId)"));
   assert.ok(server.includes("res.download(final40,'motion-'+req.params.taskId+'-40fps.mp4')"));
   assert.ok(server.includes('if(final40){res.setHeader'), 'History Preview must use final 40fps result');
+  const app=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+  assert.ok(app.includes("result.videoUrl.replace('/preview?','/download?')"),
+    'New-result Download must serve the same converted 40fps video, not an inline preview');
   console.log('PASS: KOH 30→40 and R4 35→40 CFR; original duration/audio preserved; R15 and both generation graphs unchanged');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
