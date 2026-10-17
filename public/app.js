@@ -253,6 +253,16 @@ async function checkSubmission(){
     }
   }catch(error){
     if(state.submission?.jobId!==current.jobId)return;
+    if(error.status===404){
+      current.notFound=(current.notFound||0)+1;
+      if(current.notFound>=3){
+        $('#taskStatus').textContent='Upload belum tercatat';
+        $('#taskEstimate').textContent='Referensi belum diterima server';
+        toast('Upload sebelumnya terputus. File belum diterima. Silakan coba kembali.',true);
+        clearSubmission();
+        return;
+      }
+    }
     $('#taskStatus').textContent='Menghubungkan kembali…';
     $('#taskEstimate').textContent='Memeriksa status upload tanpa mengirim ulang';
   }finally{state.submissionPolling=false;}
@@ -777,4 +787,7 @@ if(historyFilters) historyFilters.onclick=e=>{
 };
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
 
-bindHistoryActions();loadSession().then(()=>{startHistoryMonitor();cleanupReferenceMedia().catch(()=>{});resumeSubmission().catch(()=>{});}).catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
+bindHistoryActions();
+resumeSubmission().catch(error=>console.warn('Upload resume pending',error.message));
+loadSession().then(()=>{startHistoryMonitor();cleanupReferenceMedia().catch(()=>{});})
+  .catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
