@@ -15,10 +15,12 @@ const encrypt=data=>{
   return [iv,cipher.getAuthTag(),raw].map(x=>x.toString('base64url')).join('.');
 };
 const decrypt=token=>{
-  const [iv,tag,body]=token.split('.').map(x=>Buffer.from(x,'base64url'));
-  const decipher=crypto.createDecipheriv('aes-256-gcm',secret,iv);
-  decipher.setAuthTag(tag);
-  return JSON.parse(Buffer.concat([decipher.update(body),decipher.final()]).toString());
+  try{
+    const [iv,tag,body]=token.split('.').map(x=>Buffer.from(x,'base64url'));
+    const decipher=crypto.createDecipheriv('aes-256-gcm',secret,iv);
+    decipher.setAuthTag(tag);
+    return JSON.parse(Buffer.concat([decipher.update(body),decipher.final()]).toString());
+  }catch{return null;}
 };
 try{
   const registry=createTaskRegistry({dir:folder,encrypt,decrypt,now:()=>now});
