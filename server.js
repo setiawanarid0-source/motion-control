@@ -10,6 +10,7 @@ import { extractTaskFailure } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences } from './history-references.js';
+import {createTaskRegistry} from './task-registry.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -96,6 +97,77 @@ function decrypt(token) {
   }
 }
 
+const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
+function registeredAccount(taskId,accountId=''){
+  const item=taskRegistry.get(String(taskId));
+  if(!item)return null;
+  if(accountId&&item.accountId!==accountId)return null;
+  return {id:item.accountId,name:item.accountName,key:item.key,registered:true};
+}
+function taskAccount(req,taskId,accountId){
+  const fromRegistry=registeredAccount(taskId,accountId);
+  if(fromRegistry)return fromRegistry;
+  // Backwards compatible for legacy tasks not yet registered in the vault.
+  return getPersistentAccounts(req).accounts.find(a=>a.id===accountId)||null;
+}
+function writeTaskState(taskId,result){
+  const now=new Date().toISOString();
+  const patch={status:result.state,lastCheckedAt:now};
+  if(result.state==='success'){
+    const outputs=Array.isArray(result.outputs)?result.outputs:[];
+    const video=outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
+    const mask=outputs.find(x=>String(x.nodeId)==='394');
+    patch.resultUrl=video?.fileUrl||null;
+    patch.referenceMaskUrl=mask?.fileUrl||null;
+    patch.cameraQA=result.cameraQA||null;
+    patch.finishedAt=now;
+    patch.error=null;
+  }else if(result.state==='failed'){
+    patch.finishedAt=now;
+    patch.error=result.message||'RunningHub mengonfirmasi task gagal.';
+  }else{
+    patch.error=result.state==='check_error'?'Status terbaru belum tersedia. Pemantauan akan dicoba kembali.':null;
+  }
+  return taskRegistry.update(taskId,patch);
+}
+async function runningHubTaskState(taskId,account,accountId){
+  const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
+  const code=Number(data?.code);
+  if(code===0&&Array.isArray(data?.data)&&data.data.length){
+    const outputs=data.data.map(x=>({fileUrl:x.fileUrl,fileType:x.fileType,nodeId:x.nodeId??null})).filter(x=>x.fileUrl);
+    const video=outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
+    if(video){
+      const qa=await cameraStatus(taskId,video.fileUrl,accountId);
+      if(qa)return {...qa,rawCode:code};
+    }
+    return {state:'success',outputs,rawCode:code};
+  }
+  if(code===813)return {state:'queued',rawCode:code,message:data?.msg||''};
+  if(code===804||code===0)return {state:'running',rawCode:code,message:data?.msg||''};
+  const failure=extractTaskFailure(data);
+  if(failure)return {state:'failed',rawCode:code,message:data?.msg||'Task gagal.',failure};
+  // Unexpected codes, insufficient credits, and API errors must NEVER be treated as generation failures.
+  return {state:'check_error',rawCode:code,message:'Status terbaru belum tersedia. Pemantauan akan dicoba kembali.'};
+}
+let monitorBusy=false;
+async function monitorRegisteredTasks(){
+  if(monitorBusy)return;
+  monitorBusy=true;
+  try{
+    const pending=taskRegistry.active().sort((a,b)=>Date.parse(a.lastCheckedAt||0)-Date.parse(b.lastCheckedAt||0)).slice(0,8);
+    await Promise.all(pending.map(async item=>{
+      try{
+        const data=await runningHubTaskState(item.taskId,item,item.accountId);
+        writeTaskState(item.taskId,data);
+      }catch(err){
+        taskRegistry.update(item.taskId,{status:'check_error',lastCheckedAt:new Date().toISOString(),
+          error:'Koneksi RunningHub belum tersedia. Pemeriksaan akan diulang.'});
+      }
+    }));
+    taskRegistry.purgeExpired();
+  }catch(err){console.warn('Task lifecycle monitor',err.message);}
+  finally{monitorBusy=false;}
+}
 function getDeviceId(req) {
   const raw = String(req.headers['x-vanta-device'] || req.query?.deviceId || '').trim();
   return /^[a-zA-Z0-9_-]{20,128}$/.test(raw) ? raw : '';
@@ -400,23 +472,30 @@ app.delete('/api/accounts/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/accounts/refresh', async (req, res) => {
-  const { deviceId, accounts } = getPersistentAccounts(req);
-  if (!deviceId) return res.status(400).json({ error: 'Sesi perangkat tidak tersedia. Muat ulang halaman.' });
-
+async function refreshPool(req){
+  const {deviceId,accounts}=getPersistentAccounts(req);
   const checked=await Promise.all(accounts.map(async account=>{
     try{return {account,status:await accountStatus(account.key)};}
     catch(error){return {account,status:{error:error.message}};}
   }));
-  // Delete only accounts with a VERIFIED sub-100 balance.
-  // A transient API error or absent balance must never trigger destructive removal.
-  const {retained,removed}=partitionAccountRefresh(checked,MIN_POOL_CREDITS);
-  if(removed.length)saveVaultAccounts(deviceId,retained.map(x=>x.account));
-  res.json({
-    accounts:retained.map(x=>publicAccount(x.account,x.status)),
-    autoRemovedCount:removed.length,
-    minimumCredits:MIN_POOL_CREDITS
-  });
+  // The task registry keeps a separate encrypted credential until History expires.
+  // Accounts with RunningHub tasks that are not yet registered are retained as a safeguard.
+  const {removed}=partitionAccountRefresh(checked,MIN_POOL_CREDITS);
+  if(removed.length){
+    const retiredIds=new Set(removed.map(x=>x.account.id));
+    const latest=loadGlobalAccounts();
+    const next=latest.filter(a=>!retiredIds.has(a.id));
+    if(next.length!==latest.length)saveVaultAccounts(deviceId,next);
+  }
+  const remaining=loadGlobalAccounts();
+  return {accounts:remaining.map(a=>{
+    const status=checked.find(x=>x.account.id===a.id)?.status||null;
+    return publicAccount(a,status);
+  }),autoRemovedCount:removed.length,minimumCredits:MIN_POOL_CREDITS};
+}
+app.post('/api/accounts/refresh',async(req,res)=>{
+  try{res.json(await refreshPool(req));}
+  catch(error){res.status(502).json({error:'Tidak dapat memperbarui Account Pool saat ini.'});}
 });
 
 app.post('/api/generate', upload.fields([
@@ -477,8 +556,9 @@ app.post('/api/generate', upload.fields([
       if(!candidates.length)throw new Error('Tidak ada akun dengan kredit minimal 100 RH untuk membuat task baru.');
     }
     if(workflowKey==='r15')preparedMotion=await prepareMotionSource(videoFile);
-    // Both previews must be persisted to the Railway volume before RunningHub is charged.
+    // Verify both input previews and encrypted task registry before a paid submission.
     stagedReferences=await stageReferences(imageFile,videoFile);
+    taskRegistry.ensureWritable();
     let lastError = null;
     for (const account of candidates) {
       try {
@@ -492,8 +572,19 @@ app.post('/api/generate', upload.fields([
           diagnosticAccount,
           diagnosticTaskId,
         });
-        // Associate the staged input pair with the paid task via an atomic directory rename.
-        // This operation must not trigger another paid task if media storage has an issue.
+        // Task is accepted/paid: register it before any post-submit work.
+        // A local persistence problem must NOT retry submission against another account.
+        let trackingRegistered=false;
+        try{
+          taskRegistry.add({taskId:String(task.taskId),accountId:account.id,
+            accountName:account.name,key:account.key,workflow:workflowMeta[workflowKey].name,
+            outputKind:workflowMeta[workflowKey].outputKind||'video',mode,
+            video:videoFile.originalname,submittedAt:task.submittedAt,
+            status:task.taskStatus==='RUNNING'?'running':'queued'});
+          trackingRegistered=true;
+        }catch(registerError){
+          console.error('Paid task accepted but registry write failed',String(task.taskId),registerError.message);
+        }
         let referencesStored=false;
         try{
           const stored=await commitReferences(stagedReferences,String(task.taskId));
@@ -507,17 +598,20 @@ app.post('/api/generate', upload.fields([
           catch(cameraError){console.error('R15 source save failed',String(task.taskId),cameraError.message);}
         }
         // Never restore a deleted account from this request's earlier in-memory snapshot.
-        const newestAccounts=loadGlobalAccounts();
-        const currentAccount=newestAccounts.find(x=>x.id===account.id);
-        if(currentAccount){
-          currentAccount.lastUsedAt=new Date().toISOString();
-          saveVaultAccounts(deviceId,newestAccounts);
-        }
+        try{
+          const newestAccounts=loadGlobalAccounts();
+          const currentAccount=newestAccounts.find(x=>x.id===account.id);
+          if(currentAccount){
+            currentAccount.lastUsedAt=new Date().toISOString();
+            saveVaultAccounts(deviceId,newestAccounts);
+          }
+        }catch(vaultErr){console.error('Account timestamp update deferred',vaultErr.message);}
         cleanup();
         return res.json({
           ok: true,
           taskId: String(task.taskId),
           referencesStored,
+          trackingRegistered,
           taskStatus: task.taskStatus || 'QUEUED',
           accountId: account.id,
           accountName: account.name,
@@ -556,44 +650,71 @@ async function resolveTaskVideoUrl(account, taskId) {
 }
 
 // On-demand lookup of an existing task. It NEVER creates a new paid RunningHub job.
+app.get('/api/tasks/history',(req,res)=>{
+  try{res.setHeader('Cache-Control','private, no-store');res.json({tasks:taskRegistry.publicList()});}
+  catch(error){res.status(503).json({error:'Riwayat server sementara tidak tersedia.'});}
+});
+// Recover existing browser History into encrypted server registry BEFORE Account Pool cleanup.
+// Never creates a paid RunningHub task.
+app.post('/api/tasks/claim',async(req,res)=>{
+  const input=Array.isArray(req.body?.tasks)?req.body.tasks.slice(0,30):[];
+  const accounts=getPersistentAccounts(req).accounts;
+  const restored=[];
+  for(const item of input){
+    const taskId=String(item.taskId||''),accountId=String(item.accountId||'');
+    if(!/^\d{10,25}$/.test(taskId))continue;
+    if(taskRegistry.get(taskId)){restored.push(taskId);continue;}
+    const account=accounts.find(x=>x.id===accountId);
+    if(!account)continue;
+    try{
+      const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},12000);
+      if(!isTrackableTaskCode(data?.code,data))continue;
+      const code=Number(data.code);
+      taskRegistry.add({taskId,accountId:account.id,accountName:account.name,key:account.key,
+        workflow:String(item.workflow||'Legacy task').slice(0,140),
+        outputKind:item.outputKind==='diagnostic'?'diagnostic':'video',
+        mode:item.mode==='standard'?'standard':'lite',
+        video:String(item.video||'').slice(0,140),
+        submittedAt:Number.isFinite(Date.parse(item.startedAt))?item.startedAt:new Date().toISOString(),
+        status:code===813?'queued':'running'});
+      restored.push(taskId);
+    }catch(error){console.warn('Legacy task claim deferred',taskId,error.message);}
+  }
+  res.json({restored:restored.length});
+});
 app.post('/api/tasks/:taskId/recover',async(req,res)=>{
-  const {deviceId,accounts}=getPersistentAccounts(req);
-  if(!deviceId)return res.status(400).json({error:'Device session tidak tersedia.'});
   const taskId=String(req.params.taskId||'');
   if(!/^\d{10,25}$/.test(taskId))return res.status(400).json({error:'Task ID tidak valid.'});
-  for(const account of accounts.slice(0,25)){
+  const registered=registeredAccount(taskId);
+  if(registered)return res.json({ok:true,accountId:registered.id,accountName:registered.name});
+  const accounts=getPersistentAccounts(req).accounts;
+  for(const account of accounts.slice(0,35)){
     try{
-      const result=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},15000);
-      if(isTrackableTaskCode(result?.code,result))
+      const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},15000);
+      if(isTrackableTaskCode(data?.code,data)){
+        taskRegistry.add({taskId,accountId:account.id,accountName:account.name,
+          key:account.key,workflow:'Recovered task',submittedAt:new Date().toISOString(),status:'running'});
         return res.json({ok:true,accountId:account.id,accountName:account.name});
-    }catch(_error){/* Try next stored account; no new task submitted. */}
-  }
-  res.status(404).json({error:'API key pembuat task tidak ditemukan. Tambahkan kembali API key tersebut di Account Pool (jangan kirim ke chat), kemudian tekan Periksa lagi.'});
-});
-
-app.post('/api/tasks/:taskId', async (req, res) => {
-  const { accounts } = getPersistentAccounts(req);
-  const accountId = String(req.body?.accountId || '');
-  const account = accounts.find(a => a.id === accountId);
-  if (!account) return res.status(404).json({ error: 'Akun pembuat task tidak ada di Account Pool. Status RunningHub belum diketahui. Jangan generate ulang; pilih Periksa lagi di History.' });
-  try {
-    const data = await rhJson('/task/openapi/outputs', account.key, { apiKey: account.key, taskId: req.params.taskId }, 30000);
-    const code = Number(data?.code);
-    if (code === 0 && Array.isArray(data?.data) && data.data.length) {
-      const outputs = data.data.map(x => ({ fileUrl: x.fileUrl, fileType: x.fileType, nodeId: x.nodeId ?? null })).filter(x => x.fileUrl);
-      const rawVideo=outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
-      if(rawVideo){
-        const qa=await cameraStatus(req.params.taskId,rawVideo.fileUrl,accountId);
-        if(qa)return res.json({...qa,rawCode:code});
       }
-      return res.json({ state: 'success', outputs, rawCode: code });
-    }
-    if (code === 804 || code === 813 || code === 0) {
-      return res.json({ state: code === 813 ? 'queued' : 'running', rawCode: code, message: data?.msg || '' });
-    }
-    res.json({ state: 'failed', rawCode: code, message: data?.msg || 'Task gagal.', failure: extractTaskFailure(data) });
-  } catch (error) {
-    res.status(502).json({ error: error.message || 'Gagal mengambil status task.' });
+    }catch(error){/* Continue checking; no paid generation occurs. */}
+  }
+  res.status(404).json({error:'Akun pemilik task lama tidak dapat ditemukan. Proses RunningHub tidak dibatalkan.'});
+});
+app.post('/api/tasks/:taskId',async(req,res)=>{
+  const taskId=String(req.params.taskId||'');
+  if(!/^\d{10,25}$/.test(taskId))return res.status(400).json({error:'Task ID tidak valid.'});
+  const accountId=String(req.body?.accountId||'');
+  const account=taskAccount(req,taskId,accountId);
+  if(!account)return res.status(409).json({state:'check_error',message:'Koneksi pemantauan akan dicoba kembali.'});
+  try{
+    const data=await runningHubTaskState(taskId,account,accountId||account.id);
+    if(taskRegistry.get(taskId))writeTaskState(taskId,data);
+    res.json(data);
+  }catch(error){
+    if(taskRegistry.get(taskId))
+      taskRegistry.update(taskId,{status:'check_error',lastCheckedAt:new Date().toISOString(),
+        error:'Koneksi RunningHub belum tersedia. Pemeriksaan akan diulang.'});
+    res.json({state:'check_error',message:'Menghubungkan kembali ke RunningHub. Pemantauan akan dilanjutkan otomatis.'});
   }
 });
 
@@ -603,7 +724,7 @@ function referenceAccess(req){
   const id=String(req.params.taskId||'');
   const accountId=String(req.query?.accountId||req.body?.accountId||'');
   if(!/^\d{10,25}$/.test(id))return false;
-  return getPersistentAccounts(req).accounts.some(a=>a.id===accountId);
+  return !!taskAccount(req,id,accountId);
 }
 app.get('/api/task-references/:taskId', (req,res)=>{
   if(!referenceAccess(req))return res.status(404).json({error:'Referensi tidak tersedia untuk akun ini.'});
@@ -623,7 +744,7 @@ app.get('/api/task-references/:taskId/:kind', (req,res)=>{
 });
 app.get('/api/camera-video/:taskId',(req,res)=>{
   const accountId=String(req.query?.accountId||'');
-  if(!getPersistentAccounts(req).accounts.some(a=>a.id===accountId))return res.status(404).end();
+  if(!taskAccount(req,req.params.taskId,accountId))return res.status(404).end();
   const video=readCorrected(req.params.taskId);
   if(!video)return res.status(404).end();
   res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');res.sendFile(video);
@@ -632,8 +753,8 @@ app.get('/api/camera-video/:taskId',(req,res)=>{
 app.get('/api/tasks/:taskId/preview', async (req, res) => {
   const { accounts } = getPersistentAccounts(req);
   const accountId = String(req.query?.accountId || '');
-  const account = accounts.find(a => a.id === accountId);
-  if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan.' });
+  const account = taskAccount(req,req.params.taskId,accountId);
+  if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
   const corrected=readCorrected(req.params.taskId);
   if(corrected){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(corrected);}
   try {
@@ -671,8 +792,8 @@ app.get('/api/tasks/:taskId/preview', async (req, res) => {
 app.get('/api/tasks/:taskId/download', async (req, res) => {
   const { accounts } = getPersistentAccounts(req);
   const accountId = String(req.query?.accountId || '');
-  const account = accounts.find(a => a.id === accountId);
-  if (!account) return res.status(404).json({ error: 'Akun task tidak ditemukan dalam sesi.' });
+  const account = taskAccount(req,req.params.taskId,accountId);
+  if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
   const corrected=readCorrected(req.params.taskId);
   if(corrected)return res.download(corrected,'motion-'+req.params.taskId+'-camera-checked.mp4');
   try {
@@ -712,6 +833,10 @@ if (!startupGlobalAccounts.length && startupLegacyAccounts.length) {
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
+try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
+setInterval(()=>monitorRegisteredTasks(),25000).unref();
+setTimeout(()=>monitorRegisteredTasks(),1200).unref();
+setInterval(()=>refreshPool({headers:{},query:{}}).catch(error=>console.warn('Background Account Pool refresh',error.message)),120000).unref();
 if(/^\d{10,25}$/.test(process.env.VANTA_REFERENCE_AUDIT_TASK||'')){
   console.log('Reference availability audit',process.env.VANTA_REFERENCE_AUDIT_TASK,
     JSON.stringify(referenceAvailability(process.env.VANTA_REFERENCE_AUDIT_TASK)));
