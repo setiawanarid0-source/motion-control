@@ -4,7 +4,7 @@ for(const [s,expected] of [[{remainCoins:500},true],[{remainCoins:99},false],[{r
   assert.equal(canStartNewTask(s),expected);
 for(const [c,d,e] of [[804,{},true],[813,{},true],[805,{},true],[0,{data:[]},true],[802,{},false],[0,{data:null},false]])
   assert.equal(isTrackableTaskCode(c,d),e);
-console.log('PASS: low-credit accounts remain trackable, cannot start new jobs; recover rejects unauthorized keys.');
+console.log('PASS: <100 RH prevents new jobs; account selection is independent of ongoing task monitoring.');
 
 const checks=[
   {account:{id:'ready'},status:{remainCoins:100}},
@@ -14,5 +14,5 @@ const checks=[
   {account:{id:'active-low'},status:{remainCoins:12,currentTaskCounts:1}},
 ];
 const partition=partitionAccountRefresh(checks);
-assert.deepEqual(partition.removed.map(x=>x.account.id),['low']);
-assert.deepEqual(partition.retained.map(x=>x.account.id),['ready','offline','unknown','active-low']);
+assert.deepEqual(partition.removed.map(x=>x.account.id),['low','active-low']);
+assert.deepEqual(partition.retained.map(x=>x.account.id),['ready','offline','unknown']);
