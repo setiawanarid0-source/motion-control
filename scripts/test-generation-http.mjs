@@ -33,11 +33,11 @@ async function waitForServer(){
 try{
   await waitForServer();
   const jobId=crypto.randomUUID();
-  const form=()=>{
+  const form=(mode='standard')=>{
     const data=new FormData();
     data.append('referenceImage',new Blob([Buffer.alloc(1024,1)],{type:'image/jpeg'}),'source.jpg');
     data.append('videoReference',new Blob([Buffer.alloc(4096,2)],{type:'video/mp4'}),'source.mp4');
-    data.append('workflow','r15');data.append('mode','lite');
+    data.append('workflow','r15');data.append('mode',mode);
     data.append('accountId','auto');return data;
   };
   const started=Date.now();
@@ -70,7 +70,19 @@ try{
   assert.equal((await replay.json()).jobId,jobId);
   const latest=await fetch(url+'/api/generate/jobs',{headers});
   assert.ok((await latest.json()).jobs.some(x=>x.jobId===jobId));
-  console.log('PASS: HTTP 202 before processing, job status/recovery, account isolation, and idempotency');
+  // Only Standard and Plus are offered/accepted for NEW requests.
+  const plusId=crypto.randomUUID();
+  const plusResponse=await fetch(url+'/api/generate',{
+    method:'POST',headers:{...headers,'X-Vanta-Request-Id':plusId},body:form('plus')
+  });
+  assert.equal(plusResponse.status,202);
+  assert.equal((await plusResponse.json()).jobId,plusId);
+  const liteResponse=await fetch(url+'/api/generate',{
+    method:'POST',headers:{...headers,'X-Vanta-Request-Id':crypto.randomUUID()},body:form('lite')
+  });
+  assert.equal(liteResponse.status,400,'Legacy Lite must not be available for new uploads');
+  assert.match((await liteResponse.json()).error,/Standard atau Plus/);
+  console.log('PASS: HTTP 202 before processing, Standard/Plus validation, session isolation, and idempotency');
 }finally{
   server.kill('SIGTERM');
   await new Promise(resolve=>{if(server.exitCode!==null||server.killed){setTimeout(resolve,300);}else{server.once('exit',resolve);setTimeout(resolve,2000);}});
