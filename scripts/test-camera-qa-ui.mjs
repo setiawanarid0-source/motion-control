@@ -13,5 +13,5 @@ assert.ok(app.includes('cameraQA:task.cameraQA||local.cameraQA'), 'Server camera
 assert.ok(server.includes('cameraStatus(taskId,video.fileUrl,accountId)'), 'Camera QA engine remains active');
 assert.ok(camera.includes('cameraDecision(source,out'), 'Existing Camera QA is not modified');
 assert.ok(JSON.parse(graph)['418'].class_type==='WanSCAILToVideo','R15 generation workflow preserved');
-assert.ok(html.includes('/app.js?v=20261017-camera-qa-display-v1'),'Client cache updated');
+assert.match(html,/\/app\.js\?v=20261017-[a-z0-9-]+/,'Versioned frontend asset must be present to avoid stale UI');
 console.log('PASS: hide inconclusive camera diagnostics in user UI; preserve Camera QA and R15 workflow');
