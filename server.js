@@ -108,7 +108,8 @@ function taskAccount(req,taskId,accountId){
   const fromRegistry=registeredAccount(taskId,accountId);
   if(fromRegistry)return fromRegistry;
   // Backwards compatible for legacy tasks not yet registered in the vault.
-  return getPersistentAccounts(req).accounts.find(a=>a.id===accountId)||null;
+  return getPersistentAccounts(req).accounts.find(a=>a.id===accountId)
+    ||taskRegistry.getRetiredAccount(accountId)||null;
 }
 function writeTaskState(taskId,result){
   const now=new Date().toISOString();
@@ -465,11 +466,15 @@ app.post('/api/accounts', async (req, res) => {
 app.delete('/api/accounts/:id', (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);
   if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
-  const next = accounts.filter(a => a.id !== req.params.id);
-  if (next.length === accounts.length) return res.status(404).json({ error: 'Akun tidak ditemukan.' });
-  next.forEach((a, i) => { a.name = `Account ${String(i + 1).padStart(2, '0')}`; });
-  saveVaultAccounts(deviceId, next);
-  res.json({ ok: true });
+  const removing=accounts.find(a=>a.id===req.params.id);
+  if(!removing)return res.status(404).json({error:'Akun tidak ditemukan.'});
+  try{
+    // Even manual removal must never orphan accepted RunningHub tasks.
+    taskRegistry.retireAccount(removing);
+    const next=loadGlobalAccounts().filter(a=>a.id!==req.params.id);
+    saveVaultAccounts(deviceId,next);
+    res.json({ok:true});
+  }catch(error){res.status(503).json({error:'Penghapusan ditunda: penyimpanan task belum siap.'});}
 });
 
 async function refreshPool(req){
@@ -484,6 +489,9 @@ async function refreshPool(req){
   if(removed.length){
     const retiredIds=new Set(removed.map(x=>x.account.id));
     const latest=loadGlobalAccounts();
+    const toRetire=latest.filter(a=>retiredIds.has(a.id));
+    // Store every retired API key in the encrypted task vault before modifying Account Pool.
+    for(const account of toRetire)taskRegistry.retireAccount(account);
     const next=latest.filter(a=>!retiredIds.has(a.id));
     if(next.length!==latest.length)saveVaultAccounts(deviceId,next);
   }
@@ -658,7 +666,8 @@ app.get('/api/tasks/history',(req,res)=>{
 // Never creates a paid RunningHub task.
 app.post('/api/tasks/claim',async(req,res)=>{
   const input=Array.isArray(req.body?.tasks)?req.body.tasks.slice(0,30):[];
-  const accounts=getPersistentAccounts(req).accounts;
+  const accounts=[...getPersistentAccounts(req).accounts,
+    ...taskRegistry.retiredAccounts().map(x=>taskRegistry.getRetiredAccount(x.id))];
   const restored=[];
   const attempt=async item=>{
     const taskId=String(item.taskId||''),accountId=String(item.accountId||'');
@@ -689,8 +698,9 @@ app.post('/api/tasks/:taskId/recover',async(req,res)=>{
   if(!/^\d{10,25}$/.test(taskId))return res.status(400).json({error:'Task ID tidak valid.'});
   const registered=registeredAccount(taskId);
   if(registered)return res.json({ok:true,accountId:registered.id,accountName:registered.name});
-  const accounts=getPersistentAccounts(req).accounts;
-  for(const account of accounts.slice(0,35)){
+  const accounts=[...getPersistentAccounts(req).accounts,
+    ...taskRegistry.retiredAccounts().map(x=>taskRegistry.getRetiredAccount(x.id))];
+  for(const account of accounts.slice(0,65)){
     try{
       const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},15000);
       if(isTrackableTaskCode(data?.code,data)){
