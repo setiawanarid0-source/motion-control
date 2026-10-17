@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const app=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
+const camera=fs.readFileSync(new URL('../camera-runtime.js',import.meta.url),'utf8');
+const graph=fs.readFileSync(new URL('../workflows/r15-camera-adaptive-api.json',import.meta.url),'utf8');
+assert.ok(!app.includes('Kamera: ${escapeHtml(x.cameraQA.sourceCamera'), 'Internal camera flags should not appear in History');
+assert.ok(app.includes("const cameraInfo='';"), 'History camera notice should be absent');
+assert.ok(app.includes("$('#resultCacheState').textContent=diagnostic?'Hasil diagnostik siap diperiksa':'Hasil siap diputar';"));
+assert.ok(app.includes('cameraQA:result.cameraQA||null'), 'Camera data must remain available for audit');
+assert.ok(app.includes('cameraQA:task.cameraQA||local.cameraQA'), 'Server camera data must still be synced');
+assert.ok(server.includes('cameraStatus(taskId,video.fileUrl,accountId)'), 'Camera QA engine remains active');
+assert.ok(camera.includes('cameraDecision(source,out'), 'Existing Camera QA is not modified');
+assert.ok(JSON.parse(graph)['418'].class_type==='WanSCAILToVideo','R15 generation workflow preserved');
+assert.ok(html.includes('/app.js?v=20261017-camera-qa-display-v1'),'Client cache updated');
+console.log('PASS: hide inconclusive camera diagnostics in user UI; preserve Camera QA and R15 workflow');
