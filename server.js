@@ -839,7 +839,7 @@ app.use((req, res) => {
 
 const startupGlobalAccounts = loadGlobalAccounts();
 const startupLegacyAccounts = recoverLegacyVaultAccounts();
-if (!startupGlobalAccounts.length && startupLegacyAccounts.length) {
+if (!fs.existsSync(GLOBAL_ACCOUNT_VAULT) && !startupGlobalAccounts.length && startupLegacyAccounts.length) {
   saveGlobalAccounts(startupLegacyAccounts);
 }
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
