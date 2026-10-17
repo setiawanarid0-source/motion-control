@@ -135,10 +135,8 @@ function workflowName(){
 }
 function estimateSeconds(){ if(['koh1AntiObject','r4Lab','r15'].includes(state.workflow))return 0; if(!state.videoDuration)return 0; return state.videoDuration*(state.mode==='standard'?21.2:38.6); }
 function startVisibleTimer(){
+  // Internal task timestamps are retained for History; no unsolicited duration UI.
   state.startedAt=Date.now();
-  $('#taskElapsed').textContent='00:00';
-  clearInterval(state.elapsedTimer);
-  state.elapsedTimer=setInterval(()=>$('#taskElapsed').textContent=fmtElapsed(Date.now()-state.startedAt),1000);
 }
 function showStartingTask(){
   state.startedAt=null;
@@ -150,7 +148,6 @@ function showStartingTask(){
   $('#taskAccount').textContent=$('#accountSelect').value==='auto'?'Automatic':'Akun dipilih';
   $('#taskMode').textContent=state.mode==='standard'?'Standard':'Lite';
   $('#taskId').textContent='Menunggu task ID';
-  $('#taskElapsed').textContent='—';
   const est=estimateSeconds();
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
   $('#taskSection').scrollIntoView({behavior:'smooth',block:'center'});
@@ -344,11 +341,6 @@ function showTask(data){
   clearInterval(state.elapsedTimer);
   $('#taskSection').classList.remove('hidden');
   $('#resultSection').classList.add('hidden');
-  $('#taskElapsed').textContent=fmtElapsed(Math.max(0,Date.now()-state.startedAt));
-  state.elapsedTimer=setInterval(()=>{
-    if(state.task&&state.startedAt)
-      $('#taskElapsed').textContent=fmtElapsed(Math.max(0,Date.now()-state.startedAt));
-  },1000);
   $('#taskStatus').textContent=data.taskStatus==='RUNNING'?'Memproses':'Dalam antrean';
   $('#taskWorkflow').textContent=data.workflow.name;
   $('#taskAccount').textContent=data.accountName;
@@ -404,7 +396,6 @@ function selectTaskOutputs(outputs,kind){
 function finishFailed(msg,failure=null){
   clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
   const elapsed=Date.now()-state.startedAt;
-  $('#taskElapsed').textContent=fmtElapsed(elapsed);
   $('#taskEstimate').textContent='Task gagal';
   toast(msg,true);
   updateHistory(state.task.taskId,{status:'failed',finishedAt:new Date().toISOString(),runtimeMs:elapsed,error:msg,...(failure?{diagnosis:formatTaskDiagnosis(failure,msg),diagnosisChecked:true}:{})});
@@ -413,7 +404,6 @@ function finishFailed(msg,failure=null){
 function finishSuccess(result){
   clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
   const elapsed=Date.now()-state.startedAt;
-  $('#taskElapsed').textContent=fmtElapsed(elapsed);
   $('#taskEstimate').textContent='Selesai';
   $('#taskStatus').textContent='Selesai';
   $('#resultSection').classList.remove('hidden');
@@ -426,11 +416,10 @@ function finishSuccess(result){
   $('#referenceMaskWrap').classList.toggle('hidden',!diagnostic||!result.referenceMaskUrl);
   if(result.referenceMaskUrl){$('#referenceMaskPreview').src=result.referenceMaskUrl;$('#referenceMaskDownload').href=result.referenceMaskUrl;}
   $('#resultWorkflow').textContent=state.task.workflow.name;
-  $('#resultDuration').textContent=`Generate time ${fmtElapsed(elapsed)}`;
   updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:result.videoUrl,referenceMaskUrl:result.referenceMaskUrl,cameraQA:result.cameraQA||null});
   state.task=null;updateGenerate();
   $('#resultSection').scrollIntoView({behavior:'smooth',block:'start'});
-  toast(`${diagnostic?'Tes SAM3':'Video'} selesai dalam ${fmtElapsed(elapsed)}.`);
+  toast(diagnostic?'Tes SAM3 selesai.':'Video berhasil dibuat.');
 }
 
 const HISTORY_RETENTION_MS=3*24*60*60*1000;
@@ -581,11 +570,10 @@ function renderHistory(){
   const root=$('#historyBody');
   if(!items.length){
     const message=allItems.length?'Tidak ada generation pada filter ini.':'Belum ada riwayat generation.';
-    root.innerHTML=`<tr class="history-empty-row"><td colspan="8">${message}</td></tr>`;
+    root.innerHTML=`<tr class="history-empty-row"><td colspan="7">${message}</td></tr>`;
     return;
   }
   root.innerHTML=items.map(x=>{
-    const elapsed=historyElapsed(x);
     const statusClass=historyStatusClass(x.status);
     const statusLabel=historyStatusLabel(x.status);
     const error=x.error?`<small class="history-error" title="${escapeHtml(x.error)}">${escapeHtml(x.error)}</small>`:'';
@@ -614,7 +602,6 @@ function renderHistory(){
       <td data-label="Mode">${escapeHtml(x.mode)}</td>
       <td data-label="Account">${escapeHtml(x.account)}</td>
       <td data-label="Video" class="history-video-name">${escapeHtml(x.video)}</td>
-      <td data-label="Generate time" class="history-runtime">${elapsed?fmtElapsed(elapsed):'—'}</td>
       <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}${diagnosis}${cameraInfo}${inspect}</td>
       <td data-label="Result">${result}</td>
     </tr>`;
