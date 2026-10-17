@@ -52,6 +52,16 @@ assert.equal(adapted['33'].inputs.frame_load_cap,0,'R15 Camera Engine must not h
 assert.deepEqual(adapted['418'].inputs.pose_video_mask,['104',0]);
 assert.deepEqual(adapted['418'].inputs.reference_image_mask,['104',1]);
 assert.equal(adapted['489'].inputs.divisible_by,8);
+for(const id of ['308','489']){
+  assert.equal(adapted[id].class_type,'ImageResizeKJv2','R15 resize node '+id+' type');
+  assert.equal(adapted[id].inputs.upscale_method,'lanczos','R15 node '+id+' must avoid NvVFX invalid parameter errors');
+  assert.equal(adapted[id].inputs.device,'cpu','Lanczos on KJNodes requires CPU for node '+id);
+}
+assert.equal(adapted['308'].inputs.divisible_by,16,'R15 reference dimensions unchanged');
+assert.deepEqual(adapted['308'].inputs.image,['30',0],'R15 reference source unchanged');
+assert.equal(adapted['489'].inputs.width,1080,'R15 output width unchanged');
+assert.equal(adapted['489'].inputs.height,1920,'R15 output height unchanged');
+assert.deepEqual(adapted['489'].inputs.image,['401',0],'R15 output VAEDecode link unchanged');
 assert.equal(adapted['331'].inputs.steps,6);assert.equal(adapted['331'].inputs.cfg,1);
 assert.ok(!adapted['492'],'No Video Stabilizer Classic');
 console.log('PASS: R15 camera-aware graph, Current & other graphs preserved.');
