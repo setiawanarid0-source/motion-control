@@ -105,6 +105,7 @@ function registeredAccount(taskId,accountId=''){
   return {id:item.accountId,name:item.accountName,key:item.key,registered:true};
 }
 function taskAccount(req,taskId,accountId){
+  if(!accountId)return null; // Preserve the original account-scoped media access check.
   const fromRegistry=registeredAccount(taskId,accountId);
   if(fromRegistry)return fromRegistry;
   // Backwards compatible for legacy tasks not yet registered in the vault.
