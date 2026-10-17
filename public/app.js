@@ -410,7 +410,9 @@ function finishSuccess(result){
   const diagnostic=state.task.workflow.outputKind==='diagnostic';
   $('#resultHeading').textContent=diagnostic?'Tes SAM3 selesai — hasil mask':'Generation completed';
   $('#resultMediaLabel').textContent=diagnostic?'Mask gerakan SAM3 (BUKAN hasil motion transfer)':'Video hasil generasi';
-  $('#resultCacheState').textContent=diagnostic?'Hasil diagnostik siap diperiksa':result.cameraQA?.corrected?'Kamera diperiksa · koreksi kecil diterapkan':result.cameraQA?'Kamera diperiksa · hasil asli dipertahankan':'Hasil siap diputar';
+  // The Camera QA classification is an internal, advisory diagnostic.
+  // A successful RunningHub video does not imply camera validation has passed.
+  $('#resultCacheState').textContent=diagnostic?'Hasil diagnostik siap diperiksa':'Hasil siap diputar';
   $('#downloadBtn').textContent=diagnostic?'Download video mask':'Download video';
   $('#referenceMaskWrap').classList.toggle('hidden',!diagnostic||!result.referenceMaskUrl);
   if(result.referenceMaskUrl){$('#referenceMaskPreview').src=result.referenceMaskUrl;$('#referenceMaskDownload').href=result.referenceMaskUrl;}
@@ -577,7 +579,8 @@ function renderHistory(){
     const statusLabel=historyStatusLabel(x.status);
     const error=x.error?`<small class="history-error" title="${escapeHtml(x.error)}">${escapeHtml(x.error)}</small>`:'';
     const diagnosis=x.diagnosis?`<small class="history-diagnosis">${escapeHtml(x.diagnosis)}</small>`:'';
-    const cameraInfo=x.cameraQA?`<small class="history-diagnosis">Kamera: ${escapeHtml(x.cameraQA.sourceCamera||'?')} → ${escapeHtml(x.cameraQA.generatedCamera||'?')} · ${x.cameraQA.corrected?'koreksi kecil diterapkan':'hasil asli'} (${escapeHtml(x.cameraQA.reason||'')})</small>`:'';
+    // Keep cameraQA on the task for audit, but never show raw internal classifications in History.
+    const cameraInfo='';
     const inspect=x.status==='failed'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-diagnose-task="${escapeHtml(x.taskId)}">Periksa penyebab</button>`:x.status==='unavailable'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-recover-task="${escapeHtml(x.taskId)}">Periksa lagi</button>`:'';
 
     const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
