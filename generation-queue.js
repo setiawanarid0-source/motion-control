@@ -84,7 +84,7 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
       const data={jobId,deviceId,createdAt,updatedAt:createdAt,stage:'queued',
         message:LABELS.queued,body:{
           workflow:String(body.workflow||'r15'),
-          mode:String(body.mode||'lite'),
+          mode:String(body.mode||'standard'),
           accountId:String(body.accountId||'auto'),
           diagnosticTaskId:String(body.diagnosticTaskId||''),
           diagnosticAccountId:String(body.diagnosticAccountId||'')
