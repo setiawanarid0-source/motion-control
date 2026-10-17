@@ -297,8 +297,11 @@ async function rhJson(pathname, apiKey, body, timeout = 30000) {
 async function accountStatus(apiKey) {
   const data = await rhJson('/uc/openapi/accountStatus', apiKey, { apikey: apiKey }, 20000);
   if (!data || Number(data.code) !== 0) throw new Error(data?.msg || 'API key tidak dapat divalidasi.');
+  const coins=data.data?.remainCoins;
+  if(coins==null||!Number.isFinite(Number(coins)))
+    throw new Error('Saldo akun belum dapat diverifikasi. Akun tidak akan dihapus.');
   return {
-    remainCoins: Number(data.data?.remainCoins || 0),
+    remainCoins: Number(coins),
     currentTaskCounts: Number(data.data?.currentTaskCounts || 0),
     currency: data.data?.currency || null,
     apiType: data.data?.apiType || null,
