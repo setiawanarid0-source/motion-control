@@ -2,6 +2,7 @@ const state = {
   view: 'create', workflow: 'r15', mode: 'lite', session: null, accounts: [],
   image: null, video: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false, historyFilter: 'all',
+  registeredTaskIds: new Set(),
 };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -27,8 +28,63 @@ function switchView(view){ state.view=view; $$('.view').forEach(v=>v.classList.t
 
 async function api(url, options={}){ const r=await fetch(url,{...options,headers:{'X-Vanta-Device':getDeviceId(),...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(options.headers||{})}}); let data={}; try{data=await r.json()}catch{} if(!r.ok){const error=new Error(data.error||`HTTP ${r.status}`);error.status=r.status;throw error;}return data; }
 
+async function claimBrowserHistory(){
+  const selected=history()
+    .filter(x=>x.taskId&&x.accountId)
+    .sort((a,b)=>(isActiveHistoryStatus(b.status)?1:0)-(isActiveHistoryStatus(a.status)?1:0))
+    .slice(0,30);
+  if(!selected.length)return true;
+  try{
+    const claimed=await api('/api/tasks/claim',{method:'POST',body:JSON.stringify({tasks:selected.map(x=>({
+      taskId:x.taskId,accountId:x.accountId,startedAt:x.startedAt,workflow:x.workflow,
+      mode:x.mode,video:x.video,outputKind:x.outputKind
+    }))})});
+    // When a legacy task is still active, never retire its account until the
+    // server has safely captured its credential for independent monitoring.
+    const activeCount=selected.filter(x=>isActiveHistoryStatus(x.status)).length;
+    if(activeCount&&claimed.restored<activeCount)return false;
+    return true;
+  }catch(error){
+    console.warn('History claim will retry',error.message);
+    return false;
+  }
+}
+async function syncServerHistory(){
+  try{
+    const data=await api('/api/tasks/history');
+    const remote=Array.isArray(data.tasks)?data.tasks:[];
+    state.registeredTaskIds=new Set(remote.map(x=>String(x.taskId)));
+    const locals=history();
+    const merged=new Map(locals.map(x=>[String(x.taskId),x]));
+    for(const task of remote){
+      const id=String(task.taskId),local=merged.get(id)||{};
+      const preserveSuccess=local.status==='success'&&task.status==='check_error';
+      merged.set(id,{...local,taskId:id,accountId:task.accountId,account:task.accountName,
+        workflow:task.workflow||local.workflow,mode:task.mode||local.mode,
+        outputKind:task.outputKind||local.outputKind,video:task.video||local.video,
+        startedAt:task.submittedAt||local.startedAt,
+        status:preserveSuccess?'success':task.status,
+        ...(preserveSuccess?{}:{finishedAt:task.finishedAt||local.finishedAt,
+          resultUrl:task.resultUrl||local.resultUrl,
+          referenceMaskUrl:task.referenceMaskUrl||local.referenceMaskUrl,
+          cameraQA:task.cameraQA||local.cameraQA,
+          error:task.error||null})});
+    }
+    setHistory([...merged.values()].sort((a,b)=>Date.parse(b.startedAt||0)-Date.parse(a.startedAt||0)));
+    if(state.view==='history')renderHistory();
+  }catch(error){console.warn('Server History synchronization pending',error.message);}
+}
 async function loadSession(){
-  state.session=await api('/api/session'); state.accounts=state.session.accounts||[]; renderAccountSelect(); updateGenerate(); await refreshAccounts();
+  state.session=await api('/api/session');
+  state.accounts=state.session.accounts||[];
+  renderAccountSelect();updateGenerate();
+  const legacySafe=await claimBrowserHistory();
+  await syncServerHistory();
+  if(legacySafe)await refreshAccounts();
+  else{
+    renderAccounts();updatePoolSummary();
+    toast('Pemantauan task lama sedang dipulihkan. Pembersihan akun ditunda.');
+  }
 }
 function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic</option>'+state.accounts.map(a=>`<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)}${a.canGenerate===false?' (status belum tersedia)':''}</option>`).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
 
@@ -48,7 +104,7 @@ async function refreshAccounts(){
     renderAccounts();
     updatePoolSummary();
     renderAccountSelect();
-    if(data.autoRemovedCount>0)toast(`${data.autoRemovedCount} akun dengan saldo di bawah 100 RH dihapus dari Account Pool.`);
+    if(data.autoRemovedCount>0)toast(`${data.autoRemovedCount} akun dikeluarkan dari pilihan generasi. Task lama tetap dipantau.`);
   }catch(e){
     toast(e.message,true);
   }finally{
@@ -120,7 +176,10 @@ async function generate(){
     saveReferenceMedia(String(data.taskId),state.image,state.video)
       .catch(()=>toast('Task berjalan, tetapi salinan referensi di browser ini tidak tersimpan.',true));
     if(data.referencesStored===false)
-      toast('Task sudah berjalan. Penyimpanan referensi di server belum lengkap; salinan browser tetap dicoba.',true);
+      toast('Task sudah diterima. Media referensi sedang diperiksa.',true);
+    if(data.trackingRegistered===false)
+      toast('Task sudah diterima RunningHub. Pemantauan sedang disambungkan kembali.',true);
+    else state.registeredTaskIds.add(String(data.taskId));
     startPolling();
   }catch(e){
     clearInterval(state.elapsedTimer);
@@ -160,6 +219,12 @@ async function pollTask(){
       $('#taskStatus').textContent=data.message?.includes('kamera')?'Memeriksa kamera':'Memproses';
       updateHistory(state.task.taskId,{status:'processing',error:null});
     }
+    if(data.state==='check_error'){
+      $('#taskStatus').textContent='Menghubungkan kembali…';
+      $('#taskEstimate').textContent='Status terbaru belum tersedia';
+      updateHistory(state.task.taskId,{status:'check_error',
+        error:'Pemantauan dilanjutkan otomatis saat RunningHub merespons.',runtimeMs:null});
+    }
     if(data.state==='failed') finishFailed(data.message||'Task gagal.',data.failure||null);
     if(data.state==='success'){
       const results=selectTaskOutputs(data.outputs, state.task.workflow.outputKind);
@@ -169,19 +234,10 @@ async function pollTask(){
     }
   }catch(e){
     console.warn('poll',e.message);
-    if(e.status===404){
-      const task=state.task;
-      clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
-      $('#taskStatus').textContent='Pemantauan terputus';
-      $('#taskEstimate').textContent='Status RunningHub belum diketahui';
-      updateHistory(task.taskId,{status:'unavailable',error:e.message,runtimeMs:null});
-      state.task=null;updateGenerate();
-      toast('Status task tidak bisa diperiksa. Buka History lalu tekan Periksa lagi. Jangan generate ulang.',true);
-    }else{
-      $('#taskStatus').textContent='Gagal mengecek status';
-      $('#taskEstimate').textContent='Mencoba lagi';
-      updateHistory(state.task.taskId,{status:'check_error',error:e.message,runtimeMs:null});
-    }
+    $('#taskStatus').textContent='Menghubungkan kembali…';
+    $('#taskEstimate').textContent='Memeriksa status secara otomatis';
+    updateHistory(state.task.taskId,{status:'check_error',
+      error:'Status terbaru belum tersedia. Pemeriksaan akan diulang.',runtimeMs:null});
   }
 }
 function selectTaskOutputs(outputs,kind){
@@ -303,7 +359,7 @@ function updateHistory(taskId,patch){
   setHistory(history().map(x=>x.taskId===taskId?{...x,...patch}:x));
   if(state.view==='history')renderHistory();
 }
-function isActiveHistoryStatus(status){return ['uploading','queued','running','processing','check_error'].includes(String(status||'').toLowerCase())}
+function isActiveHistoryStatus(status){return ['uploading','queued','running','processing','check_error','unavailable'].includes(String(status||'').toLowerCase())}
 function historyElapsed(item){
   if(item.runtimeMs!=null) return Number(item.runtimeMs)||0;
   if(['uploading','queued','running','processing'].includes(String(item.status||'').toLowerCase())&&item.startedAt){
@@ -318,8 +374,7 @@ function historyStatusLabel(status){
   if(s==='running'||s==='processing')return 'Memproses';
   if(s==='success')return 'Berhasil';
   if(s==='failed')return 'Gagal';
-  if(s==='unavailable')return 'Pemantauan terputus';
-  if(s==='check_error')return 'Gagal cek status';
+  if(s==='unavailable'||s==='check_error')return 'Menghubungkan kembali';
   return status||'—';
 }
 function historyStatusClass(status){
@@ -328,7 +383,7 @@ function historyStatusClass(status){
   if(s==='failed')return 'failed';
   if(s==='queued')return 'queued';
   if(s==='running'||s==='processing')return 'processing';
-  if(s==='unavailable'||s==='check_error')return 'failed';
+  if(s==='unavailable'||s==='check_error')return 'processing';
   return 'neutral';
 }
 function resolveHistoryAccountId(item){
@@ -388,7 +443,7 @@ function renderHistory(){
 
     const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
     const resolvedAccountId=resolveHistoryAccountId(x);
-    const accountStillAvailable=state.accounts.some(a=>a.id===resolvedAccountId);
+    const accountStillAvailable=state.accounts.some(a=>a.id===resolvedAccountId)||state.registeredTaskIds.has(String(x.taskId));
     const rawDownloadUrl=(accountStillAvailable&&x.taskId)
       ? `/api/tasks/${encodeURIComponent(x.taskId)}/download?accountId=${encodeURIComponent(resolvedAccountId)}&deviceId=${encodeURIComponent(getDeviceId())}`
       : (x.resultUrl||'');
@@ -422,13 +477,16 @@ async function pollHistoryTasks(){
     for(const item of active){
       if(state.task&&String(state.task.taskId)===String(item.taskId))continue;
       const accountId=resolveHistoryAccountId(item);
-      if(!accountId){updateHistory(item.taskId,{status:'unavailable',error:'Akun lama untuk task tidak ditemukan.',runtimeMs:null});continue;}
+      if(!accountId){updateHistory(item.taskId,{status:'check_error',error:'Menunggu pemulihan koneksi task.',runtimeMs:null});continue;}
       try{
         const data=await api(`/api/tasks/${item.taskId}`,{method:'POST',body:JSON.stringify({accountId})});
         if(data.state==='queued'){
           updateHistory(item.taskId,{accountId,status:'queued',error:null});
         }else if(data.state==='running'){
           updateHistory(item.taskId,{accountId,status:'processing',error:null});
+        }else if(data.state==='check_error'){
+          updateHistory(item.taskId,{accountId,status:'check_error',
+            error:'Memeriksa kembali status RunningHub secara otomatis.',runtimeMs:null});
         }else if(data.state==='failed'){
           updateHistory(item.taskId,{accountId,status:'failed',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),error:data.message||'Task gagal.',...(data.failure?{diagnosis:formatTaskDiagnosis(data.failure,data.message),diagnosisChecked:true}:{})});
         }else if(data.state==='success'){
@@ -438,8 +496,8 @@ async function pollHistoryTasks(){
         }
       }catch(e){
         console.warn('history poll',item.taskId,e.message);
-        if(e.status===404)updateHistory(item.taskId,{status:'unavailable',error:e.message,runtimeMs:null});
-        else updateHistory(item.taskId,{status:'check_error',error:'Gagal memeriksa status: '+e.message,runtimeMs:null});
+        updateHistory(item.taskId,{status:'check_error',
+          error:'Koneksi sementara terputus. Pemantauan akan diulang.',runtimeMs:null});
       }
     }
   }finally{
@@ -565,8 +623,9 @@ function bindHistoryActions(){
 function startHistoryMonitor(){
   clearInterval(state.historyPollTimer);
   clearInterval(state.historyClockTimer);
-  state.historyPollTimer=setInterval(pollHistoryTasks,5000);
+  state.historyPollTimer=setInterval(pollHistoryTasks,8000);
   state.historyClockTimer=setInterval(()=>{if(state.view==='history')renderHistory()},1000);
+  setInterval(syncServerHistory,30000);
   pollHistoryTasks();
   inspectRecentFailedTasks();
 }
