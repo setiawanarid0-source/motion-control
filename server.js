@@ -51,7 +51,7 @@ const workflowMeta = {
   current: {
     id: 'current',
     name: 'Current Workflow',
-    subtitle: 'KOH (1) · 30 FPS · 6 steps · CFG 1',
+    subtitle: 'KOH (1) · input 30 FPS · output 40 FPS · 6 steps · CFG 1',
     detail: 'Current Workflow dari file KOH (1) yang baru.'
   },
   koh1AntiObject: {
@@ -64,7 +64,7 @@ const workflowMeta = {
   r4Lab: {
     id: 'r4Lab',
     name: 'MotionFly R4 · Full Controlled Test',
-    subtitle: 'Eksperimen full generation · 35 FPS · 337 frame · 6 steps · CFG 1',
+    subtitle: 'Eksperimen · input 35 FPS · output 40 FPS · 337 frame · 6 steps · CFG 1',
     detail: 'Menggunakan dua upload serta mask dari tes SAM3 berhasil di History. Mask masih mentah (belum refinement offline). Wajib memakai reference image dan video kompensasi yang SAMA dengan tes SAM3. Memerlukan kredit RunningHub.',
     outputKind: 'video',
     experimental: true
