@@ -11,8 +11,9 @@ contains(server,'const account = taskAccount(req,req.params.taskId,accountId)', 
 contains(server,"app.get('/api/tasks/history'",'Server History must be retrievable');
 contains(server,"app.post('/api/tasks/claim'",'Existing History must be migrated before retirement');
 contains(server,'setInterval(()=>monitorRegisteredTasks()', 'Task monitoring must continue without a browser');
-contains(app,'const legacySafe=await claimBrowserHistory()', 'Claim previous jobs before pruning accounts');
-contains(app,'if(legacySafe)await refreshAccounts()', 'Do not prune an unclaimed active History');
+contains(server,'if(!accountId)return null;', 'Media lookup must require an account identifier');
+contains(app,'await refreshAccounts();', 'Account refresh cannot be blocked by slow legacy API queries');
+contains(app,'claimBrowserHistory().then(syncServerHistory)', 'Legacy task recovery must run without blocking the UI');
 contains(app,"if(data.state==='check_error')", 'Client retries uncertain statuses');
 contains(app,"state.registeredTaskIds.has(String(x.taskId))", 'Retired account video preview remains available');
 contains(registry,'if(!DONE.has(t.status))return true', 'Unfinished task never pruned');
