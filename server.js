@@ -11,6 +11,7 @@ import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from '.
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences } from './history-references.js';
 import {createTaskRegistry} from './task-registry.js';
+import {createGenerationQueue} from './generation-queue.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -98,6 +99,7 @@ function decrypt(token) {
 }
 
 const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
+const generationQueue=createGenerationQueue({dir:DATA_DIR,maxConcurrent:1});
 function registeredAccount(taskId,accountId=''){
   const item=taskRegistry.get(String(taskId));
   if(!item)return null;
@@ -380,7 +382,7 @@ async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
     return {videoName,imageName};
   }finally{await fs.promises.rm(dir,{recursive:true,force:true});}
 }
-async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, diagnosticAccount, diagnosticTaskId }) {
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
   const imageName = await uploadToRunningHub(apiKey, imageFile);
   const videoName = await uploadToRunningHub(apiKey, videoFile);
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
@@ -400,6 +402,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   if (mode === 'standard') payload.instanceType = 'default';
 
   const submittedAt = new Date().toISOString();
+  if(onBeforeSubmit)onBeforeSubmit();
   const data = await rhJson('/task/openapi/create', apiKey, payload, 60000);
   if (!data || Number(data.code) !== 0 || !data.data?.taskId) {
     const tips = data?.data?.promptTips;
@@ -510,10 +513,7 @@ app.post('/api/accounts/refresh',async(req,res)=>{
   catch(error){res.status(502).json({error:'Tidak dapat memperbarui Account Pool saat ini.'});}
 });
 
-app.post('/api/generate', upload.fields([
-  { name: 'referenceImage', maxCount: 1 },
-  { name: 'videoReference', maxCount: 1 },
-]), async (req, res) => {
+async function handleGeneration(req,res){
   const imageFile = req.files?.referenceImage?.[0];
   const videoFile = req.files?.videoReference?.[0];
   let preparedMotion=null;
@@ -547,8 +547,10 @@ app.post('/api/generate', upload.fields([
     const diagnosticAccount=workflowKey==='r4Lab'?accounts.find(a=>a.id===diagnosticAccountId):null;
     if(workflowKey==='r4Lab'&&!diagnosticAccount)throw new Error('Akun tes SAM3 sebelumnya tidak tersedia pada sesi ini.');
 
+    req.progress?.('analyzing');
     // Analyze driving-video camera before a paid RunningHub submission.
     const sourceCamera=workflowKey==='r15'?await analyzeSource(videoFile):null;
+    req.progress?.('checking_account');
     let candidates=[];
     if(requestedAccountId!=='auto'){
       const chosen=accounts.find(a=>a.id===requestedAccountId);
@@ -567,13 +569,18 @@ app.post('/api/generate', upload.fields([
         .map(x=>x.a);
       if(!candidates.length)throw new Error('Tidak ada akun dengan kredit minimal 100 RH untuk membuat task baru.');
     }
-    if(workflowKey==='r15')preparedMotion=await prepareMotionSource(videoFile);
+    if(workflowKey==='r15'){
+      req.progress?.('preparing_motion');
+      preparedMotion=await prepareMotionSource(videoFile);
+    }
     // Verify both input previews and encrypted task registry before a paid submission.
+    req.progress?.('saving_references');
     stagedReferences=await stageReferences(imageFile,videoFile);
     taskRegistry.ensureWritable();
     let lastError = null;
     for (const account of candidates) {
       try {
+        req.progress?.('uploading_inputs');
         const task = await createTask({
           apiKey: account.key,
           workflowId: LOCKED_WORKFLOW_ID,
@@ -583,6 +590,7 @@ app.post('/api/generate', upload.fields([
           videoFile:preparedMotion?.file||videoFile,
           diagnosticAccount,
           diagnosticTaskId,
+          onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting');},
         });
         // Task is accepted/paid: register it before any post-submit work.
         // A local persistence problem must NOT retry submission against another account.
@@ -634,7 +642,8 @@ app.post('/api/generate', upload.fields([
         });
       } catch (error) {
         lastError = error;
-        if (requestedAccountId !== 'auto') break;
+        // After a paid create request may have reached RunningHub, never try another account.
+        if (requestedAccountId !== 'auto'||req.submissionAttempted) break;
       }
     }
     throw lastError || new Error('Tidak ada akun RunningHub yang dapat membuat task.');
@@ -642,6 +651,85 @@ app.post('/api/generate', upload.fields([
     cleanup();
     res.status(400).json({ error: error.message || 'Generate gagal.' });
   }
+}
+
+// The browser receives an upload acknowledgement while heavy preflight runs in the
+// background. Files are persisted on the existing Railway volume before we respond.
+async function runQueuedGeneration(job,report){
+  const req={
+    headers:{'x-vanta-device':job.deviceId},
+    cookies:{},query:{},body:job.body,
+    files:{referenceImage:[job.image],videoReference:[job.video]},
+    progress:report,submissionAttempted:false
+  };
+  let result=null,httpStatus=200;
+  const response={
+    status(code){httpStatus=code;return this;},
+    json(data){result=data;return this;}
+  };
+  await handleGeneration(req,response);
+  if(result?.ok&&result.taskId){
+    generationQueue.update(job.jobId,{
+      stage:'accepted',message:'Task diterima RunningHub',
+      task:result,error:null
+    });
+    return;
+  }
+  if(req.submissionAttempted){
+    console.warn('RunningHub acceptance unconfirmed',job.jobId,
+      String(result?.error||'No acknowledgement').slice(0,160));
+    generationQueue.update(job.jobId,{
+      stage:'uncertain',
+      error:'Belum dapat memastikan apakah RunningHub menerima task. Periksa History sebelum mencoba lagi.'
+    });
+  }else{
+    generationQueue.update(job.jobId,{
+      stage:'error',error:result?.error||
+        (httpStatus===400?'Persiapan media belum berhasil.':'Tidak dapat memulai pemrosesan video.')
+    });
+  }
+}
+generationQueue.setExecutor(runQueuedGeneration);
+
+// Upload can be retried with the same request ID without creating a second task.
+app.post('/api/generate', upload.fields([
+  {name:'referenceImage',maxCount:1},
+  {name:'videoReference',maxCount:1}
+]), async(req,res)=>{
+  const image=req.files?.referenceImage?.[0],video=req.files?.videoReference?.[0];
+  try{
+    const deviceId=getDeviceId(req);
+    if(!deviceId)return res.status(400).json({error:'Sesi perangkat tidak tersedia. Muat ulang halaman.'});
+    if(!image||!video)return res.status(400).json({error:'Gambar dan video referensi wajib diunggah.'});
+    if(image.size>IMAGE_MAX||video.size>VIDEO_MAX)return res.status(413).json({error:'Gambar maksimal 20 MB dan video maksimal 100 MB.'});
+    if(!/^image\/(jpeg|png|webp)$/i.test(image.mimetype)||!/^video\/(mp4|quicktime|webm|x-matroska)$/i.test(video.mimetype))
+      return res.status(415).json({error:'Format gambar atau video tidak didukung.'});
+    const id=String(req.headers['x-vanta-request-id']||crypto.randomUUID());
+    if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id))
+      return res.status(400).json({error:'ID upload tidak valid.'});
+    const staged=await generationQueue.stage({jobId:id,deviceId,body:req.body||{},image,video});
+    res.setHeader('Cache-Control','no-store');
+    res.status(202).json(staged);
+  }catch(error){
+    console.error('Generation upload preflight failed',String(error.message||error).slice(0,190));
+    res.status(503).json({error:'Referensi belum berhasil diterima server. Coba lagi setelah koneksi stabil.'});
+  }finally{
+    for(const file of [image,video])if(file?.path)fs.promises.rm(file.path,{force:true}).catch(()=>{});
+  }
+});
+app.get('/api/generate/jobs', (req,res)=>{
+  const deviceId=getDeviceId(req);
+  if(!deviceId)return res.status(401).json({error:'Sesi perangkat tidak tersedia.'});
+  res.setHeader('Cache-Control','no-store');
+  res.json({jobs:generationQueue.latest(deviceId)});
+});
+app.get('/api/generate/jobs/:jobId', (req,res)=>{
+  const deviceId=getDeviceId(req);
+  if(!deviceId)return res.status(401).json({error:'Sesi perangkat tidak tersedia.'});
+  const job=generationQueue.owned(String(req.params.jobId),deviceId);
+  if(!job)return res.status(404).json({error:'Pengiriman tidak ditemukan.'});
+  res.setHeader('Cache-Control','no-store');
+  res.json(job);
 });
 
 async function resolveTaskVideoUrl(account, taskId) {
@@ -849,6 +937,8 @@ if (!fs.existsSync(GLOBAL_ACCOUNT_VAULT) && !startupGlobalAccounts.length && sta
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
+generationQueue.resume();
+setInterval(()=>generationQueue.purge(),60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
 setInterval(()=>monitorRegisteredTasks(),25000).unref();
 setTimeout(()=>monitorRegisteredTasks(),1200).unref();
