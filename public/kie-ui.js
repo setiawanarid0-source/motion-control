@@ -78,9 +78,9 @@
       b.setAttribute('aria-selected',String(on));
     });
     el('kieRefsWrap').classList.toggle('hidden',mode!=='edit');
-    if(mode==='create'&&el('kieRefs').files.length){
-      el('kieRefs').value='';showRefImages();
-    }
+    // Keep selected Edit references when switching tabs. Create never submits them.
+    // The input is a picker only: retained files live in selectedRefs.
+    el('kieRefs').value='';
     el('kiePrompt').placeholder=mode==='edit'?'Jelaskan perubahan yang diinginkan pada gambar referensi…':
       'Deskripsikan gambar yang ingin dibuat…';
     el('kieGenerateBtn').querySelector('span').textContent=mode==='edit'?'Edit Image':'Generate Image';
@@ -98,18 +98,52 @@
     el('kieModelHint').textContent=m.id==='wan'?'WAN 2.7 Pro mengatur aspect ratio otomatis. Biaya bergantung model dan resolusi.':
       'Parameter hanya ditampilkan bila didukung model. Kredit dipotong langsung oleh kie.ai.';
   }
-  let previewURLs=[];
+  // Native FileList is replaced every time mobile/desktop file pickers reopen.
+  // Keep each selected File independently so incremental picks never overwrite.
+  let selectedRefs=[];
+  const maxRefs=2;
+  const allowedRefTypes=new Set(['image/png','image/jpeg','image/webp']);
   function showRefImages(){
-    previewURLs.forEach(URL.revokeObjectURL);previewURLs=[];
-    const files=[...el('kieRefs').files];
     const root=el('kieRefsPreview');
-    if(files.length>2||files.some(f=>f.size>10*1024*1024||!['image/png','image/jpeg','image/webp'].includes(f.type))){
-      el('kieRefs').value='';root.innerHTML='';toast('Maksimal dua gambar, masing-masing 10 MB (JPG/PNG/WEBP).',true);return;
+    el('kieRefsCount').textContent=selectedRefs.length+' / '+maxRefs+' gambar';
+    el('kieRefsDrop').classList.toggle('hidden',selectedRefs.length===maxRefs);
+    root.innerHTML=selectedRefs.map((ref,index)=>
+      '<figure class="kie-ref-thumbnail"><img src="'+ref.url+'" alt="Referensi '+(index+1)+': '+esc(ref.file.name)+'">'+
+      '<figcaption><span class="kie-ref-number">Gambar '+(index+1)+'</span><span class="kie-ref-name" title="'+esc(ref.file.name)+'">'+esc(ref.file.name)+'</span></figcaption>'+
+      '<button class="kie-ref-remove" type="button" data-kie-ref-remove="'+index+'" aria-label="Hapus gambar '+(index+1)+'" title="Hapus gambar">'+
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'+
+      '</button></figure>').join('');
+  }
+  function addSelectedRefs(){
+    const picker=el('kieRefs');
+    const files=[...picker.files];
+    // Reset the chooser, not the selected images. This also allows picking the
+    // same file again after it has been removed, including on mobile browsers.
+    picker.value='';
+    if(kie.busy)return;
+    if(!files.length)return;
+    if(files.length>2||selectedRefs.length+files.length>maxRefs){
+      toast('Maksimal dua gambar. Hapus salah satu referensi sebelum menambah lagi.',true);
+      return;
     }
-    root.innerHTML=files.map((f,index)=>{
-      const url=URL.createObjectURL(f);previewURLs.push(url);
-      return '<div class="kie-ref-thumbnail"><img src="'+url+'" alt="Gambar referensi '+(index+1)+'"><small>Image '+(index+1)+'</small></div>';
-    }).join('');
+    if(files.some(f=>!allowedRefTypes.has(f.type)||f.size>10*1024*1024||!f.size)){
+      toast('Gunakan JPG, PNG, atau WEBP, maksimal 10 MB per gambar.',true);
+      return;
+    }
+    const duplicates=files.some((f,i)=>selectedRefs.some(x=>x.file.name===f.name&&x.file.size===f.size&&x.file.lastModified===f.lastModified)||
+      files.slice(0,i).some(x=>x.name===f.name&&x.size===f.size&&x.lastModified===f.lastModified));
+    if(duplicates){
+      toast('Gambar tersebut sudah dipilih. Hapus dahulu jika ingin menggantinya.',true);
+      return;
+    }
+    for(const file of files)selectedRefs.push({file,url:URL.createObjectURL(file)});
+    showRefImages();
+  }
+  function removeSelectedRef(index){
+    if(kie.busy||!Number.isInteger(index)||index<0||index>=selectedRefs.length)return;
+    const [removed]=selectedRefs.splice(index,1);
+    URL.revokeObjectURL(removed.url);
+    showRefImages();
   }
   function drawAccounts(){
     const select=el('kieAccountSelect'),current=select.value;
@@ -192,7 +226,7 @@
   async function submitImage(){
     if(kie.busy)return;
     if(!el('kiePrompt').value.trim())return toast('Tulis prompt terlebih dahulu.',true);
-    const files=[...el('kieRefs').files];
+    const files=kie.mode==='edit'?selectedRefs.map(ref=>ref.file):[];
     if(kie.mode==='edit'&&(!files.length||files.length>2))return toast('Edit memerlukan satu atau dua gambar referensi.',true);
     if(kie.mode==='create'&&files.length)return toast('Beralih ke Edit Image untuk menggunakan gambar referensi.',true);
     const fd=new FormData();
@@ -213,7 +247,15 @@
   document.querySelectorAll('[data-image-mode]').forEach(b=>b.onclick=()=>setImageMode(b.dataset.imageMode));
   document.querySelectorAll('[data-kie-filter]').forEach(b=>b.onclick=()=>{kie.filter=b.dataset.kieFilter;renderHistory();});
   el('kieModel').onchange=updateModel;
-  el('kieRefs').onchange=showRefImages;
+  el('kieRefs').onchange=addSelectedRefs;
+  el('kieRefsPreview').addEventListener('click',e=>{
+    const remove=e.target.closest('[data-kie-ref-remove]');
+    if(remove)removeSelectedRef(Number(remove.dataset.kieRefRemove));
+  });
+  window.addEventListener('pagehide',()=>{
+    for(const ref of selectedRefs)URL.revokeObjectURL(ref.url);
+    selectedRefs=[];
+  });
   el('kieGenerateBtn').onclick=submitImage;
   el('kieAddAccount').onclick=addAccount;
   el('kieRefreshAccounts').onclick=refreshAccounts;
