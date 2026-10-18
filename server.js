@@ -13,7 +13,7 @@ import { referenceAvailability, referenceFile, stageReferences, commitReferences
 import {createTaskRegistry} from './task-registry.js';
 import {createGenerationQueue} from './generation-queue.js';
 import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance.js';
-import {requiresFinal40,ensureFinal40,readFinal40,pruneFinal40} from './final-fps.js';
+import {readLegacyFinal40} from './legacy-final40-cache.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,7 +51,7 @@ const workflowMeta = {
   current: {
     id: 'current',
     name: 'Current Workflow',
-    subtitle: 'KOH (1) · input 30 FPS · output 40 FPS · 6 steps · CFG 1',
+    subtitle: 'KOH (1) · 40 FPS langsung dari workflow · 6 steps · CFG 1',
     detail: 'Current Workflow dari file KOH (1) yang baru.'
   },
   koh1AntiObject: {
@@ -64,8 +64,8 @@ const workflowMeta = {
   r4Lab: {
     id: 'r4Lab',
     name: 'MotionFly R4 · Full Controlled Test',
-    subtitle: 'Eksperimen · input 35 FPS · output 40 FPS · 337 frame · 6 steps · CFG 1',
-    detail: 'Menggunakan dua upload serta mask dari tes SAM3 berhasil di History. Mask masih mentah (belum refinement offline). Wajib memakai reference image dan video kompensasi yang SAMA dengan tes SAM3. Memerlukan kredit RunningHub.',
+    subtitle: 'Eksperimen · 40 FPS langsung dari workflow · 6 steps · CFG 1',
+    detail: 'Menggunakan dua upload serta mask dari tes SAM3 berhasil di History. Video driving dan mask diselaraskan pada 40 FPS di workflow. Wajib memakai reference image dan video kompensasi yang SAMA dengan tes SAM3. Memerlukan kredit RunningHub.',
     outputKind: 'video',
     experimental: true
   }
@@ -144,27 +144,10 @@ async function runningHubTaskState(taskId,account,accountId){
   const code=Number(data?.code);
   if(code===0&&Array.isArray(data?.data)&&data.data.length){
     const outputs=data.data.map(x=>({fileUrl:x.fileUrl,fileType:x.fileType,nodeId:x.nodeId??null})).filter(x=>x.fileUrl);
-    // Convert *only* the completed Current / R4 Full output to 40fps.
-    // Keep the original diffusion/pose/driving frame rate and duration untouched.
+    // RunningHub generates native 40 FPS frames within Current / R4 Full workflows.
+    // The website never runs an additional post-generation FPS conversion.
     const video=outputs.find(x=>String(x.nodeId)==='490')
       ||outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
-    const registered=taskRegistry.get(taskId);
-    if(video&&registered&&requiresFinal40(registered.workflow)){
-      const result=ensureFinal40(taskId,video.fileUrl);
-      if(result.state==='processing')return {
-        state:'finalizing',rawCode:code,providerStatus:'SUCCESS',
-        message:'RunningHub selesai · menyiapkan video 40 FPS'
-      };
-      if(result.state==='failed')return {
-        state:'success',rawCode:code,providerStatus:'SUCCESS',outputs,
-        deliveryNote:'RunningHub selesai. Konversi 40 FPS belum berhasil; video asli tersedia.',
-        message:'RunningHub selesai · video asli tersedia'
-      };
-      return {state:'success',rawCode:code,providerStatus:'SUCCESS',outputs:[{
-        nodeId:'490',fileType:'video/mp4',
-        fileUrl:'/api/tasks/'+encodeURIComponent(taskId)+'/preview?accountId='+encodeURIComponent(accountId)
-      }]};
-    }
     if(video){
       const qa=await cameraStatus(taskId,video.fileUrl,accountId);
       if(qa)return {...qa,rawCode:code};
@@ -899,7 +882,7 @@ app.get('/api/tasks/:taskId/preview', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
-  const final40=readFinal40(req.params.taskId);
+  const final40=readLegacyFinal40(req.params.taskId);
   if(final40){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(final40);}
   const corrected=readCorrected(req.params.taskId);
   if(corrected){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(corrected);}
@@ -940,7 +923,7 @@ app.get('/api/tasks/:taskId/download', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
-  const final40=readFinal40(req.params.taskId);
+  const final40=readLegacyFinal40(req.params.taskId);
   if(final40)return res.download(final40,'motion-'+req.params.taskId+'-40fps.mp4');
   const corrected=readCorrected(req.params.taskId);
   if(corrected)return res.download(corrected,'motion-'+req.params.taskId+'-camera-checked.mp4');
@@ -994,8 +977,6 @@ if (!fs.existsSync(GLOBAL_ACCOUNT_VAULT) && !startupGlobalAccounts.length && sta
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
-pruneFinal40().catch(error=>console.warn('Final FPS cleanup',error.message));
-setInterval(()=>pruneFinal40().catch(error=>console.warn('Final FPS cleanup',error.message)),60*60*1000).unref();
 generationQueue.resume();
 setInterval(()=>generationQueue.purge(),60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
