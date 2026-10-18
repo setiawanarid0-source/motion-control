@@ -109,7 +109,23 @@ async function loadSession(){
   claimBrowserHistory().then(syncServerHistory)
     .catch(error=>console.warn('Background History recovery',error.message));
 }
-function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic</option>'+state.accounts.map(a=>`<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)}${a.canGenerate===false?' (status belum tersedia)':''}</option>`).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
+function sortedRunningHubAccounts(){
+  const coins=a=>a.status&&!a.status.error&&a.status.remainCoins!=null&&Number.isFinite(Number(a.status.remainCoins))
+    ?Number(a.status.remainCoins):null;
+  return [...state.accounts].sort((a,b)=>{
+    const x=coins(a),y=coins(b);
+    if(x===null&&y!==null)return 1;
+    if(y===null&&x!==null)return -1;
+    if(x!==null&&y!==null&&x!==y)return y-x;
+    const recent=Date.parse(b.addedAt||'')-Date.parse(a.addedAt||'');
+    return Number.isFinite(recent)&&recent!==0?recent:String(a.id).localeCompare(String(b.id));
+  });
+}
+function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic · 100–600 RH</option>'+sortedRunningHubAccounts().map(a=>{
+  const credits=a.status&&!a.status.error?Number(a.status.remainCoins):NaN;
+  const reason=a.canGenerate===false?(Number.isFinite(credits)&&credits>600?' (di atas 600 RH)':Number.isFinite(credits)&&credits<100?' (di bawah 100 RH)':' (status belum tersedia)'):'';
+  return `<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)}${reason}</option>`;
+}).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
 
 async function refreshAccounts(){
   const refreshBtn=$('#refreshAccounts');
@@ -137,7 +153,7 @@ async function refreshAccounts(){
 function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada API key di pool.<br>Tambahkan akun pertama dari panel di sebelah kiri.</div>';return;}
-  root.innerHTML=state.accounts.map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ready?'Siap digunakan':ok&&Number(s.currentTaskCounts||0)>0?'Menunggu task berjalan selesai':ok?'Saldo tidak memenuhi syarat':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
+  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true,protectedBalance=ok&&Number(s.remainCoins)>600;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ready?'Siap digunakan':protectedBalance?'Saldo di atas 600 RH · tidak dipakai untuk generate':ok&&Number(s.currentTaskCounts||0)>0?'Menunggu task berjalan selesai':ok?'Saldo tidak memenuhi syarat':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
   $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{await api(`/api/accounts/${btn.dataset.delete}`,{method:'DELETE'});toast('Akun dihapus.');await loadSession();}catch(e){toast(e.message,true)}});
 }
 
