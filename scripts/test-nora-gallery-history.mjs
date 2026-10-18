@@ -54,7 +54,7 @@ function fakeEl(id){
       },
       addEventListener(event,fn){this.events[event]=fn;},
       querySelectorAll(){return[];},
-      querySelector(){return{addEventListener(){}};},
+      querySelector(selector){return selector==='[data-nora-close]'?{addEventListener(){}}:null;},
       focus(){},
     });
   }
