@@ -25,7 +25,28 @@ function machineLabel(mode){return mode==='plus'?'Plus':mode==='lite'?'Lite':'St
 function fileSize(n){ if(!n)return '0 B'; const u=['B','KB','MB','GB']; let i=0,v=n; while(v>=1024&&i<u.length-1){v/=1024;i++} return `${v.toFixed(i?1:0)} ${u[i]}`; }
 function escapeHtml(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 
-function switchView(view){ state.view=view; $$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`)); $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $('#pageTitle').textContent=view==='create'?'Motion Control':view==='history'?'History':'Account Pool'; $('#sidebar').classList.remove('open'); if(view==='history')renderHistory(); if(view==='accounts')refreshAccounts(); }
+function switchView(view){
+  if(!document.getElementById('view-'+view))return;
+  state.view=view;
+  $('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));
+  $('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  const titles={create:'Motion Control','image-create':'Image Generation',history:'Motion History',
+    'image-history':'Image History',accounts:'RunningHub Pool','kie-accounts':'kie.ai Pool'};
+  $('#pageTitle').textContent=titles[view]||'VANTA Studio';
+  const group=['create','image-create'].includes(view)?'create':
+    ['history','image-history'].includes(view)?'history':'accounts';
+  $('.nav-group').forEach(x=>{
+    const opened=x.dataset.group===group;
+    x.classList.toggle('expanded',opened);
+    x.querySelector('[data-nav-group]')?.setAttribute('aria-expanded',String(opened));
+  });
+  $('#sidebar').classList.remove('open');
+  $('#sidebarOverlay')?.classList.remove('visible');
+  document.body.classList.remove('sidebar-open');
+  if(view==='history')renderHistory();
+  if(view==='accounts')refreshAccounts();
+  window.vantaKieNavigation?.(view);
+}
 
 async function api(url, options={}){ const r=await fetch(url,{...options,headers:{'X-Vanta-Device':getDeviceId(),...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(options.headers||{})}}); let data={}; try{data=await r.json()}catch{} if(!r.ok){const error=new Error(data.error||`HTTP ${r.status}`);error.status=r.status;throw error;}return data; }
 
