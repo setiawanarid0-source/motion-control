@@ -14,7 +14,24 @@ const VALID_ID=/^\d{10,25}$/;
 const DURATION_LIMIT=3*24*60*60*1000;
 const MAX_INPUT=450*1024*1024;
 const running=new Map();
-const errors=new Map();
+const MAX_ATTEMPTS=2;
+const RETRY_AFTER_MS=120000;
+const statusFile=id=>path.join(ROOT,String(id),'status.json');
+function loadStatus(id){
+  try{
+    const data=JSON.parse(fs.readFileSync(statusFile(id),'utf8'));
+    return {attempts:Math.max(0,Number(data.attempts)||0),
+      lastAttempt:Math.max(0,Number(data.lastAttempt)||0)};
+  }catch{return {attempts:0,lastAttempt:0};}
+}
+function saveStatus(id,state){
+  const file=statusFile(id),tmp=file+'.tmp-'+process.pid;
+  fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
+  try{
+    fs.writeFileSync(tmp,JSON.stringify(state),{mode:0o600});
+    fs.renameSync(tmp,file);
+  }finally{fs.rmSync(tmp,{force:true});}
+}
 const infoFile=id=>path.join(ROOT,String(id),'result.mp4');
 const validId=id=>VALID_ID.test(String(id||''));
 const validUrl=raw=>{
@@ -50,11 +67,11 @@ export async function convertVideo40(input,destination){
   const tmp=destination+'.tmp-'+process.pid+'-'+Date.now()+'.mp4';
   try{
     await run('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
-      '-threads','2','-i',input,'-map','0:v:0','-map','0:a?',
-      '-vf','fps=40','-c:v','libx264','-threads:v','2',
-      '-preset','veryfast','-crf','18','-pix_fmt','yuv420p',
+      '-threads','1','-filter_threads','1','-i',input,'-map','0:v:0','-map','0:a?',
+      '-vf','fps=40','-c:v','libx264','-threads:v','1',
+      '-preset','ultrafast','-crf','20','-pix_fmt','yuv420p',
       '-c:a','copy','-movflags','+faststart','-f','mp4',tmp],
-    {timeout:15*60*1000,maxBuffer:65536});
+    {timeout:4*60*1000,maxBuffer:65536});
     const output=await probeVideo(tmp);
     if(Math.abs(output.fps-40)>.01)throw Error('Video akhir bukan 40 FPS');
     if(Math.abs(output.duration-original.duration)>.125)
@@ -87,22 +104,28 @@ async function process40(taskId,url){
     await convertVideo40(original,infoFile(taskId));
   }finally{await fs.promises.rm(original,{force:true}).catch(()=>{});}
 }
-// Non-blocking. Existing RunningHub task stays 'processing' until the final
-// 40-FPS downloadable/seekable video is ready; no second RunningHub call.
+// RunningHub output is already finished here. Never mislabel a local conversion
+// problem as a RunningHub task still generating, nor retry video conversion forever.
 export function ensureFinal40(taskId,url){
-  if(!validId(taskId))return {ready:false};
+  if(!validId(taskId))return {state:'failed'};
   const file=readFinal40(taskId);
-  if(file)return {ready:true,file};
-  if(running.has(taskId)||running.size>=1)return {ready:false};
-  const last=errors.get(taskId);
-  if(last&&Date.now()-last<90*1000)return {ready:false};
-  const job=process40(taskId,url).then(()=>{errors.delete(taskId);})
-    .catch(error=>{
-      errors.set(taskId,Date.now());
-      console.warn('Final 40fps conversion postponed',taskId,String(error.message||error).slice(0,170));
-    }).finally(()=>running.delete(taskId));
+  if(file)return {state:'ready',file};
+  const previous=loadStatus(taskId);
+  if(previous.attempts>=MAX_ATTEMPTS&&!running.has(taskId))return {state:'failed'};
+  if(running.has(taskId)||running.size>=1)return {state:'processing'};
+  if(previous.lastAttempt&&Date.now()-previous.lastAttempt<RETRY_AFTER_MS)
+    return {state:'processing'};
+  const attempts=previous.attempts+1;
+  saveStatus(taskId,{attempts,lastAttempt:Date.now()});
+  const job=process40(taskId,url).catch(error=>{
+    // Log FFmpeg's actual error, not just the command that exited nonzero.
+    const stderr=String(error.stderr||'').trim().slice(-700);
+    console.error('Final 40fps conversion failed',taskId,'attempt',attempts,
+      'code',error.code||error.signal||'unknown',
+      'reason',stderr||String(error.message||error).slice(0,230));
+  }).finally(()=>running.delete(taskId));
   running.set(taskId,job);
-  return {ready:false};
+  return {state:'processing'};
 }
 export async function pruneFinal40(){
   await fs.promises.mkdir(ROOT,{recursive:true,mode:0o700});
