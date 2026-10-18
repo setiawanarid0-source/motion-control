@@ -80,8 +80,9 @@ assert.ok(js.includes("const files=kie.mode==='edit'?selectedRefs.map(ref=>ref.f
   'Submitting edit must send the STORED references, not the latest FileList');
 assert.ok(js.includes("for(const f of files)fd.append('references',f,f.name);"),
   'Both selected Files must be attached to FormData in order');
-assert.ok(js.includes("if(mode==='create')el('kieRefs').value='';"),
-  'Create tab must leave retained Edit references intact');
+const setMode=js.slice(js.indexOf('function setImageMode('),js.indexOf('function updateModel()'));
+assert.ok(setMode.includes("el('kieRefs').value='';")&&!setMode.includes('selectedRefs=[]'),
+  'Switching tabs resets the file picker but preserves separately stored Edit references');
 assert.ok(js.includes('window.addEventListener(\'pagehide\''),
   'Unneeded previews must release object URLs when page is closed');
 assert.ok(js.includes("el('kieRefsPreview').addEventListener('click'"),
