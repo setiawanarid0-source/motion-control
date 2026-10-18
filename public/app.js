@@ -638,6 +638,7 @@ function renderHistory(){
   const items=allItems.filter(historyFilterMatches);
   const root=$('#historyBody');
   if(!items.length){
+    window.vantaGallery?.renderMotion([]);
     const message=allItems.length?'Tidak ada generation pada filter ini.':'Belum ada riwayat generation.';
     root.innerHTML=`<tr class="history-empty-row"><td colspan="7">${message}</td></tr>`;
     return;
@@ -682,6 +683,7 @@ function renderHistory(){
       <td data-label="Result">${result}</td>
     </tr>`;
   }).join('');
+  window.vantaGallery?.renderMotion(items);
   if(state.workflow==='r4Lab')refreshLabNotice();
 }
 async function pollHistoryTasks(){
@@ -837,12 +839,68 @@ function bindHistoryActions(){
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeHistoryPreview();});
 }
 
+window.vantaMotionGallery={
+  redraw(){renderHistory();},
+  videoUrl(item){
+    const id=String(item.taskId||'');
+    if(!/^\d{10,25}$/.test(id)||!item.resultUrl)return null;
+    const accountId=resolveHistoryAccountId(item);
+    if(!accountId)return item.resultUrl;
+    return '/api/tasks/'+encodeURIComponent(id)+'/preview?accountId='+
+      encodeURIComponent(accountId)+'&deviceId='+encodeURIComponent(getDeviceId());
+  },
+  referenceUrl(item){
+    const accountId=resolveHistoryAccountId(item);
+    if(!accountId||!item.taskId)return null;
+    return referenceLink(item.taskId,'image',accountId);
+  },
+  elapsed:historyElapsed,
+  formatDuration:fmtElapsed,
+  showReferences(item){
+    const accountId=resolveHistoryAccountId(item);
+    const preview=window.vantaMotionGallery.videoUrl(item);
+    const download=accountId?'/api/tasks/'+encodeURIComponent(item.taskId)+'/download?accountId='+
+      encodeURIComponent(accountId)+'&deviceId='+encodeURIComponent(getDeviceId()):item.resultUrl;
+    if(preview)openHistoryPreview(preview,item.taskId,download);
+  },
+  async refresh(){
+    await syncServerHistory();
+    await pollHistoryTasks();
+    renderHistory();
+  },
+  async diagnose(item){
+    await diagnoseFailedTask(item);
+    renderHistory();
+  },
+  retry(){
+    switchView('create');
+    toast('Pilih kembali gambar dan video referensi, lalu kirim task baru bila sudah siap.');
+  },
+  async remove(item){
+    const id=String(item.taskId||''),accountId=resolveHistoryAccountId(item);
+    if(!['success','failed'].includes(String(item.status||'')))throw Error('Task masih aktif.');
+    try{
+      await api('/api/tasks/'+encodeURIComponent(id)+'/history',{
+        method:'DELETE',body:JSON.stringify({accountId})});
+    }catch(error){
+      if(error.status!==404)throw error;
+      // Legacy task not in server vault: remove browser-only history.
+    }
+    setHistory(history().filter(x=>String(x.taskId)!==id));
+    state.registeredTaskIds.delete(id);
+    renderHistory();
+    toast('Hasil dihapus dari Motion History.');
+  }
+};
 function startHistoryMonitor(){
   clearInterval(state.historyPollTimer);
   clearInterval(state.historyClockTimer);
   state.historyPollTimer=setInterval(pollHistoryTasks,8000);
   state.historyClockTimer=setInterval(()=>{
-    if(state.view==='history')renderHistory();
+    if(state.view==='history'){
+      renderHistory();
+      window.vantaGallery?.refreshDurations();
+    }
     renderLiveTaskDuration();
   },1000);
   setInterval(syncServerHistory,30000);
@@ -857,6 +915,8 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{$$('.workflow-card').forEach(x=>x
 $$('.mode-card').forEach(b=>b.onclick=()=>{$$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode});
 initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');
 $('#generateBtn').onclick=generate;$('#refreshAccounts').onclick=refreshAccounts;
+$('#motionGalleryRefresh')?.addEventListener('click',()=>window.vantaMotionGallery.refresh()
+  .catch(error=>toast('Status Motion History belum tersedia: '+error.message,true)));
 const historyFilters=$('#historyFilters');
 if(historyFilters) historyFilters.onclick=e=>{
   const btn=e.target.closest('[data-history-filter]');
