@@ -70,7 +70,8 @@ async function syncServerHistory(){
           resultUrl:task.resultUrl||local.resultUrl,
           referenceMaskUrl:task.referenceMaskUrl||local.referenceMaskUrl,
           cameraQA:task.cameraQA||local.cameraQA,
-          error:task.error||null})});
+          error:task.error||null,statusDetail:task.statusDetail||null,
+          providerCode:task.providerCode??null,deliveryNote:task.deliveryNote||null})});
     }
     setHistory([...merged.values()].sort((a,b)=>Date.parse(b.startedAt||0)-Date.parse(a.startedAt||0)));
     if(state.view==='history')renderHistory();
@@ -354,13 +355,13 @@ async function pollTask(){
   if(!state.task)return;
   try{
     const data=await api(`/api/tasks/${state.task.taskId}`,{method:'POST',body:JSON.stringify({accountId:state.task.accountId})});
-    if(data.state==='queued'){
-      $('#taskStatus').textContent='Dalam antrean';
-      updateHistory(state.task.taskId,{status:'queued',error:null});
-    }
-    if(data.state==='running'){
-      $('#taskStatus').textContent=data.message?.includes('kamera')?'Memeriksa kamera':'Memproses';
-      updateHistory(state.task.taskId,{status:'processing',error:null});
+    if(data.state==='queued'||data.state==='running'||data.state==='finalizing'||data.state==='waiting_output'){
+      const labels={queued:'Antrean RunningHub',running:'Diproses RunningHub',
+        finalizing:'Menyiapkan video 40 FPS',waiting_output:'Menunggu hasil RunningHub'};
+      $('#taskStatus').textContent=labels[data.state];
+      $('#taskEstimate').textContent=data.message||'Status diperbarui dari RunningHub';
+      updateHistory(state.task.taskId,{status:data.state,error:null,statusDetail:data.message||null,
+        providerCode:data.rawCode??null});
     }
     if(data.state==='check_error'){
       $('#taskStatus').textContent='Menghubungkan kembali…';
@@ -373,6 +374,7 @@ async function pollTask(){
       const results=selectTaskOutputs(data.outputs, state.task.workflow.outputKind);
       if(!results.videoUrl) return finishFailed('RunningHub tidak mengembalikan video mask/generasi.');
       results.cameraQA=data.cameraQA||null;
+      results.deliveryNote=data.deliveryNote||null;
       finishSuccess(results);
     }
   }catch(e){
@@ -422,10 +424,10 @@ function finishSuccess(result){
   $('#referenceMaskWrap').classList.toggle('hidden',!diagnostic||!result.referenceMaskUrl);
   if(result.referenceMaskUrl){$('#referenceMaskPreview').src=result.referenceMaskUrl;$('#referenceMaskDownload').href=result.referenceMaskUrl;}
   $('#resultWorkflow').textContent=state.task.workflow.name;
-  updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:result.videoUrl,referenceMaskUrl:result.referenceMaskUrl,cameraQA:result.cameraQA||null});
+  updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:result.videoUrl,referenceMaskUrl:result.referenceMaskUrl,cameraQA:result.cameraQA||null,deliveryNote:result.deliveryNote||null});
   state.task=null;updateGenerate();
   $('#resultSection').scrollIntoView({behavior:'smooth',block:'start'});
-  toast(diagnostic?'Tes SAM3 selesai.':'Video berhasil dibuat.');
+  toast(result.deliveryNote|| (diagnostic?'Tes SAM3 selesai.':'Video berhasil dibuat.'));
 }
 
 const HISTORY_RETENTION_MS=3*24*60*60*1000;
@@ -506,7 +508,7 @@ function updateHistory(taskId,patch){
   setHistory(history().map(x=>x.taskId===taskId?{...x,...patch}:x));
   if(state.view==='history')renderHistory();
 }
-function isActiveHistoryStatus(status){return ['uploading','queued','running','processing','check_error','unavailable'].includes(String(status||'').toLowerCase())}
+function isActiveHistoryStatus(status){return ['uploading','queued','running','processing','waiting_output','finalizing','check_error','unavailable'].includes(String(status||'').toLowerCase())}
 function historyElapsed(item){
   if(item.runtimeMs!=null) return Number(item.runtimeMs)||0;
   if(['uploading','queued','running','processing'].includes(String(item.status||'').toLowerCase())&&item.startedAt){
@@ -517,11 +519,13 @@ function historyElapsed(item){
 }
 function historyStatusLabel(status){
   const s=String(status||'').toLowerCase();
-  if(s==='queued')return 'Dalam antrean';
-  if(s==='running'||s==='processing')return 'Memproses';
+  if(s==='queued')return 'Antrean RunningHub';
+  if(s==='running'||s==='processing')return 'Diproses RunningHub';
+  if(s==='waiting_output')return 'Menunggu hasil RunningHub';
+  if(s==='finalizing')return 'Menyiapkan video 40 FPS';
   if(s==='success')return 'Berhasil';
   if(s==='failed')return 'Gagal';
-  if(s==='unavailable'||s==='check_error')return 'Menghubungkan kembali';
+  if(s==='unavailable'||s==='check_error')return 'Status belum tersedia';
   return status||'—';
 }
 function historyStatusClass(status){
@@ -529,7 +533,7 @@ function historyStatusClass(status){
   if(s==='success')return 'success';
   if(s==='failed')return 'failed';
   if(s==='queued')return 'queued';
-  if(s==='running'||s==='processing')return 'processing';
+  if(['running','processing','finalizing','waiting_output'].includes(s))return 'processing';
   if(s==='unavailable'||s==='check_error')return 'processing';
   return 'neutral';
 }
@@ -563,7 +567,7 @@ function historyFilterMatches(item){
   const status=String(item?.status||'').toLowerCase();
   if(state.historyFilter==='success')return status==='success';
   if(state.historyFilter==='failed')return status==='failed';
-  if(state.historyFilter==='process')return ['uploading','queued','running','processing','unavailable','check_error'].includes(status);
+  if(state.historyFilter==='process')return ['uploading','queued','running','processing','waiting_output','finalizing','unavailable','check_error'].includes(status);
   return true;
 }
 function syncHistoryFilterUI(){
@@ -586,6 +590,10 @@ function renderHistory(){
     const diagnosis=x.diagnosis?`<small class="history-diagnosis">${escapeHtml(x.diagnosis)}</small>`:'';
     // Keep cameraQA on the task for audit, but never show raw internal classifications in History.
     const cameraInfo='';
+    const statusDetail=x.statusDetail&&isActiveHistoryStatus(x.status)?
+      `<small class="history-diagnosis">${escapeHtml(x.statusDetail)}</small>`:'';
+    const deliveryNote=x.deliveryNote?
+      `<small class="history-diagnosis">${escapeHtml(x.deliveryNote)}</small>`:'';
     const inspect=x.status==='failed'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-diagnose-task="${escapeHtml(x.taskId)}">Periksa penyebab</button>`:x.status==='unavailable'&&x.taskId?`<button type="button" class="history-diagnose-btn" data-recover-task="${escapeHtml(x.taskId)}">Periksa lagi</button>`:'';
 
     const safeUrl=x.resultUrl?escapeHtml(x.resultUrl):'';
@@ -609,7 +617,7 @@ function renderHistory(){
       <td data-label="Mode">${escapeHtml(machineLabel(x.mode))}</td>
       <td data-label="Account">${escapeHtml(x.account)}</td>
       <td data-label="Video" class="history-video-name">${escapeHtml(x.video)}</td>
-      <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}${diagnosis}${cameraInfo}${inspect}</td>
+      <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}${diagnosis}${statusDetail}${deliveryNote}${cameraInfo}${inspect}</td>
       <td data-label="Result">${result}</td>
     </tr>`;
   }).join('');
@@ -628,10 +636,9 @@ async function pollHistoryTasks(){
       if(!accountId){updateHistory(item.taskId,{status:'check_error',error:'Menunggu pemulihan koneksi task.',runtimeMs:null});continue;}
       try{
         const data=await api(`/api/tasks/${item.taskId}`,{method:'POST',body:JSON.stringify({accountId})});
-        if(data.state==='queued'){
-          updateHistory(item.taskId,{accountId,status:'queued',error:null});
-        }else if(data.state==='running'){
-          updateHistory(item.taskId,{accountId,status:'processing',error:null});
+        if(['queued','running','finalizing','waiting_output'].includes(data.state)){
+          updateHistory(item.taskId,{accountId,status:data.state,error:null,
+            statusDetail:data.message||null,providerCode:data.rawCode??null});
         }else if(data.state==='check_error'){
           updateHistory(item.taskId,{accountId,status:'check_error',
             error:'Memeriksa kembali status RunningHub secara otomatis.',runtimeMs:null});
@@ -640,7 +647,8 @@ async function pollHistoryTasks(){
         }else if(data.state==='success'){
           const outputs=selectTaskOutputs(data.outputs,item.outputKind);
           if(!outputs.videoUrl)throw new Error('Output video tidak tersedia pada respons RunningHub.');
-          updateHistory(item.taskId,{accountId,status:'success',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),resultUrl:outputs.videoUrl,referenceMaskUrl:outputs.referenceMaskUrl,cameraQA:data.cameraQA||null,error:null});
+          updateHistory(item.taskId,{accountId,status:'success',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),resultUrl:outputs.videoUrl,referenceMaskUrl:outputs.referenceMaskUrl,cameraQA:data.cameraQA||null,
+            deliveryNote:data.deliveryNote||null,statusDetail:null,error:null});
         }
       }catch(e){
         console.warn('history poll',item.taskId,e.message);
