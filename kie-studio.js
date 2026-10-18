@@ -12,11 +12,11 @@ export const KIE_MODELS=[
  {id:'qwen',name:'Qwen Image 3.0 Pro',create:'qwen3/pro-text-to-image',edit:'qwen3/pro-image-to-image',images:'image_urls',aspect:'image_size',resolution:'resolution',resolutions:['1K','2K']},
  {id:'wan',name:'WAN 2.7 Image Pro',create:'wan/2-7-image-pro',edit:'wan/2-7-image-pro',images:'input_urls',resolution:'resolution',resolutions:['1K','2K']},
  {id:'seedream',name:'Seedream 5.0 Pro',create:'seedream/5-pro-text-to-image',edit:'seedream/5-pro-image-to-image',images:'image_urls',aspect:'aspect_ratio',resolution:'quality',resolutions:['basic','high']},
- {id:'nano2',name:'Nano Banana 2',create:'nano-banana-2',edit:'nano-banana-2',images:'image_input',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K']},
- {id:'nanopro',name:'Nano Banana Pro',create:'nano-banana-pro',edit:'nano-banana-pro',images:'image_input',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K']},
+ {id:'nano2',name:'Nano Banana 2',create:'nano-banana-2',edit:'nano-banana-2',images:'image_input',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
+ {id:'nanopro',name:'Nano Banana Pro',create:'nano-banana-pro',edit:'nano-banana-pro',images:'image_input',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
  {id:'gpt2',name:'GPT Image 2',create:'gpt-image-2-text-to-image',edit:'gpt-image-2-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolutions:[]},
- {id:'flare',name:'GPT Image 2.5 Flare',create:'gpt-image-2-5-flare-text-to-image',edit:'gpt-image-2-5-flare-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K']},
- {id:'sunburst',name:'GPT Image 2.5 Sunburst',create:'gpt-image-2-5-sunburst-text-to-image',edit:'gpt-image-2-5-sunburst-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K']}
+ {id:'flare',name:'GPT Image 2.5 Flare',create:'gpt-image-2-5-flare-text-to-image',edit:'gpt-image-2-5-flare-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
+ {id:'sunburst',name:'GPT Image 2.5 Sunburst',create:'gpt-image-2-5-sunburst-text-to-image',edit:'gpt-image-2-5-sunburst-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']}
 ];
 const RATIOS=new Set(['auto','1:1','3:2','2:3','4:3','3:4','16:9','9:16','21:9']);
 const BASE='https://api.kie.ai';
