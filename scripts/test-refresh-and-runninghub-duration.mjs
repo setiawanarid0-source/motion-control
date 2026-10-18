@@ -77,7 +77,7 @@ assert.ok(render.includes('Dihitung sejak task diterima RunningHub'),'Duration m
 assert.ok(show.includes('renderLiveTaskDuration();'),'Live Task must draw its timer at accepted state');
 assert.ok(polling.includes('state.task.currentState=data.state;')&&polling.includes('renderLiveTaskDuration();'),
   'RunningHub provider status polling must control timing');
-assert.ok(monitor.includes('renderLiveTaskDuration();')&&monitor.includes("if(state.view==='history')renderHistory();"),
+assert.ok(monitor.includes('renderLiveTaskDuration();')&&monitor.includes("if(state.view==='history'){")&&monitor.includes('renderHistory();'),
   'Both timers must reuse existing 1 second clock');
 assert.equal((monitor.match(/setInterval/g)||[]).length,3,'Do not introduce additional polling timers');
 assert.ok(!original.includes('MAX_NEW_TASK_CREDITS=700'),'RunningHub 600 RH account policy stays in place');
