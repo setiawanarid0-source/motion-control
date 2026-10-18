@@ -40,7 +40,26 @@
     if(dx<0&&el('sidebar').classList.contains('open'))closeSidebar();
     else if(dx>0&&startX<24&&!el('sidebar').classList.contains('open'))openSidebar();
   },{passive:true});
+  function updateProviderIndicator(){
+    const kiePage=['image-create','image-history','kie-accounts'].includes(state.view);
+    const count=kiePage?kie.accounts.filter(a=>a.state==='ready'&&Number(a.credits)>0).length:
+      state.accounts.filter(a=>a.canGenerate===true).length;
+    const title=document.querySelector('.balance-pill span'),unit=el('poolReadyUnit');
+    if(title)title.textContent=kiePage?'kie.ai ready':'Pool ready';
+    if(unit)unit.textContent=kiePage?'akun kie.ai':'akun siap';
+    el('poolCredits').textContent=String(count);
+    if(kiePage){
+      el('poolCount').textContent=count+' akun kie.ai siap';
+      document.querySelector('.sidebar-foot small').textContent='kie.ai pool';
+      el('poolDot').classList.toggle('ready',count>0);
+    }else{
+      el('poolCount').textContent=count+' akun siap';
+      document.querySelector('.sidebar-foot small').textContent='RunningHub pool';
+      el('poolDot').classList.toggle('ready',count>0);
+    }
+  }
   window.vantaKieNavigation=view=>{
+    updateProviderIndicator();
     if(view==='image-create'){loadModels();loadAccounts();loadTasks();}
     if(view==='image-history')loadTasks();
     if(view==='kie-accounts')loadAccounts();
@@ -59,6 +78,9 @@
       b.setAttribute('aria-selected',String(on));
     });
     el('kieRefsWrap').classList.toggle('hidden',mode!=='edit');
+    if(mode==='create'&&el('kieRefs').files.length){
+      el('kieRefs').value='';showRefImages();
+    }
     el('kiePrompt').placeholder=mode==='edit'?'Jelaskan perubahan yang diinginkan pada gambar referensi…':
       'Deskripsikan gambar yang ingin dibuat…';
     el('kieGenerateBtn').querySelector('span').textContent=mode==='edit'?'Edit Image':'Generate Image';
@@ -94,6 +116,7 @@
     select.innerHTML='<option value="auto">Automatic · akun dengan kredit tersedia</option>'+
       kie.accounts.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' · '+(a.credits==null?'saldo —':fmt(a.credits)+' kredit')+'</option>').join('');
     if([...select.options].some(o=>o.value===current))select.value=current;
+    updateProviderIndicator();
     const list=el('kieAccountList');
     list.innerHTML=kie.accounts.length?kie.accounts.map(a=>
       '<article class="account-card"><div class="account-card-main"><div class="account-icon">K</div><div><strong>'+esc(a.name)+
