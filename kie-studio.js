@@ -78,7 +78,7 @@ export function createKieStudio({encrypt,decrypt,dir}){
       return publicAccount(account);
     const request=(async()=>{
       let balance=null,failed=false;
-      try{balance=await credits(account.key);}
+      try{balance=await credits(account.key,10000);}
       catch(error){failed=true;console.warn('kie.ai account balance refresh failed',id,cleanError(error));}
       // Read again after the network call: never resurrect a removed account, and
       // never overwrite another account added/refreshed while this call awaited.
@@ -112,8 +112,8 @@ export function createKieStudio({encrypt,decrypt,dir}){
       throw Error(String(resp.data?.msg||'kie.ai API error '+resp.status).slice(0,240));
     return resp.data.data;
   }
-  async function credits(key){
-    const n=Number(await kieRequest(key,'GET','/api/v1/chat/credit'));
+  async function credits(key,timeout=30000){
+    const n=Number(await kieRequest(key,'GET','/api/v1/chat/credit',undefined,timeout));
     if(!Number.isFinite(n)||n<0)throw Error('Saldo kie.ai tidak dapat diverifikasi.');
     return n;
   }
@@ -185,7 +185,7 @@ export function createKieStudio({encrypt,decrypt,dir}){
       const balance=await credits(key),accounts=getAccounts();
       const fingerprint=crypto.createHash('sha256').update(key).digest('hex');
       if(accounts.some(a=>a.fingerprint===fingerprint))return res.status(409).json({error:'API key sudah ada.'});
-      const nextIndex=Math.max(0,...accounts.map(a=>Number((String(a.name||'').match(/^Account (\\d+)$/)||[])[1])||0))+1;
+      const nextIndex=Math.max(0,...accounts.map(a=>Number((String(a.name||'').match(/^Account (\d+)$/)||[])[1])||0))+1;
       const account={id:crypto.randomUUID(),name:'Account '+String(nextIndex).padStart(2,'0'),
         key,fingerprint,credits:balance,state:'ready',lastCheckedAt:new Date().toISOString(),
         lastAttemptAt:new Date().toISOString()};
