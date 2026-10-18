@@ -145,15 +145,21 @@
     URL.revokeObjectURL(removed.url);
     showRefImages();
   }
+  function accountDisplayName(a){
+    // Distinguish legacy accounts with the same display name without
+    // renaming API keys, account IDs or historical task ownership.
+    const duplicates=kie.accounts.filter(x=>x.name===a.name).length;
+    return duplicates>1?a.name+' · '+String(a.id).slice(0,6):a.name;
+  }
   function drawAccounts(){
     const select=el('kieAccountSelect'),current=select.value;
     select.innerHTML='<option value="auto">Automatic · akun dengan kredit tersedia</option>'+
-      kie.accounts.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' · '+(a.credits==null?'saldo —':fmt(a.credits)+' kredit')+'</option>').join('');
+      kie.accounts.map(a=>'<option value="'+esc(a.id)+'">'+esc(accountDisplayName(a))+' · '+(a.credits==null?'saldo —':fmt(a.credits)+' kredit')+'</option>').join('');
     if([...select.options].some(o=>o.value===current))select.value=current;
     updateProviderIndicator();
     const list=el('kieAccountList');
     list.innerHTML=kie.accounts.length?kie.accounts.map(a=>
-      '<article class="account-card"><div class="account-card-main"><div class="account-icon">K</div><div><strong>'+esc(a.name)+
+      '<article class="account-card"><div class="account-card-main"><div class="account-icon">K</div><div><strong>'+esc(accountDisplayName(a))+
       '</strong><small>'+(a.state==='unavailable'?'Status belum tersedia':Number(a.credits)>0?'Siap digunakan':'Kredit habis')+
       '</small></div></div><div class="account-metrics"><span>'+esc(a.credits==null?'—':fmt(a.credits))+' kredit</span><span>kie.ai</span></div>'+
       '<button class="delete-account" type="button" data-kie-remove="'+esc(a.id)+'">Remove</button></article>').join(''):
@@ -167,7 +173,12 @@
       kie.accounts=d.accounts||[];
       kie.lastAccountsSync=Date.now();
       drawAccounts();
-    }catch(e){console.warn('kie.ai account sync',e.message);}
+    }catch(e){
+      console.warn('kie.ai account sync',e.message);
+      // Never present stale balances as current after a failed refresh request.
+      kie.accounts=kie.accounts.map(a=>({...a,credits:null,state:'unavailable'}));
+      drawAccounts();
+    }
     finally{kie.accountPolling=false;}
   }
   async function refreshAccounts(){
