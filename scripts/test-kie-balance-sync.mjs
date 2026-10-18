@@ -29,7 +29,9 @@ const axios=async request=>{
 const context={getAccounts:()=>structuredClone(stored),save:(file,key,items)=>{
   assert.equal(file,'accounts.enc');assert.equal(key,'accounts');
   stored=structuredClone(items);},accountsFile:'accounts.enc',axios,BASE:'https://api.kie.ai',
-  console:{warn(){}},Date,Number,Math,Promise,Map,cleanError:e=>String(e.message)};
+  console:{warn(){}},Date,Number,Math,Promise,Map,
+  balanceProbes:new Map(),AUTO_BALANCE_MAX_AGE_MS:30000,
+  cleanError:e=>String(e.message)};
 vm.createContext(context);
 vm.runInContext(server.slice(coreStart,coreEnd)+'\nthis.sync={refreshBalances,refreshAccountBalance,publicAccount};',context);
 
