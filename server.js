@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { extractTaskFailure } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
+import {MAX_NEW_TASK_CREDITS,canGenerateWithAccount,rankGenerationAccounts} from './runninghub-account-priority.js';
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences } from './history-references.js';
 import {createTaskRegistry} from './task-registry.js';
@@ -296,7 +297,7 @@ function publicAccount(account, status = null) {
     addedAt: account.addedAt,
     lastUsedAt: account.lastUsedAt || null,
     status,
-    canGenerate: canStartNewTask(status, MIN_POOL_CREDITS),
+    canGenerate: canGenerateWithAccount(status, MIN_POOL_CREDITS, MAX_NEW_TASK_CREDITS),
   };
 }
 
@@ -577,18 +578,17 @@ async function handleGeneration(req,res){
       const chosen=accounts.find(a=>a.id===requestedAccountId);
       if(!chosen)throw new Error('Akun yang dipilih tidak ditemukan.');
       const status=await accountStatus(chosen.key);
-      if(!canStartNewTask(status,MIN_POOL_CREDITS))
-        throw new Error('Saldo akun di bawah 100 RH. Perbarui Account Pool untuk menghapus akun tersebut.');
+      if(!canGenerateWithAccount(status,MIN_POOL_CREDITS,MAX_NEW_TASK_CREDITS))
+        throw new Error('Akun ini tidak dapat digunakan. Generasi RunningHub hanya memakai akun dengan saldo 100–600 RH.');
       candidates=[chosen];
     }else{
-      const ranked=await Promise.all(accounts.map(async a=>{
-        try{return {a,s:await accountStatus(a.key)};}
-        catch(error){return {a,s:{error:error.message}};}
+      const checked=await Promise.all(accounts.map(async account=>{
+        try{return {account,status:await accountStatus(account.key)};}
+        catch(error){return {account,status:{error:error.message}};}
       }));
-      candidates=ranked.filter(x=>canStartNewTask(x.s,MIN_POOL_CREDITS))
-        .sort((x,y)=>(x.s.currentTaskCounts-y.s.currentTaskCounts)||(y.s.remainCoins-x.s.remainCoins))
-        .map(x=>x.a);
-      if(!candidates.length)throw new Error('Tidak ada akun dengan kredit minimal 100 RH untuk membuat task baru.');
+      candidates=rankGenerationAccounts(checked,MIN_POOL_CREDITS,MAX_NEW_TASK_CREDITS)
+        .map(x=>x.account);
+      if(!candidates.length)throw new Error('Tidak ada akun RunningHub yang siap dengan saldo 100–600 RH. Akun di atas 600 RH tidak akan digunakan.');
     }
     if(workflowKey==='r15'){
       req.progress?.('preparing_motion');
