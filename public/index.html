@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20261011-auto-reference-v3" />
+  <link rel="stylesheet" href="/styles.css?v=20261018-image-dashboard-v1" />
 </head>
 <body>
   <div class="app-shell">
@@ -17,10 +17,29 @@
         <div class="brand-mark">V</div>
         <div class="brand-copy"><strong>VANTA</strong><span>motion studio</span></div>
       </div>
-      <nav class="nav-list" aria-label="Main navigation">
-        <button class="nav-item active" data-view="create"><span class="nav-icon">◈</span><span>Create</span></button>
-        <button class="nav-item" data-view="history"><span class="nav-icon">↺</span><span>History</span></button>
-        <button class="nav-item" data-view="accounts"><span class="nav-icon">◎</span><span>Account Pool</span></button>
+      <button id="sidebarClose" class="sidebar-close" type="button" aria-label="Tutup menu">×</button>
+      <nav class="nav-list vanta-nav" aria-label="Main navigation">
+        <div class="nav-group expanded" data-group="create">
+          <button class="nav-category" type="button" data-nav-group="create" aria-expanded="true"><span class="nav-icon"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18"/><path d="M5 5l2 2M17 17l2 2"/></svg></span><span>Create</span><span class="nav-chevron">⌄</span></button>
+          <div class="nav-submenu">
+            <button class="nav-item active" data-view="create" type="button"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3V9Z"/></svg><span>Motion Control</span></button>
+            <button class="nav-item" data-view="image-create" type="button"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg><span>Image Generation</span></button>
+          </div>
+        </div>
+        <div class="nav-group" data-group="history">
+          <button class="nav-category" type="button" data-nav-group="history" aria-expanded="false"><span class="nav-icon"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></span><span>History</span><span class="nav-chevron">⌄</span></button>
+          <div class="nav-submenu">
+            <button class="nav-item" data-view="history" type="button"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3V9Z"/></svg><span>Motion Control</span></button>
+            <button class="nav-item" data-view="image-history" type="button"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg><span>Image Generation</span></button>
+          </div>
+        </div>
+        <div class="nav-group" data-group="accounts">
+          <button class="nav-category" type="button" data-nav-group="accounts" aria-expanded="false"><span class="nav-icon"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M5.5 16c.5-2 6.5-2 7 0M15 9h4M15 13h4"/></svg></span><span>Account Pool</span><span class="nav-chevron">⌄</span></button>
+          <div class="nav-submenu">
+            <button class="nav-item" data-view="accounts" type="button"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3V9Z"/></svg><span>RunningHub</span></button>
+            <button class="nav-item" data-view="kie-accounts" type="button"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg><span>kie.ai</span></button>
+          </div>
+        </div>
       </nav>
       <div class="sidebar-foot">
         <span class="status-dot" id="poolDot"></span>
@@ -133,6 +152,45 @@
         </section>
       </section>
 
+      <section id="view-image-create" class="view">
+        <div class="image-hero">
+          <div class="eyebrow">KIE.AI / IMAGE STUDIO</div>
+          <h2>Image Generation<span class="image-hero-accent">.</span></h2>
+          <p>Delapan model pilihan. Buat gambar baru atau edit menggunakan maksimal dua gambar referensi.</p>
+        </div>
+        <div class="image-mode-tabs" role="tablist" aria-label="Image generation mode">
+          <button type="button" class="image-mode-tab selected" data-image-mode="create" role="tab" aria-selected="true"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18"/><path d="M5 5l2 2M17 17l2 2"/></svg> Create Image</button>
+          <button type="button" class="image-mode-tab" data-image-mode="edit" role="tab" aria-selected="false"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg> Edit Image</button>
+        </div>
+        <div class="image-workspace">
+          <section class="panel image-config-panel">
+            <label class="field-label" for="kieModel">MODEL GAMBAR</label>
+            <select id="kieModel" aria-label="Pilih model gambar"><option>Memuat model kie.ai…</option></select>
+            <div id="kieRefsWrap" class="hidden">
+              <label class="field-label" for="kieRefs">GAMBAR REFERENSI (MAKS. 2)</label>
+              <label class="kie-file-drop" for="kieRefs"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg><strong>Tambah gambar referensi</strong><small>1–2 gambar · JPG, PNG, WEBP · maks. 10 MB/file</small></label>
+              <input id="kieRefs" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+              <div id="kieRefsPreview" class="kie-refs-preview" aria-live="polite"></div>
+            </div>
+            <label class="field-label" for="kiePrompt">PROMPT</label>
+            <textarea id="kiePrompt" class="kie-textarea" maxlength="12000" placeholder="Jelaskan gambar yang ingin dibuat atau perubahan yang ingin dilakukan..." rows="6"></textarea>
+            <div class="kie-options-grid">
+              <label class="kie-field" id="kieAspectField"><span class="field-label">ASPECT RATIO</span><select id="kieAspect"><option value="1:1">1:1</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="3:4">3:4</option><option value="4:3">4:3</option><option value="2:3">2:3</option><option value="3:2">3:2</option><option value="21:9">21:9</option><option value="auto">Auto</option></select></label>
+              <label class="kie-field" id="kieResolutionField"><span class="field-label" id="kieResolutionLabel">RESOLUSI</span><select id="kieResolution"><option value="1K">1K</option><option value="2K">2K</option></select></label>
+            </div>
+            <label class="field-label" for="kieAccountSelect">AKUN KIE.AI</label>
+            <select id="kieAccountSelect"><option value="auto">Automatic · pilih akun dengan kredit tersedia</option></select>
+            <div class="account-hint" id="kieModelHint">Biaya bergantung model; kredit akan dipotong langsung oleh kie.ai.</div>
+            <button type="button" class="generate-btn" id="kieGenerateBtn"><span>Generate Image</span><span class="btn-arrow">↗</span></button>
+          </section>
+          <aside class="panel image-preview-panel">
+            <div class="panel-head"><span>↗</span><div><h3>Output preview</h3><p id="kieResultState">Belum ada generasi</p></div></div>
+            <div class="image-stage" id="kieImageStage"><svg class="vanta-nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg><p>Hasil gambar akan muncul di sini.</p></div>
+            <div id="kieResultActions" class="hidden"><a id="kieDownload" class="download-btn" target="_blank" rel="noopener noreferrer" download href="#">Buka / Download Gambar</a></div>
+          </aside>
+        </div>
+      </section>
+
       <section id="view-history" class="view">
         <div class="section-title history-title"><div><div class="eyebrow">ARCHIVE</div><h2>Generation history</h2><p>Pantau status, waktu proses, dan hasil setiap generation.</p></div></div>
         <div class="history-filters" id="historyFilters" aria-label="Filter generation history">
@@ -143,6 +201,17 @@
         </div>
         <div class="history-retention-note" role="note"><span aria-hidden="true">◷</span><p>Riwayat disimpan 3 hari. Referensi generasi baru tersedia di server dan browser selama masa penyimpanan.</p></div>
         <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+      </section>
+
+      <section id="view-image-history" class="view">
+        <div class="section-title"><div><div class="eyebrow">KIE.AI / ARCHIVE</div><h2>Image History</h2><p>Riwayat khusus gambar kie.ai, terpisah dari task Motion Control. Disimpan selama 3 hari.</p></div><button type="button" class="ghost-btn" id="kieRefreshHistory">↻ Refresh</button></div>
+        <div class="history-filters" id="kieHistoryFilters" aria-label="Filter image history">
+          <button type="button" class="history-filter active" data-kie-filter="all">Semua</button>
+          <button type="button" class="history-filter" data-kie-filter="success">Berhasil</button>
+          <button type="button" class="history-filter" data-kie-filter="failed">Gagal</button>
+          <button type="button" class="history-filter" data-kie-filter="process">Proses</button>
+        </div>
+        <div id="kieHistoryGrid" class="kie-history-grid"><div class="empty-state">Belum ada generasi gambar.</div></div>
       </section>
 
       <section id="view-accounts" class="view">
@@ -158,14 +227,24 @@
           <div class="account-list" id="accountList"></div>
         </div>
       </section>
+      <section id="view-kie-accounts" class="view">
+        <div class="section-title account-pool-title"><div><div class="eyebrow">KIE.AI / PRIVATE STUDIO</div><h2>kie.ai Account Pool</h2><p>Satu akun, satu API key, seluruh model gambar pilihan. Tidak terhubung dengan kredit RunningHub.</p></div>
+        <button type="button" class="ghost-btn refresh-account-btn" id="kieRefreshAccounts" title="Refresh saldo kie.ai" aria-label="Refresh saldo kie.ai">↻</button></div>
+        <div class="account-layout">
+          <div class="panel add-account">
+            <h3>Add kie.ai API key</h3>
+            <label class="field-label" for="kieKeyInput">API KEY</label>
+            <input id="kieKeyInput" class="text-input" type="password" autocomplete="off" placeholder="Paste kie.ai API key">
+            <button id="kieAddAccount" class="generate-btn compact" type="button">Add to pool</button>
+            <p class="form-note">API key diverifikasi lewat saldo kie.ai sebelum disimpan secara terenkripsi. Akun tidak dihapus otomatis ketika kredit habis.</p>
+          </div>
+          <div class="account-list" id="kieAccountList"><div class="empty-state">Belum ada akun kie.ai.</div></div>
+        </div>
+      </section>
     </main>
   </div>
 
-  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
-    <button class="nav-item mobile-nav-item active" data-view="create"><span class="nav-icon">◈</span><span>Create</span></button>
-    <button class="nav-item mobile-nav-item" data-view="history"><span class="nav-icon">↺</span><span>History</span></button>
-    <button class="nav-item mobile-nav-item" data-view="accounts"><span class="nav-icon">◎</span><span>Accounts</span></button>
-  </nav>
+  <button class="sidebar-overlay" id="sidebarOverlay" type="button" aria-label="Tutup navigasi" tabindex="-1"></button>
 
   <div id="historyPreviewModal" class="preview-modal hidden" role="dialog" aria-modal="true" aria-labelledby="historyPreviewTitle">
     <div class="preview-backdrop" data-close-preview></div>
@@ -210,6 +289,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261018-rh-state-fix" defer></script>
+  <script src="/app.js?v=20261018-image-dashboard-v1" defer></script>
 </body>
 </html>
