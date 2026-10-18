@@ -71,18 +71,18 @@
   "33": {
     "inputs": {
       "video": "driver_compensated_aligned_337f_35fps.mp4",
-      "force_rate": 35,
+      "force_rate": 40,
       "force_size": "Disabled",
       "custom_width": 0,
       "custom_height": 0,
-      "frame_load_cap": 337,
+      "frame_load_cap": 0,
       "skip_first_frames": 0,
       "select_every_nth": 1,
       "format": "Cosmos"
     },
     "class_type": "VHS_LoadVideo",
     "_meta": {
-      "title": "VIDEO GERAKAN - 30 FPS"
+      "title": "VIDEO GERAKAN - 40 FPS"
     }
   },
   "74": {
@@ -480,7 +480,7 @@
         0
       ],
       "loop_count": 0,
-      "filename_prefix": "R4_Full_ControlledLab_337f_35fps",
+      "filename_prefix": "R4_Full_ControlledLab_40fps",
       "format": "video/h264-mp4",
       "pix_fmt": "yuv420p",
       "crf": 14,
@@ -500,7 +500,7 @@
     },
     "class_type": "VHS_VideoCombine",
     "_meta": {
-      "title": "FINAL HD OUTPUT - 30 FPS"
+      "title": "FINAL HD OUTPUT - 40 FPS"
     }
   },
   "500": {
@@ -516,17 +516,17 @@
     "class_type": "VHS_LoadVideo",
     "inputs": {
       "video": "R4_SAM3_Driving_Mask_Refined_35fps.mp4",
-      "force_rate": 35,
+      "force_rate": 40,
       "force_size": "Disabled",
       "custom_width": 0,
       "custom_height": 0,
-      "frame_load_cap": 337,
+      "frame_load_cap": 0,
       "skip_first_frames": 0,
       "select_every_nth": 1,
       "format": "Cosmos"
     },
     "_meta": {
-      "title": "INTERNAL R4 refined driving RGB mask — 337 frames"
+      "title": "INTERNAL R4 refined driving RGB mask — 40 FPS"
     }
   }
 }
