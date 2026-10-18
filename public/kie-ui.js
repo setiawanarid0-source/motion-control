@@ -198,25 +198,43 @@
     }
   }
   function renderHistory(){
-    document.querySelectorAll('[data-kie-filter]').forEach(b=>b.classList.toggle('active',b.dataset.kieFilter===kie.filter));
-    const tasks=kie.tasks.filter(t=>kie.filter==='all'||kie.filter==='process'&&active(t.status)||
-      kie.filter==='success'&&t.status==='success'||kie.filter==='failed'&&t.status==='failed');
-    el('kieHistoryGrid').innerHTML=tasks.length?tasks.map(t=>{
-      const img=t.resultUrls?.[0];
-      return '<article class="panel kie-history-card"><div class="kie-history-cover">'+(img?
-        '<img loading="lazy" src="'+esc(img)+'" alt="Hasil gambar">':(t.references?.[0]?
-        '<img loading="lazy" src="'+esc(t.references[0])+'" alt="Gambar referensi">':
-        '<div class="kie-history-empty">◇</div>'))+'</div>'+
-        '<div class="kie-history-info"><span class="kie-task-badge '+esc(t.status)+'">'+esc(badge(t.status))+'</span>'+
-        '<h3>'+esc(t.modelName)+'</h3><p>'+esc(t.mode==='edit'?'Edit Image':'Create Image')+' · '+esc(t.accountName)+'</p>'+
-        '<p class="kie-task-prompt">'+esc(t.prompt)+'</p>'+
-        '<small>'+esc(new Date(t.createdAt).toLocaleString('id-ID'))+'</small>'+
-        (t.error?'<p class="kie-error">'+esc(t.error)+'</p>':'')+
-        (img?'<a class="download-btn kie-history-download" href="'+esc(img)+'" target="_blank" rel="noopener noreferrer">Preview / Download</a>':'')+
-        (t.status==='success'&&t.creditsConsumed!=null?'<small>Terpakai: '+fmt(t.creditsConsumed)+' kredit</small>':'')+
-        '</div></article>';
-    }).join(''):'<div class="empty-state">Tidak ada generasi gambar untuk filter ini.</div>';
+    document.querySelectorAll('[data-kie-filter]').forEach(b=>
+      b.classList.toggle('active',b.dataset.kieFilter===kie.filter));
+    const tasks=kie.tasks.filter(t=>kie.filter==='all'||
+      kie.filter==='process'&&active(t.status)||
+      kie.filter==='success'&&t.status==='success'||
+      kie.filter==='failed'&&t.status==='failed');
+    if(window.vantaGallery)window.vantaGallery.renderImage(tasks);
+    else el('kieHistoryGrid').innerHTML='<div class="nora-gallery-empty"><strong>Memuat galeri…</strong></div>';
   }
+  window.vantaImageGallery={
+    redraw:renderHistory,
+    refresh:loadTasks,
+    async reuse(task){
+      await loadModels();
+      switchView('image-create');
+      setImageMode(task.mode==='edit'?'edit':'create');
+      if(kie.models.some(m=>m.id===task.model))el('kieModel').value=task.model;
+      updateModel();
+      el('kiePrompt').value=task.prompt||'';
+      // History cannot silently send a previous reference again: require
+      // deliberate review and fresh uploads before creating a new paid task.
+      for(const ref of selectedRefs)URL.revokeObjectURL(ref.url);
+      selectedRefs=[];el('kieRefs').value='';showRefImages();
+      if(task.mode==='edit')toast('Prompt disalin. Pilih kembali maksimal dua gambar referensi sebelum generate.');
+      else toast('Prompt dan model dipulihkan. Periksa sebelum generate.');
+      el('kiePrompt').focus();
+    },
+    retry(task){return window.vantaImageGallery.reuse(task);},
+    async remove(task){
+      if(!['success','failed'].includes(task.status))throw Error('Task masih berjalan.');
+      await api('/api/kie/tasks/'+encodeURIComponent(task.id),{method:'DELETE'});
+      if(kie.selectedTask===task.id)kie.selectedTask=null;
+      kie.tasks=kie.tasks.filter(x=>x.id!==task.id);
+      renderHistory();renderLatest();
+      toast('Hasil dihapus dari Image History.');
+    }
+  };
   async function loadTasks(){
     if(kie.polling)return;kie.polling=true;
     try{const d=await api('/api/kie/tasks');kie.tasks=d.tasks||[];renderHistory();renderLatest();}
