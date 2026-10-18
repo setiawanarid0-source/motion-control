@@ -6,7 +6,7 @@ for(const [name,graph] of Object.entries(graphs)){
  for(const [id,node] of Object.entries(graph))for(const [field,value] of Object.entries(node.inputs||{}))if(Array.isArray(value)&&value.length===2&&typeof value[0]==='string'&&Number.isInteger(value[1]))assert.ok(graph[value[0]],name+' broken reference '+id+'.'+field+'->'+value[0]);
  assert.ok(graph['30']?.class_type==='LoadImage');
  assert.ok(graph['33']?.class_type==='VHS_LoadVideo');
- assert.equal(graph['33'].inputs.force_rate,name==='current'?30:35,name+' FPS');
+ assert.equal(graph['33'].inputs.force_rate,name==='current'?40:35,name+' FPS');
 }
 for(const name of ['r15','current']){
  const g=graphs[name];
@@ -36,16 +36,19 @@ for(const [id,node] of Object.entries(full))for(const [field,v] of Object.entrie
 for(const id of ['30','33','331','418','489','490','500','501'])assert.ok(full[id], 'R4 Full missing '+id);
 assert.deepEqual(full['418'].inputs.pose_video_mask,['501',0]);
 assert.deepEqual(full['418'].inputs.reference_image_mask,['500',0]);
-assert.equal(full['33'].inputs.frame_load_cap,337);
-assert.equal(full['501'].inputs.frame_load_cap,337);
-assert.equal(full['33'].inputs.force_rate,35);
+assert.equal(full['33'].inputs.frame_load_cap,0,'R4 driving must not truncate native 40fps frames');
+assert.equal(full['501'].inputs.frame_load_cap,0,'R4 mask must not truncate native 40fps frames');
+assert.equal(full['33'].inputs.force_rate,40);
+assert.equal(full['501'].inputs.force_rate,40,'R4 video and SAM3 mask must use identical 40 FPS');
+assert.deepEqual(full['490'].inputs.frame_rate,['239',0]);
+assert.deepEqual(full['418'].inputs.length,['239',1]);
 assert.equal(full['489'].inputs.divisible_by,8);
 assert.equal(full['489'].inputs.width,1080);
 assert.equal(full['489'].inputs.height,1920);
 assert.equal(full['331'].inputs.steps,6);
 assert.equal(full['331'].inputs.cfg,1);
 assert.ok(!full['492'],'Stabilizer must not be included');
-console.log('PASS: R4 Full Controlled Test has 337 synchronized frames, two cached masks, 6-step CFG1 and 1080×1920 output.');
+console.log('PASS: R4 Full Controlled uses 40 FPS synchronized driving/mask streams, uncapped frames, 6-step CFG1 and 1080×1920.');
 
 const adapted=graphs.r15;
 assert.equal(adapted['33'].inputs.frame_load_cap,0,'R15 Camera Engine must not hard-limit length');
