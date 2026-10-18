@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css?v=20261018-image-dashboard-v1" />
   <link rel="stylesheet" href="/vanta-polish.css?v=20261018-runninghub-duration-refresh-v1" />
+  <link rel="stylesheet" href="/history-gallery.css?v=20261018-nora-gallery-v1" />
 </head>
 <body>
   <div class="app-shell">
@@ -194,7 +195,7 @@
       </section>
 
       <section id="view-history" class="view">
-        <div class="section-title history-title"><div><div class="eyebrow">ARCHIVE</div><h2>Generation history</h2><p>Pantau status, waktu proses, dan hasil setiap generation.</p></div></div>
+        <div class="section-title history-title"><div><div class="eyebrow">RUNNINGHUB / GALLERY</div><h2>Motion History</h2><p>Video hasil, status tugas, dan referensi dalam satu galeri.</p></div><button class="ghost-btn nora-gallery-refresh" id="motionGalleryRefresh" type="button" aria-label="Perbarui Motion History">↻ <span>Refresh</span></button></div>
         <div class="history-filters" id="historyFilters" aria-label="Filter generation history">
           <button type="button" class="history-filter active" data-history-filter="all">Semua</button>
           <button type="button" class="history-filter" data-history-filter="success">Berhasil</button>
@@ -202,11 +203,12 @@
           <button type="button" class="history-filter" data-history-filter="process">Proses</button>
         </div>
         <div class="history-retention-note" role="note"><span aria-hidden="true">◷</span><p>Riwayat disimpan 3 hari. Referensi generasi baru tersedia di server dan browser selama masa penyimpanan.</p></div>
-        <div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+        <div id="motionGalleryGrid" class="nora-gallery-grid" aria-label="Galeri hasil Motion Control"></div>
+        <div class="history-legacy-backup" hidden><div class="panel table-wrap"><table><thead><tr><th>Time</th><th>Workflow</th><th>Mode</th><th>Account</th><th>Video</th><th>Status</th><th>Result</th></tr></thead><tbody id="historyBody"></tbody></table></div></div>
       </section>
 
       <section id="view-image-history" class="view">
-        <div class="section-title"><div><div class="eyebrow">KIE.AI / ARCHIVE</div><h2>Image History</h2><p>Riwayat khusus gambar kie.ai, terpisah dari task Motion Control. Disimpan selama 3 hari.</p></div><button type="button" class="ghost-btn" id="kieRefreshHistory">↻ Refresh</button></div>
+        <div class="section-title"><div><div class="eyebrow">KIE.AI / GALLERY</div><h2>Image History</h2><p>Semua hasil gambar, tertata seperti galeri Nora.</p></div><button type="button" class="ghost-btn nora-gallery-refresh" id="kieRefreshHistory">↻ <span>Refresh</span></button></div>
         <div class="history-filters" id="kieHistoryFilters" aria-label="Filter image history">
           <button type="button" class="history-filter active" data-kie-filter="all">Semua</button>
           <button type="button" class="history-filter" data-kie-filter="success">Berhasil</button>
@@ -290,8 +292,39 @@
     </div>
   </div>
 
+  <div id="noraGalleryViewer" class="nora-viewer hidden" role="dialog" aria-modal="true" aria-labelledby="noraViewerTitle" tabindex="-1">
+    <div class="nora-viewer-backdrop" data-nora-close></div>
+    <div class="nora-viewer-shell">
+      <header class="nora-viewer-header">
+        <div class="nora-viewer-heading"><span id="noraViewerContext">GALLERY</span><h3 id="noraViewerTitle">Hasil generasi</h3></div>
+        <div class="nora-viewer-top-actions">
+          <span id="noraViewerCounter" class="nora-viewer-count" aria-live="polite">1 / 1</span>
+          <button type="button" id="noraViewerClose" class="nora-icon-btn" aria-label="Tutup galeri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5 19 19M19 5 5 19"/></svg></button>
+        </div>
+      </header>
+      <div class="nora-viewer-layout">
+        <div class="nora-viewer-stage" id="noraViewerStage">
+          <button type="button" id="noraViewerPrev" class="nora-viewer-arrow prev" aria-label="Hasil sebelumnya">‹</button>
+          <div id="noraViewerMedia" class="nora-viewer-media"></div>
+          <button type="button" id="noraViewerNext" class="nora-viewer-arrow next" aria-label="Hasil berikutnya">›</button>
+        </div>
+        <aside class="nora-viewer-details">
+          <div id="noraViewerStatus" class="nora-viewer-status"></div>
+          <div id="noraViewerMeta" class="nora-viewer-meta"></div>
+          <section id="noraViewerPromptBlock" class="nora-viewer-prompt-block" hidden>
+            <div class="nora-viewer-section-head"><h4>Prompt</h4><button type="button" id="noraViewerCopy" class="nora-text-btn">Salin prompt</button></div>
+            <p id="noraViewerPrompt" class="nora-viewer-prompt"></p>
+          </section>
+          <p id="noraViewerError" class="nora-viewer-error" hidden></p>
+          <div id="noraViewerActions" class="nora-viewer-actions"></div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/app.js?v=20261018-runninghub-duration-refresh-v1" defer></script>
   <script src="/kie-ui.js?v=20261018-incremental-images-v2" defer></script>
+  <script src="/history-gallery.js?v=20261018-nora-gallery-v1" defer></script>
 </body>
 </html>
