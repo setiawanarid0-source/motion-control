@@ -1,6 +1,6 @@
 // The kie.ai image surface is independent of the RunningHub UI/state.
 (()=>{
-  const kie={mode:'create',models:[],accounts:[],tasks:[],filter:'all',selectedTask:null,polling:false,busy:false};
+  const kie={mode:'create',models:[],accounts:[],tasks:[],filter:'all',selectedTask:null,polling:false,busy:false,accountPolling:false,lastAccountsSync:0};
   const el=id=>document.getElementById(id);
   const esc=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const fmt=n=>Number(n??0).toLocaleString('id-ID',{maximumFractionDigits:2});
@@ -160,12 +160,19 @@
       '<div class="empty-state">Belum ada akun kie.ai.<br>Tambahkan satu API key melalui panel kiri.</div>';
   }
   async function loadAccounts(){
-    try{const d=await api('/api/kie/accounts');kie.accounts=d.accounts||[];drawAccounts();}
-    catch(e){toast('Account Pool kie.ai: '+e.message,true);}
+    if(kie.accountPolling)return;
+    kie.accountPolling=true;
+    try{
+      const d=await api('/api/kie/accounts');
+      kie.accounts=d.accounts||[];
+      kie.lastAccountsSync=Date.now();
+      drawAccounts();
+    }catch(e){console.warn('kie.ai account sync',e.message);}
+    finally{kie.accountPolling=false;}
   }
   async function refreshAccounts(){
     const b=el('kieRefreshAccounts');b.disabled=true;
-    try{const d=await api('/api/kie/accounts/refresh',{method:'POST',body:'{}'});kie.accounts=d.accounts||[];drawAccounts();toast('Kredit kie.ai diperbarui.');}
+    try{const d=await api('/api/kie/accounts/refresh',{method:'POST',body:'{}'});kie.accounts=d.accounts||[];kie.lastAccountsSync=Date.now();drawAccounts();toast('Saldo terbaru diperiksa langsung ke kie.ai.');}
     catch(e){toast(e.message,true);}finally{b.disabled=false;}
   }
   async function addAccount(){
@@ -237,8 +244,17 @@
   };
   async function loadTasks(){
     if(kie.polling)return;kie.polling=true;
-    try{const d=await api('/api/kie/tasks');kie.tasks=d.tasks||[];renderHistory();renderLatest();}
-    catch(e){console.warn('kie.ai history',e.message);}
+    try{
+      const oldStatuses=new Map(kie.tasks.map(t=>[t.id,t.status]));
+      const d=await api('/api/kie/tasks');
+      kie.tasks=d.tasks||[];
+      renderHistory();renderLatest();
+      // Actual credits are fetched by the backend; these calls only refresh
+      // the displayed balances, never infer/subtract model costs.
+      const becameTerminal=kie.tasks.some(t=>['success','failed'].includes(t.status)
+        &&oldStatuses.has(t.id)&&!['success','failed'].includes(oldStatuses.get(t.id)));
+      if(becameTerminal||Date.now()-kie.lastAccountsSync>25000)void loadAccounts();
+    }catch(e){console.warn('kie.ai history',e.message);}
     finally{kie.polling=false;}
   }
   async function submitImage(){
@@ -259,6 +275,7 @@
       const data=await api('/api/kie/generate',{method:'POST',body:fd});
       kie.selectedTask=data.task.id;toast('Task diterima kie.ai. Status dapat dipantau di Image History.');
       await loadTasks();
+      void loadAccounts();
     }catch(e){toast(e.message,true);el('kieResultState').textContent='Pengiriman belum terkonfirmasi. Periksa Image History sebelum mencoba lagi.';}
     finally{kie.busy=false;b.disabled=false;b.querySelector('span').textContent=kie.mode==='edit'?'Edit Image':'Generate Image';}
   }
