@@ -14,6 +14,7 @@ import {createTaskRegistry} from './task-registry.js';
 import {createGenerationQueue} from './generation-queue.js';
 import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance.js';
 import {readLegacyFinal40} from './legacy-final40-cache.js';
+import {createKieStudio} from './kie-studio.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -436,6 +437,8 @@ const upload = multer({
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+// Independent provider: never shares RunningHub credits, task history, or account vault.
+app.use('/api/kie',createKieStudio({encrypt,decrypt,dir:DATA_DIR}));
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: 0,
   etag: false,
