@@ -11,7 +11,7 @@ const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 
 const link=(url)=>html.indexOf(url);
 assert.ok(link('styles.css?v=')>=0);
-assert.ok(link('vanta-polish.css?v=20261018-nora-ui-v1')>link('styles.css?v='),
+assert.ok(link('vanta-polish.css?v=')>link('styles.css?v='),
   'Presentation-only stylesheet must be loaded after the existing functional CSS');
 assert.ok(link('app.js?v=')>link('vanta-polish.css'), 'Styles must not move application scripts');
 assert.ok(link('kie-ui.js?v=')>link('app.js?v='), 'kie.ai UI still loads after the app');
