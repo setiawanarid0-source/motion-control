@@ -62,12 +62,13 @@ assert.equal(restored.state,'ready');
 let release;
 gate={promise:new Promise(resolve=>{release=resolve;})};
 providerCredits.set('secret-b',20);
-const start= context.sync.refreshAccountBalance('b',{force:true});
+const previousCalls=calls;
+const start=context.sync.refreshAccountBalance('b',{force:true});
 const concurrent=context.sync.refreshAccountBalance('b',{force:true});
-assert.equal(start,concurrent,'Per-account credit probes must deduplicate concurrent requests');
+assert.equal(calls,previousCalls+1,'Per-account credit probes must issue only one concurrent provider request');
 // Ensure a removed API key cannot be silently reinstated when request completes.
 stored=stored.filter(x=>x.id!=='b');
-release();await start;
+release();await Promise.all([start,concurrent]);
 assert.equal(stored.some(x=>x.id==='b'),false,'Deleted account must remain deleted after delayed API response');
 gate=null;
 
