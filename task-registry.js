@@ -93,6 +93,16 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     commit(tasks);
     return publicEntry(t);
   }
+  function removeCompleted(taskId,accountId){
+    const tasks=all(),id=String(taskId||'');
+    if(!VALID_ID.test(id))throw Error('Task ID tidak valid.');
+    const task=tasks.find(x=>x.taskId===id);
+    if(!task)return false;
+    if(task.accountId!==String(accountId||''))throw Error('Akun task tidak cocok.');
+    if(!DONE.has(task.status))throw Error('Task masih diproses; History belum dapat dihapus.');
+    commit(tasks.filter(x=>x.taskId!==id));
+    return true;
+  }
   function publicList(){return all().map(publicEntry);}
   function active(){return all().filter(t=>!DONE.has(t.status));}
   function purgeExpired(){
@@ -112,5 +122,5 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     if(keep.length!==tasks.length||recent.length!==escrows.length)commit(keep,recent);
     return tasks.length-keep.length;
   }
-  return {ensureWritable,add,get,update,retireAccount,getRetiredAccount,retiredAccounts,publicList,active,purgeExpired,file};
+  return {ensureWritable,add,get,update,removeCompleted,retireAccount,getRetiredAccount,retiredAccounts,publicList,active,purgeExpired,file};
 }
