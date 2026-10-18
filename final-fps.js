@@ -2,6 +2,7 @@
 // Never changes the source motion, diffusion frames, audio timing, or R15 workflow.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {pipeline} from 'node:stream/promises';
@@ -13,6 +14,15 @@ const ROOT=path.join(process.env.VANTA_DATA_DIR||'/data','final-40fps');
 const VALID_ID=/^\d{10,25}$/;
 const DURATION_LIMIT=3*24*60*60*1000;
 const MAX_INPUT=450*1024*1024;
+const RESERVED_SPACE=160*1024*1024;
+let lastLowSpaceWarning=0;
+function storageAvailable(){
+  try{
+    fs.mkdirSync(ROOT,{recursive:true,mode:0o700});
+    const stats=fs.statfsSync(ROOT);
+    return Number(stats.bavail)*Number(stats.bsize)>=RESERVED_SPACE;
+  }catch{return false;}
+}
 const running=new Map();
 const MAX_ATTEMPTS=2;
 const RETRY_AFTER_MS=120000;
@@ -96,13 +106,14 @@ async function fetchOriginal(url,dest){
   }catch(error){await fs.promises.rm(dest,{force:true}).catch(()=>{});throw error;}
 }
 async function process40(taskId,url){
-  const directory=path.join(ROOT,String(taskId));
-  await fs.promises.mkdir(directory,{recursive:true,mode:0o700});
-  const original=path.join(directory,'input-'+process.pid+'.mp4');
+  // Large source downloads belong on ephemeral scratch disk, not the volume that
+  // stores encrypted account credentials and three-day History.
+  const scratch=await fs.promises.mkdtemp(path.join(os.tmpdir(),'vanta-final40-'));
+  const original=path.join(scratch,'source.mp4');
   try{
     await fetchOriginal(url,original);
     await convertVideo40(original,infoFile(taskId));
-  }finally{await fs.promises.rm(original,{force:true}).catch(()=>{});}
+  }finally{await fs.promises.rm(scratch,{recursive:true,force:true}).catch(()=>{});}
 }
 // RunningHub output is already finished here. Never mislabel a local conversion
 // problem as a RunningHub task still generating, nor retry video conversion forever.
@@ -110,6 +121,15 @@ export function ensureFinal40(taskId,url){
   if(!validId(taskId))return {state:'failed'};
   const file=readFinal40(taskId);
   if(file)return {state:'ready',file};
+  // Skip conversion when storage is nearly exhausted, rather than sacrificing
+  // the Account Pool and task registry to a temporary 40 FPS video.
+  if(!storageAvailable()){
+    if(Date.now()-lastLowSpaceWarning>60000){
+      console.warn('Final 40fps skipped: Railway volume has insufficient free space');
+      lastLowSpaceWarning=Date.now();
+    }
+    return {state:'failed',reason:'storage'};
+  }
   const previous=loadStatus(taskId);
   if(previous.attempts>=MAX_ATTEMPTS&&!running.has(taskId))return {state:'failed'};
   if(running.has(taskId)||running.size>=1)return {state:'processing'};
@@ -134,7 +154,15 @@ export async function pruneFinal40(){
     const folder=path.join(ROOT,name);
     try{
       const s=await fs.promises.stat(folder);
-      if(s.isDirectory()&&Date.now()-s.mtimeMs>DURATION_LIMIT)
+      if(!s.isDirectory())continue;
+      // Clean ONLY abandoned FFmpeg/input intermediates from older builds.
+      // Never remove result.mp4, status.json, reference files, task IDs, or vaults.
+      for(const filename of await fs.promises.readdir(folder)){
+        if(/^(?:input-\d+\.mp4|result\.mp4\.tmp-\d+-\d+\.mp4)$/.test(filename)){
+          await fs.promises.rm(path.join(folder,filename),{force:true}).catch(()=>{});
+        }
+      }
+      if(Date.now()-s.mtimeMs>DURATION_LIMIT)
         await fs.promises.rm(folder,{recursive:true,force:true});
     }catch{}
   }
