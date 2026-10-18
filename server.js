@@ -118,7 +118,10 @@ function taskAccount(req,taskId,accountId){
 }
 function writeTaskState(taskId,result){
   const now=new Date().toISOString();
-  const patch={status:result.state,lastCheckedAt:now};
+  const patch={status:result.state,lastCheckedAt:now,
+    statusDetail:typeof result.message==='string'?result.message.slice(0,240):null,
+    providerCode:Number.isFinite(result.rawCode)?result.rawCode:null,
+    deliveryNote:result.deliveryNote||null};
   if(result.state==='success'){
     const outputs=Array.isArray(result.outputs)?result.outputs:[];
     const video=outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
@@ -148,8 +151,16 @@ async function runningHubTaskState(taskId,account,accountId){
     const registered=taskRegistry.get(taskId);
     if(video&&registered&&requiresFinal40(registered.workflow)){
       const result=ensureFinal40(taskId,video.fileUrl);
-      if(!result.ready)return {state:'running',message:'Menyiapkan video akhir'};
-      return {state:'success',rawCode:code,outputs:[{
+      if(result.state==='processing')return {
+        state:'finalizing',rawCode:code,providerStatus:'SUCCESS',
+        message:'RunningHub selesai · menyiapkan video 40 FPS'
+      };
+      if(result.state==='failed')return {
+        state:'success',rawCode:code,providerStatus:'SUCCESS',outputs,
+        deliveryNote:'RunningHub selesai. Konversi 40 FPS belum berhasil; video asli tersedia.',
+        message:'RunningHub selesai · video asli tersedia'
+      };
+      return {state:'success',rawCode:code,providerStatus:'SUCCESS',outputs:[{
         nodeId:'490',fileType:'video/mp4',
         fileUrl:'/api/tasks/'+encodeURIComponent(taskId)+'/preview?accountId='+encodeURIComponent(accountId)
       }]};
@@ -160,12 +171,19 @@ async function runningHubTaskState(taskId,account,accountId){
     }
     return {state:'success',outputs,rawCode:code};
   }
-  if(code===813)return {state:'queued',rawCode:code,message:data?.msg||''};
-  if(code===804||code===0)return {state:'running',rawCode:code,message:data?.msg||''};
+  // RunningHub's outputs endpoint is the authoritative source; /status is deprecated.
+  if(code===813)return {state:'queued',rawCode:code,providerStatus:'QUEUED',
+    message:'Dalam antrean RunningHub'};
+  if(code===804)return {state:'running',rawCode:code,providerStatus:'RUNNING',
+    message:'Sedang diproses di RunningHub'};
+  if(code===0)return {state:'waiting_output',rawCode:code,
+    message:'Menunggu hasil dari RunningHub'};
   const failure=extractTaskFailure(data);
-  if(failure)return {state:'failed',rawCode:code,message:data?.msg||'Task gagal.',failure};
-  // Unexpected codes, insufficient credits, and API errors must NEVER be treated as generation failures.
-  return {state:'check_error',rawCode:code,message:'Status terbaru belum tersedia. Pemantauan akan dicoba kembali.'};
+  if(code===805||failure)return {state:'failed',rawCode:code,providerStatus:'FAILED',
+    message:'RunningHub menyatakan task gagal.',failure};
+  // Unrecognized status is not proof of RunningHub still generating or of failure.
+  return {state:'check_error',rawCode:Number.isFinite(code)?code:null,
+    message:'Status RunningHub belum tersedia. Pemeriksaan akan diulang.'};
 }
 let monitorBusy=false;
 async function monitorRegisteredTasks(){
@@ -758,7 +776,10 @@ async function resolveTaskVideoUrl(account, taskId) {
     err.statusCode = 409;
     throw err;
   }
-  const output = data.data.find(x => String(x.nodeId) === '393' || String(x.fileType || '').toLowerCase().includes('video') || /\.mp4(?:\?|$)/i.test(String(x.fileUrl || ''))) || data.data[0];
+  const output = data.data.find(x => String(x.nodeId) === '490')
+    ||data.data.find(x => String(x.nodeId) === '393')
+    ||data.data.find(x => String(x.fileType||'').toLowerCase().includes('video') || /\.mp4(?:\?|$)/i.test(String(x.fileUrl || '')))
+    ||data.data[0];
   const fileUrl = String(output?.fileUrl || '');
   if (!/^https?:\/\//i.test(fileUrl)) {
     const err = new Error('URL hasil video tidak valid.');
