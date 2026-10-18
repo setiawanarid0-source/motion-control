@@ -51,6 +51,9 @@ export function createKieStudio({encrypt,decrypt,dir}){
   const root=path.join(dir,'kie-studio'),accountsFile=path.join(root,'accounts.enc'),
     tasksFile=path.join(root,'tasks.enc'),mediaRoot=path.join(root,'media');
   const pending=new Map();
+  // Deduplicate live balance probes per account. Never share RunningHub balances.
+  const balanceProbes=new Map();
+  const AUTO_BALANCE_MAX_AGE_MS=30000;
   function load(file,key){
     try{const data=decrypt(fs.readFileSync(file,'utf8'));return Array.isArray(data?.[key])?data[key]:[];}catch{return[];}
   }
@@ -62,8 +65,39 @@ export function createKieStudio({encrypt,decrypt,dir}){
   }
   const getAccounts=()=>load(accountsFile,'accounts');
   const getTasks=()=>load(tasksFile,'tasks');
-  const publicAccount=a=>({id:a.id,name:a.name,credits:a.credits??null,
+  const publicAccount=a=>({id:a.id,name:a.name,
+    credits:a.state==='unavailable'?null:(a.credits??null),
     state:a.state||'unknown',lastCheckedAt:a.lastCheckedAt||null});
+  async function refreshAccountBalance(id,{force=false}={}){
+    const previous=balanceProbes.get(id);
+    if(previous)return previous;
+    const account=getAccounts().find(x=>x.id===id);
+    if(!account)return null;
+    const lastAttempt=Date.parse(account.lastAttemptAt||account.lastCheckedAt||'');
+    if(!force&&Number.isFinite(lastAttempt)&&Date.now()-lastAttempt<AUTO_BALANCE_MAX_AGE_MS)
+      return publicAccount(account);
+    const request=(async()=>{
+      let balance=null,failed=false;
+      try{balance=await credits(account.key);}
+      catch(error){failed=true;console.warn('kie.ai account balance refresh failed',id,cleanError(error));}
+      // Read again after the network call: never resurrect a removed account, and
+      // never overwrite another account added/refreshed while this call awaited.
+      const latest=getAccounts(),index=latest.findIndex(x=>x.id===id&&x.fingerprint===account.fingerprint);
+      if(index<0)return null;
+      latest[index]={...latest[index],
+        ...(failed?{state:'unavailable'}:{credits:balance,state:'ready',lastCheckedAt:new Date().toISOString()}),
+        lastAttemptAt:new Date().toISOString()};
+      save(accountsFile,'accounts',latest);
+      return publicAccount(latest[index]);
+    })().finally(()=>balanceProbes.delete(id));
+    balanceProbes.set(id,request);
+    return request;
+  }
+  async function refreshBalances({force=false}={}){
+    const accounts=getAccounts();
+    await Promise.all(accounts.map(a=>refreshAccountBalance(a.id,{force})));
+    return getAccounts().map(publicAccount);
+  }
   const publicTask=t=>({id:t.id,accountId:t.accountId,accountName:t.accountName,
     model:t.model,modelName:t.modelName,mode:t.mode,prompt:t.prompt,aspect:t.aspect,
     resolution:t.resolution,status:t.status,error:t.error||null,createdAt:t.createdAt,
@@ -120,7 +154,13 @@ export function createKieStudio({encrypt,decrypt,dir}){
           else extra.error=null;
         }else{status='check_error';extra.error='Status kie.ai belum tersedia.';}
         if(data.creditsConsumed!=null&&Number.isFinite(Number(data.creditsConsumed)))extra.creditsConsumed=Number(data.creditsConsumed);
-        return updateTask(task.id,{status,...extra});
+        const updated=updateTask(task.id,{status,...extra});
+        // On transition to success/failure, re-check the actual provider balance.
+        // Never subtract estimated model prices or modify an active paid task.
+        if(updated&&['success','failed'].includes(status)&&status!==task.status)
+          void refreshAccountBalance(task.accountId,{force:true}).catch(e=>
+            console.warn('kie.ai post-task credit sync deferred',task.id,cleanError(e)));
+        return updated;
       }catch(e){return updateTask(task.id,{status:'check_error',error:'Tidak dapat memeriksa status kie.ai: '+cleanError(e),lastCheckedAt:Date.now()});}
     })().finally(()=>pending.delete(task.id));
     pending.set(task.id,job);return job;
@@ -134,9 +174,9 @@ export function createKieStudio({encrypt,decrypt,dir}){
   router.use(guard);
   router.get('/models',(req,res)=>res.json({models:KIE_MODELS.map(({images,...m})=>m)}));
   router.get('/accounts',async(req,res)=>{
-    const accounts=getAccounts();
     res.setHeader('Cache-Control','no-store');
-    res.json({accounts:accounts.map(publicAccount)});
+    try{res.json({accounts:await refreshBalances()});}
+    catch(e){res.status(503).json({error:'Saldo kie.ai belum dapat diperbarui.'});}
   });
   router.post('/accounts',async(req,res)=>{
     const key=String(req.body?.apiKey||'').trim();
@@ -145,18 +185,16 @@ export function createKieStudio({encrypt,decrypt,dir}){
       const balance=await credits(key),accounts=getAccounts();
       const fingerprint=crypto.createHash('sha256').update(key).digest('hex');
       if(accounts.some(a=>a.fingerprint===fingerprint))return res.status(409).json({error:'API key sudah ada.'});
-      const account={id:crypto.randomUUID(),name:'Account '+String(accounts.length+1).padStart(2,'0'),
-        key,fingerprint,credits:balance,state:'ready',lastCheckedAt:new Date().toISOString()};
+      const nextIndex=Math.max(0,...accounts.map(a=>Number((String(a.name||'').match(/^Account (\\d+)$/)||[])[1])||0))+1;
+      const account={id:crypto.randomUUID(),name:'Account '+String(nextIndex).padStart(2,'0'),
+        key,fingerprint,credits:balance,state:'ready',lastCheckedAt:new Date().toISOString(),
+        lastAttemptAt:new Date().toISOString()};
       save(accountsFile,'accounts',[...accounts,account]);res.status(201).json({account:publicAccount(account)});
     }catch(e){res.status(400).json({error:'Validasi kie.ai gagal: '+cleanError(e)});}
   });
   router.post('/accounts/refresh',async(req,res)=>{
-    const accounts=await Promise.all(getAccounts().map(async a=>{
-      try{return {...a,credits:await credits(a.key),state:'ready',lastCheckedAt:new Date().toISOString()};}
-      catch(e){return {...a,state:'unavailable',lastCheckedAt:new Date().toISOString()};}
-    }));
-    save(accountsFile,'accounts',accounts);
-    res.json({accounts:accounts.map(publicAccount)});
+    try{res.setHeader('Cache-Control','no-store');res.json({accounts:await refreshBalances({force:true})});}
+    catch(e){res.status(503).json({error:'Tidak dapat memperbarui saldo kie.ai.'});}
   });
   router.delete('/accounts/:id',(req,res)=>{
     const accounts=getAccounts(),next=accounts.filter(a=>a.id!==req.params.id);
@@ -224,6 +262,14 @@ export function createKieStudio({encrypt,decrypt,dir}){
           catch(e){if(accountId!=='auto')throw e;}
         }
         if(!account)throw Error('Tidak ada akun kie.ai yang dapat digunakan atau kreditnya habis.');
+        // Preflight used the actual provider balance; persist it before submitting.
+        // Subsequent live probes reconcile spending once kie.ai has charged the task.
+        const at=getAccounts(),index=at.findIndex(a=>a.id===account.id);
+        if(index>=0){
+          at[index]={...at[index],credits:account.credits,state:'ready',
+            lastCheckedAt:new Date().toISOString(),lastAttemptAt:new Date().toISOString()};
+          save(accountsFile,'accounts',at);
+        }
         const refs=[];
         for(const [index,file] of incoming.entries()){
           const form=new FormData();
@@ -250,6 +296,9 @@ export function createKieStudio({encrypt,decrypt,dir}){
           status:'queued',error:null,createdAt:new Date().toISOString(),resultUrls:[]};
         const tasks=getTasks();
         if(!tasks.some(x=>x.id===taskId))save(tasksFile,'tasks',[task,...tasks].slice(0,250));
+        // Credits may be charged at submission or completion, provider-dependent.
+        void refreshAccountBalance(account.id,{force:true}).catch(e=>
+          console.warn('kie.ai submitted-task credit sync deferred',taskId,cleanError(e)));
         // Best effort reference persistence for three-day History; never jeopardize the paid task.
         try{
           fs.mkdirSync(path.join(mediaRoot,taskId),{recursive:true,mode:0o700});
