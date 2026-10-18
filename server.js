@@ -776,6 +776,20 @@ async function resolveTaskVideoUrl(account, taskId) {
 }
 
 // On-demand lookup of an existing task. It NEVER creates a new paid RunningHub job.
+app.delete('/api/tasks/:taskId/history',(req,res)=>{
+  const {deviceId}=getPersistentAccounts(req);
+  if(!deviceId)return res.status(401).json({error:'Sesi browser tidak tersedia.'});
+  const id=String(req.params.taskId||''),accountId=String(req.body?.accountId||'');
+  if(!/^\d{10,25}$/.test(id)||!accountId)return res.status(400).json({error:'Task atau akun tidak valid.'});
+  try{
+    const removed=taskRegistry.removeCompleted(id,accountId);
+    if(!removed)return res.status(404).json({error:'Task tidak ditemukan di History.'});
+    return res.json({ok:true});
+  }catch(error){
+    return res.status(/masih diproses/.test(error.message)?409:400)
+      .json({error:String(error.message||'Tidak dapat menghapus History.').slice(0,180)});
+  }
+});
 app.get('/api/tasks/history',(req,res)=>{
   try{res.setHeader('Cache-Control','private, no-store');res.json({tasks:taskRegistry.publicList()});}
   catch(error){res.status(503).json({error:'Riwayat server sementara tidak tersedia.'});}
