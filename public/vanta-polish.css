@@ -301,3 +301,44 @@ a:focus-visible,button:focus-visible{outline-offset:3px}
   .kie-refs-preview .kie-ref-thumbnail figcaption{padding:9px}
   .kie-refs-preview .kie-ref-remove{width:40px;height:40px}
 }
+
+
+/* RunningHub: refresh icon + accurate elapsed time from RunningHub submission. */
+#view-accounts #refreshAccounts span[aria-hidden="true"]{
+  display:grid;
+  place-items:center;
+  width:21px;
+  height:21px;
+  font-size:initial;
+}
+#view-accounts #refreshAccounts svg{
+  display:block;
+  width:20px;
+  height:20px;
+  stroke:currentColor;
+  fill:none;
+}
+#view-accounts #refreshAccounts.refreshing span[aria-hidden="true"]{
+  animation:refreshSpin .8s linear infinite;
+}
+#view-history .history-duration{
+  display:block;
+  margin-top:9px;
+  font-size:12px;
+  line-height:1.5;
+  color:#cad8e6;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:.005em;
+  white-space:nowrap;
+}
+#taskEstimate{
+  color:#d5e1ed;
+  font-size:12px;
+  line-height:1.45;
+  font-variant-numeric:tabular-nums;
+}
+@media(max-width:780px){
+  #view-accounts #refreshAccounts svg{width:20px;height:20px}
+  #view-history .history-duration{font-size:12px}
+  #taskEstimate{font-size:12px}
+}
