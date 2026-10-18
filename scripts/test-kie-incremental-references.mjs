@@ -29,7 +29,7 @@ const B={name:'woman-2.png',size:250000,type:'image/png',lastModified:222};
 const C={name:'woman-3.webp',size:350000,type:'image/webp',lastModified:333};
 const select=(files)=>{picker.files=files;picker.value='C:\\fakepath\\test.jpg';vm.runInContext('addSelectedRefs()',context);};
 const remove=(index)=>vm.runInContext('removeSelectedRef('+index+')',context);
-const files=()=>context.selectedFiles().map(x=>x.name);
+const files=()=>Array.from(context.selectedFiles(),x=>x.name);
 const images=()=>[...preview.innerHTML.matchAll(/<img /g)].length;
 
 select([A]);
