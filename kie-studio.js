@@ -175,6 +175,22 @@ export function createKieStudio({encrypt,decrypt,dir}){
     if(!['success','failed'].includes(t.status))t=await refreshTask(t)||t;
     res.setHeader('Cache-Control','no-store');res.json({task:publicTask(t)});
   });
+  router.delete('/tasks/:id',(req,res)=>{
+    const id=String(req.params.id||'');
+    if(!ID.test(id))return res.status(400).json({error:'Task ID tidak valid.'});
+    try{
+      const tasks=getTasks(),item=tasks.find(x=>x.id===id);
+      if(!item)return res.status(404).json({error:'Task tidak ditemukan.'});
+      if(!['success','failed'].includes(item.status))
+        return res.status(409).json({error:'Task masih berjalan dan tidak boleh dihapus.'});
+      save(tasksFile,'tasks',tasks.filter(x=>x.id!==id));
+      // Only this task's local reference cache; no other accounts/jobs affected.
+      fs.rmSync(path.join(mediaRoot,id),{recursive:true,force:true});
+      return res.json({ok:true});
+    }catch(error){
+      return res.status(503).json({error:'History sementara tidak dapat dihapus.'});
+    }
+  });
   router.get('/tasks/:id/reference/:index',(req,res)=>{
     const t=getTasks().find(x=>x.id===req.params.id),n=Number(req.params.index);
     if(!t||!Number.isInteger(n)||n<0||n>1||n>=t.referenceCount)return res.sendStatus(404);
