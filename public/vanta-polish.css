@@ -1,0 +1,256 @@
+/* VANTA visual refinement — presentation only.
+ * Reviewed against Nora's better-layout, better-typography, better-colors,
+ * better-ui, better-writing and better-accessibility skills.
+ * Existing functionality, IDs, state classes and layout breakpoints retained.
+ */
+:root{
+  --studio-bg:#090c11;
+  --studio-surface:#111720;
+  --studio-surface-raised:#151d27;
+  --studio-border:#293340;
+  --studio-text:#eef2f7;
+  --studio-muted:#a0abba;
+  --studio-focus:#b9ff5a;
+  --studio-space-1:4px;
+  --studio-space-2:8px;
+  --studio-space-3:12px;
+  --studio-space-4:16px;
+  --studio-space-6:24px;
+}
+html{scrollbar-gutter:stable}
+body{background:var(--studio-bg);color:var(--studio-text);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font-family:Inter,system-ui,sans-serif}
+button{font-weight:600}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,
+label.kie-file-drop:focus-within{
+  outline:2px solid var(--studio-focus);
+  outline-offset:3px;
+}
+button:disabled{cursor:not-allowed}
+.panel{background:var(--studio-surface);border:1px solid var(--studio-border);
+  box-shadow:0 8px 22px rgba(0,0,0,.12)}
+.eyebrow{font-size:10px;line-height:1.4;letter-spacing:.13em;color:#aeb8c5}
+.field-label{font-size:11px;line-height:1.4;letter-spacing:.1em;color:#aeb8c6;margin-block:18px 8px}
+.form-note,.account-hint{font-size:12px;line-height:1.6;color:var(--studio-muted);overflow-wrap:break-word}
+input.text-input,select{font-size:14px;background:#0d131a;border-color:#35414d;color:var(--studio-text);min-width:0}
+input.text-input::placeholder,textarea::placeholder{color:#7f8d9e}
+.generate-btn,.secondary-btn,.ghost-btn,.download-btn{
+  min-height:46px;font-size:13px;line-height:1.25;border-radius:11px;
+  transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease,box-shadow 140ms ease,transform 140ms ease;
+}
+.generate-btn{font-weight:700;letter-spacing:-.005em}
+.generate-btn:active:not(:disabled),.secondary-btn:active,.ghost-btn:active{transform:scale(.96)}
+.ghost-btn{border-color:var(--studio-border);background:#141b24;color:#d9e1eb}
+.ghost-btn:hover{background:#1b2530;border-color:#506072}
+.download-btn{border-color:#8bce4b;color:#c5ff82}
+.download-btn:hover{background:rgba(185,255,90,.075)}
+.section-title{margin-block:8px 22px;align-items:center;gap:16px}
+.section-title h2{font:700 clamp(24px,2.4vw,32px)/1.16 Manrope,Inter,sans-serif;
+  letter-spacing:-.035em;margin:6px 0 8px;text-wrap:balance}
+.section-title p{max-width:57ch;font-size:13px;line-height:1.55;color:var(--studio-muted);text-wrap:pretty}
+.section-title>.ghost-btn{flex:0 0 auto}
+.empty-state{font-size:13px;line-height:1.5;padding:32px;color:#9eabba;background:#10161d}
+
+/* Sidebar: compact groups, one optical scale and consistent SVG marks. */
+.sidebar{background:#0c1118;border-right-color:#232d38;padding:22px 15px}
+.brand{padding:3px 9px 22px;gap:12px}
+.brand-mark{width:38px;height:38px;border-radius:11px;font-size:19px;box-shadow:none}
+.brand-copy strong{font-size:13px;line-height:1.2;letter-spacing:.12em}
+.brand-copy span{font-size:11px;line-height:1.4;margin-top:3px;color:#9daab9}
+.nav-list.vanta-nav{gap:5px}
+.vanta-nav .nav-group{border-radius:12px;border-color:transparent}
+.vanta-nav .nav-group.expanded{border-color:#27333e;background:#121922}
+.vanta-nav .nav-category{min-height:46px;height:auto;padding:10px 12px;gap:10px;
+  color:#cdd7e2;font-size:13px;line-height:1.3;font-weight:650}
+.vanta-nav .nav-category:hover{background:#17212b}
+.vanta-nav .nav-category .nav-icon{width:20px;height:20px}
+.vanta-nav .nav-category .vanta-nav-svg{width:19px;height:19px;stroke-width:1.9}
+.vanta-nav .nav-chevron{font-size:16px;color:#9aa8b9}
+.vanta-nav .nav-submenu{gap:3px;padding:0 6px 7px 18px}
+.vanta-nav .nav-item{min-height:42px;height:auto;padding:10px 12px;gap:10px;
+  font-size:12px;line-height:1.4;font-weight:500;border-radius:9px;color:#aab6c6}
+.vanta-nav .nav-item .vanta-nav-svg{height:18px;width:18px;stroke-width:1.8}
+.vanta-nav .nav-item.active{background:rgba(185,255,90,.11);color:#c6ff87;
+  box-shadow:inset 2px 0 0 var(--accent);font-weight:650}
+.sidebar-foot{margin-top:auto;border-radius:12px;border-color:#29343f;background:#111820;
+  padding:13px;gap:12px;flex:0 0 auto}
+.sidebar-foot strong{font-size:12px;line-height:1.35}
+.sidebar-foot small{font-size:11px;line-height:1.4}
+.sidebar-foot .status-dot{height:9px;width:9px}
+.sidebar-close{border-color:#33404d;background:#17202a;color:#dce4ed;align-items:center;justify-content:center}
+.sidebar-close svg,.menu-btn svg{display:block;width:20px;height:20px;stroke-width:1.9}
+.topbar{height:74px;border-bottom-color:#222c37;background:rgba(10,14,19,.94)}
+.topbar h1{font-size:18px;letter-spacing:-.02em}
+.balance-pill{background:#121922;border-color:#29343f;border-radius:999px;min-height:39px}
+.balance-pill strong{font-size:15px;font-variant-numeric:tabular-nums}
+.balance-pill small{font-size:11px;color:#9aa7b7}
+
+/* Account Pool: one shared hierarchy, without changing either provider's
+ * independent account list, IDs, refresh/remove events or status logic. */
+#view-accounts .account-pool-title,
+#view-kie-accounts .account-pool-title{position:relative;display:flex;
+  flex-direction:row;justify-content:space-between;align-items:flex-start;
+  gap:14px;margin:4px 0 20px}
+#view-accounts .account-pool-title>div,
+#view-kie-accounts .account-pool-title>div{flex:1;min-width:0}
+#view-accounts .account-pool-title p,
+#view-kie-accounts .account-pool-title p{font-size:12px}
+#view-accounts .refresh-account-btn,
+#view-kie-accounts .refresh-account-btn{
+  width:44px;height:44px;min-width:44px;min-height:44px;flex:none;
+  margin:0;padding:0;display:grid;place-items:center;font-size:0;
+  border:1px solid #34404e;border-radius:12px;
+  background:#131b24;color:#d7e3ed;line-height:1;
+}
+#view-accounts .refresh-account-btn:hover,
+#view-kie-accounts .refresh-account-btn:hover{background:#202b36;border-color:#56687b}
+.refresh-account-btn svg{width:19px;height:19px;stroke-width:1.9}
+#kieRefreshAccounts:disabled svg{animation:refreshSpin .8s linear infinite}
+.account-layout{grid-template-columns:minmax(270px,340px) minmax(0,1fr);gap:16px}
+.add-account{padding:22px;border-radius:16px}
+.add-account h3{font:650 16px/1.4 Manrope,Inter,sans-serif;
+  letter-spacing:-.015em;margin:0 0 20px}
+.add-account .field-label{margin:0 0 9px}
+.add-account .text-input{height:48px;line-height:1.4;padding:0 14px;border-radius:11px}
+.add-account .generate-btn.compact{height:46px;min-height:46px;margin-top:14px;
+  display:flex;justify-content:center}
+.add-account .form-note{margin:13px 0 0;max-width:42ch}
+.account-list{align-content:start;gap:12px;min-width:0}
+.account-card{min-width:0;border-radius:15px;border-color:var(--studio-border);
+  background:#131a23;padding:16px;gap:12px}
+.account-card-main{min-width:0}
+.account-card-main>div:last-child{min-width:0}
+.account-card-main strong{font-size:14px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+.account-card-main small{font-size:11px;line-height:1.5;color:#a8b5c3;margin-top:4px}
+.account-metrics{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:0}
+.account-metrics span{font-size:12px;line-height:1.35;color:#b7c4d1;font-variant-numeric:tabular-nums}
+.account-icon{height:42px;width:42px;flex:0 0 42px;border-radius:12px;
+  background:#1b2630;border-color:#354452;color:#d0ff91}
+.account-card .delete-account{font-size:12px;line-height:1.2;white-space:nowrap}
+.account-card .delete-account:active{transform:scale(.96)}
+#view-kie-accounts .account-card{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  grid-template-rows:auto auto;grid-template-areas:"identity credit" "identity action";
+  column-gap:14px;row-gap:9px;align-items:center;
+}
+#view-kie-accounts .account-card-main{grid-area:identity;align-self:center}
+#view-kie-accounts .account-metrics{grid-area:credit;justify-self:end;
+  align-items:flex-end;flex-direction:column;flex-wrap:nowrap;gap:2px}
+#view-kie-accounts .account-metrics span:first-child{font-size:13px;font-weight:700;color:#edf3f7;white-space:nowrap}
+#view-kie-accounts .account-metrics span:last-child{font-size:10px;color:#90a2b4}
+#view-kie-accounts .account-card .delete-account{
+  grid-area:action;justify-self:end;min-width:92px;max-width:100%;
+  width:auto;height:38px;min-height:38px;padding:0 13px;
+  font-size:12px;border-radius:10px;font-weight:650;white-space:nowrap;
+  background:#281b23;color:#ffb3b9;border-color:#5b3541;
+  box-shadow:none;
+}
+#view-kie-accounts .account-card .delete-account:hover{
+  background:#35222b;border-color:#81515e;color:#ffd0d3;
+}
+#view-kie-accounts .account-icon{font-size:0;position:relative}
+#view-kie-accounts .account-icon::after{
+  content:"";display:block;width:21px;height:21px;background-color:#c8f98d;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='3'/%3E%3Ccircle cx='9' cy='10' r='2'/%3E%3Cpath d='M5.5 16c.5-2 6.5-2 7 0M15 9h4M15 13h4'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='3'/%3E%3Ccircle cx='9' cy='10' r='2'/%3E%3Cpath d='M5.5 16c.5-2 6.5-2 7 0M15 9h4M15 13h4'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+/* Same visual styling for both archive pages; no task-state logic changes. */
+.history-filters{gap:8px}
+.history-filter{font-size:12px;line-height:1.3;min-height:40px}
+.history-retention-note p{font-size:12px;line-height:1.55}
+.kie-history-grid{gap:16px}
+.kie-history-info{padding:17px;gap:8px}
+.kie-history-info h3{font-size:15px}
+.kie-history-info p{font-size:12px}
+.kie-history-info small{font-size:11px}
+.kie-history-info .kie-task-prompt{line-height:1.55}
+.kie-task-badge{font-size:11px}
+.kie-history-download{font-size:12px}
+
+/* Create Image / Edit Image: consistent labels and readable UI hierarchy. */
+.image-hero{padding:12px 0 28px}
+.image-hero h2{font-size:clamp(32px,3vw,50px);line-height:1.1;letter-spacing:-.04em;text-wrap:balance}
+.image-hero p{font-size:13px;line-height:1.65;color:var(--studio-muted);text-wrap:pretty}
+.image-mode-tabs{gap:8px;margin-bottom:18px}
+.image-mode-tab{min-height:44px;padding:12px 17px;font-size:13px;line-height:1.3;border-radius:11px}
+.image-mode-tab .vanta-nav-svg{height:18px;width:18px}
+.image-workspace{gap:16px}
+.image-config-panel,.image-preview-panel{padding:22px}
+.kie-file-drop{padding:24px;border-color:#415061;background:#101820}
+.kie-file-drop strong{font-size:13px}
+.kie-file-drop small{font-size:12px;line-height:1.5}
+.kie-textarea{font-size:14px;line-height:1.6;background:#0e141b;border-color:#384553}
+.kie-stage-message p{font-size:12px;line-height:1.6}
+.image-stage>p{font-size:13px;color:#a6b4c2;text-align:center;padding-inline:14px}
+.image-preview-panel .panel-head h3{font-size:15px}
+.image-preview-panel .panel-head p{font-size:12px}
+.account-hint{font-size:12px}
+#kieResultActions .download-btn{font-size:13px}
+
+/* Accessible tap targets without expanding button groups or covering their neighbours. */
+.nav-category,.nav-item,.image-mode-tab,.history-filter{min-height:44px}
+a:focus-visible,button:focus-visible{outline-offset:3px}
+
+@media(max-width:1050px){
+  .account-layout{grid-template-columns:1fr;gap:14px}
+  .add-account{padding:20px}
+}
+@media(max-width:780px){
+  html{scrollbar-gutter:auto}
+  .sidebar{padding:22px 15px;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+  .brand{padding-bottom:22px}
+  .sidebar-close{width:40px;height:40px;min-width:40px;min-height:40px;top:21px;right:15px}
+  .topbar{height:64px;padding-inline:16px;gap:10px}
+  .topbar h1{font-size:16px}
+  .topbar .menu-btn{height:40px;width:40px;min-height:40px;min-width:40px;border-color:#34404c}
+  .balance-pill{height:38px;min-height:38px;padding-inline:11px;gap:5px}
+  .balance-pill strong{font-size:14px}
+  .balance-pill small{font-size:10px}
+  .view{padding:24px 16px calc(28px + env(safe-area-inset-bottom))}
+  .section-title{margin:3px 0 20px}
+  .section-title h2{font-size:25px;line-height:1.16;letter-spacing:-.028em}
+  .section-title p{font-size:12px;line-height:1.6}
+  #view-accounts .account-pool-title,
+  #view-kie-accounts .account-pool-title{display:flex;flex-direction:row;align-items:flex-start;
+    justify-content:space-between;margin:4px 0 18px;gap:12px;padding-right:0}
+  #view-accounts .account-pool-title>div,
+  #view-kie-accounts .account-pool-title>div{min-width:0;max-width:calc(100% - 58px)}
+  #view-accounts .refresh-account-btn,
+  #view-kie-accounts .refresh-account-btn{
+    position:static;top:auto;right:auto;margin:0;flex:0 0 44px;width:44px;height:44px;min-width:44px;
+  }
+  .add-account{padding:19px 17px;border-radius:15px}
+  .add-account h3{font-size:15px;margin-bottom:18px}
+  .add-account .text-input,select,.kie-textarea{font-size:16px}
+  .add-account .text-input{height:48px}
+  .add-account .generate-btn.compact{height:46px;margin-top:12px;font-size:14px}
+  .account-card{padding:16px;border-radius:14px}
+  .account-card-main strong{font-size:14px}
+  .account-card-main small{font-size:12px}
+  .account-metrics span{font-size:12px}
+  #view-kie-accounts .account-card .delete-account{min-width:86px;width:auto;
+    height:40px;min-height:40px;padding:0 12px;font-size:12px}
+  #view-kie-accounts .account-metrics span:first-child{font-size:13px}
+  .account-list{gap:12px}
+  .image-hero{padding:10px 0 23px}
+  .image-hero h2{font-size:32px}
+  .image-hero p{font-size:13px}
+  .image-config-panel,.image-preview-panel{padding:17px}
+  .image-mode-tab{font-size:12px}
+  .kie-history-grid{grid-template-columns:1fr;gap:13px}
+  .kie-history-info{padding:16px}
+  .history-filters{flex-wrap:wrap}
+  .history-filter{font-size:12px}
+  .toast{bottom:calc(20px + env(safe-area-inset-bottom));font-size:12px;padding:13px 15px;
+    background:#17202a;border-color:#3d4a58;z-index:160}
+}
+@media(max-width:370px){
+  .view{padding-inline:12px}
+  .section-title h2{font-size:23px}
+  #view-kie-accounts .account-card{column-gap:8px;padding:14px}
+  #view-kie-accounts .account-metrics span:first-child{font-size:12px}
+  .sidebar{width:min(295px,85vw)!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .sidebar,.sidebar-overlay,.nav-chevron,.nav-item,.nav-category{transition:none!important}
+}
