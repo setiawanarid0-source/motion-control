@@ -20,7 +20,18 @@ function getDeviceId(){
 
 function toast(message, error=false){ const el=$('#toast'); el.textContent=message; el.classList.toggle('error',error); el.classList.add('show'); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove('show'),4200); }
 function fmtTime(seconds){ seconds=Math.max(0,Math.round(seconds||0)); const m=Math.floor(seconds/60),s=seconds%60; return m?`${m}m ${String(s).padStart(2,'0')}s`:`${s}s`; }
-function fmtElapsed(ms){ const sec=Math.floor(ms/1000),m=Math.floor(sec/60),s=sec%60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+function fmtElapsed(ms){
+  const sec=Math.floor(Math.max(0,Number(ms)||0)/1000);
+  const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  return [h,m,s].map(n=>String(n).padStart(2,'0')).join(':');
+}
+function renderLiveTaskDuration(){
+  if(!state.task||!['running','processing','waiting_output','finalizing'].includes(state.task.currentState))return;
+  const started=Date.parse(state.task.submittedAt||'');
+  if(!Number.isFinite(started))return;
+  const el=$('#taskEstimate');
+  if(el)el.textContent='Sejak dikirim · '+fmtElapsed(Date.now()-started);
+}
 function machineLabel(mode){return mode==='plus'?'Plus':mode==='lite'?'Lite':'Standard';}
 function fileSize(n){ if(!n)return '0 B'; const u=['B','KB','MB','GB']; let i=0,v=n; while(v>=1024&&i<u.length-1){v/=1024;i++} return `${v.toFixed(i?1:0)} ${u[i]}`; }
 function escapeHtml(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
@@ -250,6 +261,7 @@ function completedSubmission(data){
   // A completed submission is processed once even after a refresh.
   const already=history().some(x=>String(x.taskId)===String(task.taskId));
   state.task=task;
+  state.task.currentState=task.taskStatus==='RUNNING'?'running':'queued';
   const iso=task.submittedAt||new Date().toISOString();
   const ms=Date.parse(iso);state.startedAt=Number.isFinite(ms)?ms:Date.now();
   clearSubmission();
@@ -385,6 +397,7 @@ function showTask(data){
   $('#taskId').textContent=`#${data.taskId}`;
   const est=estimateSeconds();
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
+  renderLiveTaskDuration();
   toast('Task sudah dikirim ke RunningHub. Status dapat dipantau di History.');
 }
 function startPolling(){clearInterval(state.pollTimer);pollTask();state.pollTimer=setInterval(pollTask,6000)}
@@ -396,11 +409,14 @@ async function pollTask(){
       const labels={queued:'Antrean RunningHub',running:'Diproses RunningHub',
         finalizing:'Menyiapkan video 40 FPS',waiting_output:'Menunggu hasil RunningHub'};
       $('#taskStatus').textContent=labels[data.state];
+      state.task.currentState=data.state;
       $('#taskEstimate').textContent=data.message||'Status diperbarui dari RunningHub';
+      renderLiveTaskDuration();
       updateHistory(state.task.taskId,{status:data.state,error:null,statusDetail:data.message||null,
         providerCode:data.rawCode??null});
     }
     if(data.state==='check_error'){
+      state.task.currentState='check_error';
       $('#taskStatus').textContent='Menghubungkan kembali…';
       $('#taskEstimate').textContent='Status terbaru belum tersedia';
       updateHistory(state.task.taskId,{status:'check_error',
@@ -547,12 +563,18 @@ function updateHistory(taskId,patch){
 }
 function isActiveHistoryStatus(status){return ['uploading','queued','running','processing','waiting_output','finalizing','check_error','unavailable'].includes(String(status||'').toLowerCase())}
 function historyElapsed(item){
-  if(item.runtimeMs!=null) return Number(item.runtimeMs)||0;
-  if(['uploading','queued','running','processing'].includes(String(item.status||'').toLowerCase())&&item.startedAt){
-    const start=Date.parse(item.startedAt);
-    return Number.isFinite(start)?Math.max(0,Date.now()-start):0;
+  if(item.runtimeMs!=null&&Number.isFinite(Number(item.runtimeMs)))
+    return Math.max(0,Number(item.runtimeMs));
+  const start=Date.parse(item.startedAt||'');
+  if(!Number.isFinite(start))return null;
+  const status=String(item.status||'').toLowerCase();
+  if(['success','failed'].includes(status)){
+    const finished=Date.parse(item.finishedAt||'');
+    return Number.isFinite(finished)?Math.max(0,finished-start):null;
   }
-  return 0;
+  if(['running','processing','waiting_output','finalizing','check_error','unavailable'].includes(status))
+    return Math.max(0,Date.now()-start);
+  return null;
 }
 function historyStatusLabel(status){
   const s=String(status||'').toLowerCase();
@@ -623,6 +645,8 @@ function renderHistory(){
   root.innerHTML=items.map(x=>{
     const statusClass=historyStatusClass(x.status);
     const statusLabel=historyStatusLabel(x.status);
+    const elapsed=historyElapsed(x);
+    const duration=elapsed===null?'':`<small class="history-duration" title="Dihitung sejak task diterima RunningHub">${['success','failed'].includes(String(x.status||'').toLowerCase())?'Total waktu':'Sejak dikirim'} · ${fmtElapsed(elapsed)}</small>`;
     const error=x.error?`<small class="history-error" title="${escapeHtml(x.error)}">${escapeHtml(x.error)}</small>`:'';
     const diagnosis=x.diagnosis?`<small class="history-diagnosis">${escapeHtml(x.diagnosis)}</small>`:'';
     // Keep cameraQA on the task for audit, but never show raw internal classifications in History.
@@ -654,7 +678,7 @@ function renderHistory(){
       <td data-label="Mode">${escapeHtml(machineLabel(x.mode))}</td>
       <td data-label="Account">${escapeHtml(x.account)}</td>
       <td data-label="Video" class="history-video-name">${escapeHtml(x.video)}</td>
-      <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${error}${diagnosis}${statusDetail}${deliveryNote}${cameraInfo}${inspect}</td>
+      <td data-label="Status"><span class="history-status ${statusClass}"><span></span>${escapeHtml(statusLabel)}</span>${duration}${error}${diagnosis}${statusDetail}${deliveryNote}${cameraInfo}${inspect}</td>
       <td data-label="Result">${result}</td>
     </tr>`;
   }).join('');
@@ -817,7 +841,10 @@ function startHistoryMonitor(){
   clearInterval(state.historyPollTimer);
   clearInterval(state.historyClockTimer);
   state.historyPollTimer=setInterval(pollHistoryTasks,8000);
-  state.historyClockTimer=setInterval(()=>{if(state.view==='history')renderHistory()},1000);
+  state.historyClockTimer=setInterval(()=>{
+    if(state.view==='history')renderHistory();
+    renderLiveTaskDuration();
+  },1000);
   setInterval(syncServerHistory,30000);
   pollHistoryTasks();
   inspectRecentFailedTasks();
