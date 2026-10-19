@@ -125,6 +125,70 @@ win.vantaGallery.close();
 assert.ok(motionGrid.includes('Memproses'),'Active Motion must clearly show status');
 assert.equal((motionGrid.match(/class="nora-gallery-tile"/g)||[]).length,2);
 
+
+// Performance regression: history may contain many results but the DOM only
+// contains 12 tiles until the user explicitly asks for another batch.
+const many=Array.from({length:49},(_,i)=>({
+  id:'bulk-'+i,status:i===0?'generating':'success',
+  modelName:'Test Image '+i,mode:'create',accountName:'Account 02',
+  createdAt:new Date(Date.parse('2026-10-19T08:00:00Z')-i*60000).toISOString(),
+  prompt:'Prompt '+i, resultUrls:i===0?[]:['https://cdn.example.com/'+i+'.jpg']
+}));
+win.vantaGallery.reset('image');
+win.vantaGallery.renderImage(many);
+const firstPage=fakeEl('kieHistoryGrid').innerHTML;
+assert.equal((firstPage.match(/class="nora-gallery-tile"/g)||[]).length,12,
+  'Only first 12 image records may render');
+assert.equal((firstPage.match(/<img /g)||[]).length,11,
+  'Exactly 11 completed media thumbnails plus one pending should be requested');
+assert.ok(firstPage.includes('Menampilkan 12 dari 49 hasil'));
+assert.ok(firstPage.includes('Tampilkan 12 berikutnya'));
+assert.ok(!firstPage.includes('bulk-25'),'Hidden pages must not create DOM/media elements');
+assert.ok(firstPage.includes('loading="lazy" decoding="async" fetchpriority="low"'));
+win.vantaGallery.open('image','bulk-0');
+assert.equal(fakeEl('noraViewerCounter').textContent,'1 / 12',
+  'Viewer counter should only traverse currently requested results');
+win.vantaGallery.close();
+const moreEvent=provider=>({target:{closest:selector=>
+  selector==='[data-gallery-more]'?{dataset:{galleryMore:provider}}:null}});
+fakeEl('kieHistoryGrid').events.click(moreEvent('image'));
+assert.equal((fakeEl('kieHistoryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,24);
+assert.ok(fakeEl('kieHistoryGrid').innerHTML.includes('Menampilkan 24 dari 49 hasil'));
+fakeEl('kieHistoryGrid').events.click(moreEvent('image'));
+fakeEl('kieHistoryGrid').events.click(moreEvent('image'));
+fakeEl('kieHistoryGrid').events.click(moreEvent('image'));
+assert.equal((fakeEl('kieHistoryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,49);
+assert.ok(!fakeEl('kieHistoryGrid').innerHTML.includes('data-gallery-more'),
+  'No load-more button should remain after the last batch');
+win.vantaGallery.reset('image');
+win.vantaGallery.renderImage(many.slice(0,20));
+assert.equal((fakeEl('kieHistoryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,12,
+  'Applying a filter must reset gallery to its first 12 items');
+
+const bigMotion=Array.from({length:37},(_,i)=>({
+  taskId:String(2109126366731990000+i),status:'success',
+  workflow:'Current Workflow',mode:'plus',
+  account:'Account 05',
+  startedAt:new Date(Date.parse('2026-10-19T08:00:00Z')-i*60000).toISOString(),
+  resultUrl:'https://vanta.test/api/video-'+i+'.mp4'
+}));
+win.vantaGallery.reset('motion');
+win.vantaGallery.renderMotion(bigMotion);
+const firstMotion=fakeEl('motionGalleryGrid').innerHTML;
+assert.equal((firstMotion.match(/class="nora-gallery-tile"/g)||[]).length,12,
+  'Only 12 recent Motion results may render');
+assert.ok(!firstMotion.includes('<video '),'No MP4/video element may exist on Motion tiles');
+assert.ok(!firstMotion.includes('#t=0.15'),
+  'No server MP4 seek requests from thumbnail rendering');
+fakeEl('motionGalleryGrid').events.click(moreEvent('motion'));
+assert.equal((fakeEl('motionGalleryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,24);
+assert.equal((fakeEl('kieHistoryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,12,
+  'Image and Motion pagination state must remain independent');
+assert.ok(main.includes('if(window.vantaGallery){')&&main.includes('window.vantaGallery.renderMotion(items);'),
+  'Motion History must bypass legacy hidden table updates each second');
+assert.ok(main.includes("window.vantaGallery?.reset('motion')")&&image.includes("window.vantaGallery?.reset('image')"),
+  'History filters must reset their respective batches');
+
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-gallery-delete-'));
 try{
   const vault=createTaskRegistry({dir:tmp,encrypt:JSON.stringify,decrypt:JSON.parse});
