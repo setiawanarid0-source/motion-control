@@ -18,9 +18,45 @@
     unavailable:'Status belum tersedia',finalizing:'Menyiapkan hasil',waiting_output:'Menunggu hasil'
   })[s]||'Memproses';
   const PAGE_SIZE=12;
-  const limits={image:PAGE_SIZE,motion:PAGE_SIZE};
+  const pages={image:1,motion:1};
   const state={image:[],motion:[],modalProvider:null,modalId:null,focus:null};
-  const visibleItems=p=>state[p].slice(0,limits[p]);
+  const pageCount=p=>Math.max(1,Math.ceil(state[p].length/PAGE_SIZE));
+  const visibleItems=p=>state[p].slice((pages[p]-1)*PAGE_SIZE,pages[p]*PAGE_SIZE);
+  function pageNumbers(current,total){
+    if(total<=7)return Array.from({length:total},(_,i)=>i+1);
+    const numbers=new Set([1,total]);
+    const start=current<=3?2:current>=total-2?total-4:current-1;
+    const end=current<=3?5:current>=total-2?total-1:current+1;
+    for(let i=start;i<=end;i++)numbers.add(i);
+    const ordered=[...numbers].sort((a,b)=>a-b),list=[];
+    for(let i=0;i<ordered.length;i++){
+      if(i&&ordered[i]-ordered[i-1]>1){
+        if(ordered[i]-ordered[i-1]===2)list.push(ordered[i-1]+1);
+        else list.push('…');
+      }
+      list.push(ordered[i]);
+    }
+    return list;
+  }
+  function paginationHTML(p,count){
+    const total=pageCount(p),page=pages[p];
+    if(total<=1)return '';
+    const first=(page-1)*PAGE_SIZE+1,last=Math.min(page*PAGE_SIZE,count);
+    const go=(target,label,kind)=>'<button class="nora-page-btn '+kind+
+      '" type="button" data-gallery-page="'+p+'" data-gallery-target="'+target+
+      '" aria-label="'+label+'" '+(target===page?'disabled':'')+'>'+label+'</button>';
+    const numbers=pageNumbers(page,total).map(n=>n==='…'
+      ?'<span class="nora-page-ellipsis" aria-hidden="true">…</span>'
+      :'<button class="nora-page-btn number'+(n===page?' active':'')+
+        '" type="button" data-gallery-page="'+p+'" data-gallery-target="'+n+
+        '" aria-label="Halaman '+n+'" '+(n===page?'aria-current="page" disabled':'')+'>'+n+'</button>').join('');
+    return '<nav class="nora-gallery-pagination" aria-label="Navigasi halaman '+(p==='image'?'gambar':'video')+'">'+
+      '<p class="nora-pagination-summary">Menampilkan '+first+'–'+last+' dari '+count+' hasil</p>'+
+      '<div class="nora-pagination-controls">'+
+      go(Math.max(1,page-1),'Sebelumnya','previous')+numbers+
+      go(Math.min(total,page+1),'Berikutnya','next')+
+      '</div><p class="nora-pagination-position">Halaman '+page+' dari '+total+'</p></nav>';
+  }
   const rootOf=p=>element(p==='image'?'kieHistoryGrid':'motionGalleryGrid');
   const idOf=(p,t)=>String(p==='image'?t.id:t.taskId);
   const labelOf=(p,t)=>p==='image'?(t.modelName||'Model gambar'):(t.workflow||'Motion Control');
@@ -75,21 +111,18 @@
     if(!Array.isArray(items))return;
     const sorted=[...items].sort((a,b)=>(Date.parse(dateOf(p,b))||0)-(Date.parse(dateOf(p,a))||0));
     state[p]=sorted;
+    pages[p]=Math.min(pages[p],pageCount(p));
     const root=rootOf(p);if(!root)return;
     const visible=visibleItems(p);
     // Exclude hidden pages from the DOM, including their image/video requests.
     // Polling can refresh statuses without reloading already visible thumbnails.
-    const signature=JSON.stringify([limits[p],sorted.length,...visible.map(t=>
+    const signature=JSON.stringify([pages[p],sorted.length,...visible.map(t=>
       [idOf(p,t),t.status,labelOf(p,t),t.resultUrls?.[0]||t.resultUrl||'',
        t.references?.[0]||'',t.error||'',t.finishedAt||''])]);
     if(signatures[p]!==signature){
       signatures[p]=signature;
-      const remaining=Math.max(0,sorted.length-visible.length);
-      const footer=remaining?'<div class="nora-gallery-pagination" role="group" aria-label="Muat hasil berikutnya">'+
-        '<p>Menampilkan '+visible.length+' dari '+sorted.length+' hasil</p>'+
-        '<button type="button" class="nora-gallery-more" data-gallery-more="'+p+
-        '">Tampilkan '+Math.min(PAGE_SIZE,remaining)+' berikutnya</button></div>':'';
-      root.innerHTML=sorted.length?visible.map(t=>tileHTML(p,t)).join('')+footer:
+      root.innerHTML=sorted.length?visible.map(t=>tileHTML(p,t)).join('')+
+        paginationHTML(p,sorted.length):
         '<div class="nora-gallery-empty"><span aria-hidden="true">▧</span><strong>Belum ada hasil</strong>'+
         '<p>Hasil generasi akan muncul di galeri ini.</p></div>';
       root.querySelectorAll('img').forEach(img=>{img.addEventListener('error',()=>{img.hidden=true;});});
@@ -192,12 +225,15 @@
   const motion=element('motionGalleryGrid'),image=element('kieHistoryGrid');
   for(const root of [motion,image]){
     root?.addEventListener('click',e=>{
-      const more=e.target.closest('[data-gallery-more]');
-      if(more){
-        const provider=more.dataset.galleryMore;
+      const pageButton=e.target.closest('[data-gallery-page]');
+      if(pageButton){
+        const provider=pageButton.dataset.galleryPage;
         if(!['image','motion'].includes(provider))return;
-        limits[provider]=Math.min(state[provider].length,limits[provider]+PAGE_SIZE);
+        const target=Number(pageButton.dataset.galleryTarget);
+        if(!Number.isInteger(target)||target<1||target>pageCount(provider)||target===pages[provider])return;
+        pages[provider]=target;
         render(provider,state[provider]);
+        root.scrollIntoView?.({behavior:'instant',block:'start'});
         return;
       }
       const btn=e.target.closest('[data-gallery-open]');
@@ -239,7 +275,7 @@
   },{passive:true});
   window.vantaGallery={renderImage:items=>render('image',items),renderMotion:items=>render('motion',items),
     reset:provider=>{if(!['image','motion'].includes(provider))return;
-      limits[provider]=PAGE_SIZE;signatures[provider]='';},
+      pages[provider]=1;signatures[provider]='';},
     refreshDurations,close,open:showModal};
   window.vantaImageGallery?.redraw?.();
   window.vantaMotionGallery?.redraw?.();
