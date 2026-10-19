@@ -23,20 +23,11 @@
   const pageCount=p=>Math.max(1,Math.ceil(state[p].length/PAGE_SIZE));
   const visibleItems=p=>state[p].slice((pages[p]-1)*PAGE_SIZE,pages[p]*PAGE_SIZE);
   function pageNumbers(current,total){
-    if(total<=7)return Array.from({length:total},(_,i)=>i+1);
-    const numbers=new Set([1,total]);
-    const start=current<=3?2:current>=total-2?total-4:current-1;
-    const end=current<=3?5:current>=total-2?total-1:current+1;
-    for(let i=start;i<=end;i++)numbers.add(i);
-    const ordered=[...numbers].sort((a,b)=>a-b),list=[];
-    for(let i=0;i<ordered.length;i++){
-      if(i&&ordered[i]-ordered[i-1]>1){
-        if(ordered[i]-ordered[i-1]===2)list.push(ordered[i-1]+1);
-        else list.push('…');
-      }
-      list.push(ordered[i]);
-    }
-    return list;
+    // Five compact slots keep mobile pagination on a single row.
+    if(total<=5)return Array.from({length:total},(_,i)=>i+1);
+    if(current<=3)return [1,2,3,'…',total];
+    if(current>=total-2)return [1,'…',total-2,total-1,total];
+    return [1,'…',current,'…',total];
   }
   function paginationHTML(p,count){
     const total=pageCount(p),page=pages[p];
@@ -44,7 +35,9 @@
     const first=(page-1)*PAGE_SIZE+1,last=Math.min(page*PAGE_SIZE,count);
     const go=(target,label,kind)=>'<button class="nora-page-btn '+kind+
       '" type="button" data-gallery-page="'+p+'" data-gallery-target="'+target+
-      '" aria-label="'+label+'" '+(target===page?'disabled':'')+'>'+label+'</button>';
+      '" aria-label="'+label+'" '+(target===page?'disabled':'')+'>'+
+      '<span class="nora-page-word">'+label+'</span>'+
+      '<span class="nora-page-chevron" aria-hidden="true">'+(kind==='previous'?'‹':'›')+'</span></button>';
     const numbers=pageNumbers(page,total).map(n=>n==='…'
       ?'<span class="nora-page-ellipsis" aria-hidden="true">…</span>'
       :'<button class="nora-page-btn number'+(n===page?' active':'')+
