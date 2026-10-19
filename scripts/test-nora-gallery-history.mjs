@@ -117,7 +117,11 @@ win.vantaGallery.renderMotion([
 ]);
 const motionGrid=fakeEl('motionGalleryGrid').innerHTML;
 assert.ok(motionGrid.includes('data-gallery-provider="motion"'));
-assert.ok(motionGrid.includes('<video '),'Successful Motion results must preview video thumbnail');
+assert.ok(!motionGrid.includes('<video '),'Motion gallery must never preload heavy MP4 thumbnail streams');
+win.vantaGallery.open('motion','2109126366731984899');
+assert.ok(fakeEl('noraViewerMedia').innerHTML.includes('<video '),
+  'Motion video loads on explicit viewer open, not before');
+win.vantaGallery.close();
 assert.ok(motionGrid.includes('Memproses'),'Active Motion must clearly show status');
 assert.equal((motionGrid.match(/class="nora-gallery-tile"/g)||[]).length,2);
 
@@ -133,4 +137,4 @@ try{
   assert.equal(vault.removeCompleted(id,'acc'),true);
   assert.equal(vault.get(id),null);
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
-console.log('PASS: Nora Gallery 3-column grids, viewer arrows, prompt copy, no long prompt cards, terminal delete guard, Motion video, active status, existing paid generators unchanged');
+console.log('PASS: Nora Gallery grids, lazy on-demand video preview, viewer arrows, prompt copy, terminal delete guard, active status, generators unchanged');
