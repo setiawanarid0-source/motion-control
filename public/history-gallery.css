@@ -142,3 +142,31 @@
   #view-image-history .kie-history-grid,#view-history .nora-gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(prefers-reduced-motion:reduce){.nora-gallery-tile,.nora-action{transition:none}}
+
+
+/* Bounded rendering: every gallery shows at most 12 recent results per batch.
+   Pagination is an intentional user action, never infinite-scroll or auto preload. */
+.nora-gallery-pagination{
+  grid-column:1/-1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:12px;margin:12px 0 4px;padding:18px 12px;
+  border-top:1px solid #2b3743;
+}
+.nora-gallery-pagination p{
+  margin:0;font-size:12px;line-height:1.5;color:#a7b6c5;
+  font-variant-numeric:tabular-nums;text-align:center;
+}
+.nora-gallery-more{
+  display:inline-flex;justify-content:center;align-items:center;gap:8px;
+  min-width:190px;min-height:46px;padding:11px 22px;border-radius:11px;
+  border:1px solid #445568;background:#17222e;color:#e7f0fa;
+  font:650 13px/1.3 Inter,system-ui,sans-serif;cursor:pointer;
+  transition:background-color .15s,border-color .15s;
+}
+.nora-gallery-more:hover{background:#263444;border-color:#667b8e}
+.nora-gallery-more:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.nora-gallery-more:active{transform:scale(.98)}
+@media(max-width:700px){
+  .nora-gallery-pagination{padding:15px 8px;margin-top:7px;gap:10px}
+  .nora-gallery-more{min-width:0;width:100%;max-width:260px;min-height:44px}
+}
+@media(prefers-reduced-motion:reduce){.nora-gallery-more{transition:none}}
