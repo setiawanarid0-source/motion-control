@@ -15,7 +15,10 @@
     generating:'Memproses',queued:'Antrean',waiting:'Antrean',check_error:'Status belum tersedia',
     unavailable:'Status belum tersedia',finalizing:'Menyiapkan hasil',waiting_output:'Menunggu hasil'
   })[s]||'Memproses';
+  const PAGE_SIZE=12;
+  const limits={image:PAGE_SIZE,motion:PAGE_SIZE};
   const state={image:[],motion:[],modalProvider:null,modalId:null,focus:null};
+  const visibleItems=p=>state[p].slice(0,limits[p]);
   const rootOf=p=>element(p==='image'?'kieHistoryGrid':'motionGalleryGrid');
   const idOf=(p,t)=>String(p==='image'?t.id:t.taskId);
   const labelOf=(p,t)=>p==='image'?(t.modelName||'Model gambar'):(t.workflow||'Motion Control');
@@ -40,10 +43,12 @@
   function tileHTML(p,t){
     const id=idOf(p,t),isDone=t.status==='success',media=isDone?mediaOf(p,t):null;
     const poster=posterOf(p,t);
+    // Cards NEVER load MP4 streams. Motion previews fetch media only after the
+    // user opens the viewer; at most PAGE_SIZE photo posters can load at once.
     const image=p==='image'
-      ? (poster?'<img loading="lazy" alt="" src="'+safeText(poster)+'">':'<span class="nora-gallery-placeholder">◇</span>')
-      : (media?'<video preload="metadata" muted playsinline src="'+safeText(media)+'#t=0.15"></video>':
-          poster?'<img loading="lazy" alt="" src="'+safeText(poster)+'">':'<span class="nora-gallery-placeholder nora-gallery-video-placeholder">▹</span>');
+      ? (poster?'<img loading="lazy" decoding="async" fetchpriority="low" alt="" src="'+safeText(poster)+'">':'<span class="nora-gallery-placeholder">◇</span>')
+      : (poster?'<img loading="lazy" decoding="async" fetchpriority="low" alt="" src="'+safeText(poster)+'">':
+          '<span class="nora-gallery-placeholder nora-gallery-video-placeholder">▹</span>');
     const type=p==='image'?(t.mode==='edit'?'Edit Image':'Create Image'):(t.mode==='plus'?'Plus':'Standard');
     return '<article class="nora-gallery-tile">'+
       '<button class="nora-gallery-open" type="button" data-gallery-open="'+safeText(id)+'" data-gallery-provider="'+p+'" aria-label="Buka '+safeText(labelOf(p,t))+'">'+
@@ -64,24 +69,32 @@
   }
   function render(p,items){
     if(!Array.isArray(items))return;
-    const filtered=[...items].sort((a,b)=>(Date.parse(dateOf(p,b))||0)-(Date.parse(dateOf(p,a))||0));
-    state[p]=filtered;
+    const sorted=[...items].sort((a,b)=>(Date.parse(dateOf(p,b))||0)-(Date.parse(dateOf(p,a))||0));
+    state[p]=sorted;
     const root=rootOf(p);if(!root)return;
-    const signature=JSON.stringify(filtered.map(t=>[idOf(p,t),t.status,labelOf(p,t),
-      t.resultUrls?.[0]||t.resultUrl||'',t.references?.[0]||'',t.error||'',t.finishedAt||'']));
+    const visible=visibleItems(p);
+    // Exclude hidden pages from the DOM, including their image/video requests.
+    // Polling can refresh statuses without reloading already visible thumbnails.
+    const signature=JSON.stringify([limits[p],sorted.length,...visible.map(t=>
+      [idOf(p,t),t.status,labelOf(p,t),t.resultUrls?.[0]||t.resultUrl||'',
+       t.references?.[0]||'',t.error||'',t.finishedAt||''])]);
     if(signatures[p]!==signature){
       signatures[p]=signature;
-      root.innerHTML=filtered.length?filtered.map(t=>tileHTML(p,t)).join(''):
+      const remaining=Math.max(0,sorted.length-visible.length);
+      const footer=remaining?'<div class="nora-gallery-pagination" role="group" aria-label="Muat hasil berikutnya">'+
+        '<p>Menampilkan '+visible.length+' dari '+sorted.length+' hasil</p>'+
+        '<button type="button" class="nora-gallery-more" data-gallery-more="'+p+
+        '">Tampilkan '+Math.min(PAGE_SIZE,remaining)+' berikutnya</button></div>':'';
+      root.innerHTML=sorted.length?visible.map(t=>tileHTML(p,t)).join('')+footer:
         '<div class="nora-gallery-empty"><span aria-hidden="true">▧</span><strong>Belum ada hasil</strong>'+
         '<p>Hasil generasi akan muncul di galeri ini.</p></div>';
       root.querySelectorAll('img').forEach(img=>{img.addEventListener('error',()=>{img.hidden=true;});});
-      root.querySelectorAll('video').forEach(video=>{video.addEventListener('error',()=>{video.hidden=true;});});
-      if(p==='motion')refreshDurations();
     }
-    if(state.modalProvider===p&&state.modalId&&!filtered.some(t=>idOf(p,t)===state.modalId))close();
+    if(state.modalProvider===p&&state.modalId&&!visible.some(t=>idOf(p,t)===state.modalId))close();
   }
   function current(){return state[state.modalProvider]?.find(t=>idOf(state.modalProvider,t)===state.modalId);}
-  function getIndex(){return state[state.modalProvider]?.findIndex(t=>idOf(state.modalProvider,t)===state.modalId)??-1;}
+  function getIndex(){return state.modalProvider?
+    visibleItems(state.modalProvider).findIndex(t=>idOf(state.modalProvider,t)===state.modalId):-1;}
   function actions(p,t){
     const all=[];
     if(t.status==='success'&&mediaOf(p,t))all.push('<a class="nora-action primary" href="'+safeText(mediaOf(p,t))+'" target="_blank" rel="noopener noreferrer" download>Unduh</a>');
@@ -121,7 +134,7 @@
   }
   function drawModal(){
     const p=state.modalProvider,t=current();if(!p||!t)return;
-    const idx=getIndex(),count=state[p].length,media=mediaOf(p,t),poster=posterOf(p,t);
+    const idx=getIndex(),count=visibleItems(p).length,media=mediaOf(p,t),poster=posterOf(p,t);
     element('noraViewerContext').textContent=p==='image'?'KIE.AI · IMAGE GALLERY':'RUNNINGHUB · MOTION GALLERY';
     element('noraViewerTitle').textContent=labelOf(p,t);
     element('noraViewerCounter').textContent=(idx+1)+' / '+count;
@@ -144,7 +157,7 @@
     element('noraViewerError').textContent=error;
   }
   function move(n){
-    const index=getIndex(),list=state[state.modalProvider];if(index<0||!list?.length)return;
+    const index=getIndex(),list=state.modalProvider?visibleItems(state.modalProvider):[];if(index<0||!list.length)return;
     const next=(index+n+list.length)%list.length;
     state.modalId=idOf(state.modalProvider,list[next]);
     drawModal();
@@ -175,6 +188,14 @@
   const motion=element('motionGalleryGrid'),image=element('kieHistoryGrid');
   for(const root of [motion,image]){
     root?.addEventListener('click',e=>{
+      const more=e.target.closest('[data-gallery-more]');
+      if(more){
+        const provider=more.dataset.galleryMore;
+        if(!['image','motion'].includes(provider))return;
+        limits[provider]=Math.min(state[provider].length,limits[provider]+PAGE_SIZE);
+        render(provider,state[provider]);
+        return;
+      }
       const btn=e.target.closest('[data-gallery-open]');
       if(!btn)return;showModal(btn.dataset.galleryProvider,btn.dataset.galleryOpen);
     });
@@ -213,6 +234,8 @@
     if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.5)move(dx<0?1:-1);
   },{passive:true});
   window.vantaGallery={renderImage:items=>render('image',items),renderMotion:items=>render('motion',items),
+    reset:provider=>{if(!['image','motion'].includes(provider))return;
+      limits[provider]=PAGE_SIZE;signatures[provider]='';},
     refreshDurations,close,open:showModal};
   window.vantaImageGallery?.redraw?.();
   window.vantaMotionGallery?.redraw?.();
