@@ -170,3 +170,57 @@
   .nora-gallery-more{min-width:0;width:100%;max-width:260px;min-height:44px}
 }
 @media(prefers-reduced-motion:reduce){.nora-gallery-more{transition:none}}
+
+
+/* Numbered pages replace the cumulative "Tampilkan berikutnya" footer.
+   Only twelve image tiles are mounted at once; page navigation swaps them. */
+#view-history .nora-gallery-pagination,
+#view-image-history .nora-gallery-pagination{
+  grid-column:1/-1;display:flex;flex-direction:column;align-items:center;
+  gap:11px;padding:20px 12px 8px;margin:12px 0 3px;
+  border:0;border-top:1px solid #303b47;background:transparent;
+}
+.nora-gallery-pagination .nora-pagination-summary{
+  margin:0;color:#a9b8c7;font:500 12px/1.5 Inter,system-ui,sans-serif;
+  font-variant-numeric:tabular-nums;text-align:center;
+}
+.nora-pagination-controls{display:flex;align-items:center;justify-content:center;
+  gap:6px;max-width:100%;width:max-content;min-width:0}
+.nora-pagination-controls .nora-page-btn{display:inline-flex;align-items:center;
+  justify-content:center;flex:0 0 auto;min-width:40px;height:42px;
+  padding:0 9px;border-radius:10px;border:1px solid #3a495a;
+  background:#141e28;color:#cfdce9;font:650 13px/1 Inter,system-ui,sans-serif;
+  font-variant-numeric:tabular-nums;cursor:pointer;
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+.nora-pagination-controls .nora-page-btn.number{width:42px;padding:0}
+.nora-pagination-controls .nora-page-btn.previous,.nora-pagination-controls .nora-page-btn.next{
+  padding:0 14px;min-width:100px;font-weight:600}
+.nora-pagination-controls .nora-page-btn.active{
+  background:var(--accent);border-color:var(--accent);color:#101611;font-weight:750}
+.nora-pagination-controls .nora-page-btn:hover:not(:disabled){
+  background:#253443;border-color:#6a8397;color:#f7fbff}
+.nora-pagination-controls .nora-page-btn:disabled:not(.active){
+  opacity:.32;cursor:default}
+.nora-pagination-controls .nora-page-btn.active:disabled{opacity:1;cursor:default}
+.nora-pagination-controls .nora-page-btn:focus-visible{
+  outline:2px solid var(--accent);outline-offset:3px}
+.nora-page-chevron{display:none}
+.nora-page-ellipsis{display:inline-flex;align-items:center;justify-content:center;
+  width:25px;height:42px;color:#8999aa;font-size:15px;user-select:none}
+.nora-pagination-position{margin:0!important;color:#8295a7!important;font-size:11px!important;
+  font-variant-numeric:tabular-nums}
+#motionGalleryGrid,#kieHistoryGrid{scroll-margin-top:88px}
+@media(max-width:700px){
+  #view-history .nora-gallery-pagination,#view-image-history .nora-gallery-pagination{
+    padding:16px 0 6px;margin:6px 0 0;gap:10px}
+  .nora-pagination-controls{gap:4px;width:100%}
+  .nora-pagination-controls .nora-page-btn{min-width:36px;height:44px;border-radius:9px}
+  .nora-pagination-controls .nora-page-btn.number{min-width:34px;width:34px}
+  .nora-pagination-controls .nora-page-btn.previous,
+  .nora-pagination-controls .nora-page-btn.next{min-width:40px;width:40px;padding:0}
+  .nora-page-word{display:none}
+  .nora-page-chevron{display:inline;font-size:24px;line-height:1;font-weight:400}
+  .nora-page-ellipsis{width:17px;height:44px}
+  #motionGalleryGrid,#kieHistoryGrid{scroll-margin-top:80px}
+}
+@media(prefers-reduced-motion:reduce){.nora-pagination-controls .nora-page-btn{transition:none}}
