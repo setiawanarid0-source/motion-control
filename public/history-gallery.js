@@ -3,7 +3,9 @@
   const element=id=>document.getElementById(id);
   const safeText=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const safeAsset=s=>{
-    try{const u=new URL(String(s||''),location.origin);return ['https:','http:'].includes(u.protocol)&&
+    const source=typeof s==='string'?s.trim():'';
+    if(!source)return null;
+    try{const u=new URL(source,location.origin);return ['https:','http:'].includes(u.protocol)&&
       (u.origin===location.origin||u.protocol==='https:')?u.href:null;}catch{return null;}
   };
   const dateString=s=>{
