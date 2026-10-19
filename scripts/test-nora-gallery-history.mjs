@@ -126,68 +126,101 @@ assert.ok(motionGrid.includes('Memproses'),'Active Motion must clearly show stat
 assert.equal((motionGrid.match(/class="nora-gallery-tile"/g)||[]).length,2);
 
 
-// Performance regression: history may contain many results but the DOM only
-// contains 12 tiles until the user explicitly asks for another batch.
+// Numbered page regression: each page replaces the previous 12 cards, unlike
+// the old cumulative button that loaded every thumbnail into the DOM.
 const many=Array.from({length:49},(_,i)=>({
   id:'bulk-'+i,status:i===0?'generating':'success',
   modelName:'Test Image '+i,mode:'create',accountName:'Account 02',
   createdAt:new Date(Date.parse('2026-10-19T08:00:00Z')-i*60000).toISOString(),
-  prompt:'Prompt '+i, resultUrls:i===0?[]:['https://cdn.example.com/'+i+'.jpg']
+  prompt:'Prompt '+i,resultUrls:i===0?[]:['https://cdn.example.com/'+i+'.jpg']
 }));
+const countTiles=root=>(root.innerHTML.match(/class="nora-gallery-tile"/g)||[]).length;
+const pageEvent=(provider,target)=>({target:{closest:selector=>
+  selector==='[data-gallery-page]'?{dataset:{galleryPage:provider,galleryTarget:String(target)}}:null}});
+const imageGrid=fakeEl('kieHistoryGrid');
+const motionGridEl=fakeEl('motionGalleryGrid');
 win.vantaGallery.reset('image');
 win.vantaGallery.renderImage(many);
-const firstPage=fakeEl('kieHistoryGrid').innerHTML;
-assert.equal((firstPage.match(/class="nora-gallery-tile"/g)||[]).length,12,
-  'Only first 12 image records may render');
-assert.equal((firstPage.match(/<img /g)||[]).length,11,
-  'Exactly 11 completed media thumbnails plus one pending should be requested');
-assert.ok(firstPage.includes('Menampilkan 12 dari 49 hasil'));
-assert.ok(firstPage.includes('Tampilkan 12 berikutnya'));
-assert.ok(!firstPage.includes('bulk-25'),'Hidden pages must not create DOM/media elements');
+const firstPage=imageGrid.innerHTML;
+assert.equal(countTiles(imageGrid),12,'Page 1 renders exactly 12 thumbnails');
+assert.equal((firstPage.match(/<img /g)||[]).length,11,'Pending task does not request image');
+assert.ok(firstPage.includes('Menampilkan 1–12 dari 49 hasil'));
+assert.ok(firstPage.includes('Halaman 1 dari 5'));
+assert.ok(firstPage.includes('aria-current="page" disabled>1</button>'));
+assert.ok(firstPage.includes('data-gallery-target="2"'));
+assert.ok(!firstPage.includes('data-gallery-more'),'Cumulative Load More must be removed');
+assert.ok(!firstPage.includes('bulk-25'),'Off-page media must not be mounted');
 assert.ok(firstPage.includes('loading="lazy" decoding="async" fetchpriority="low"'));
 win.vantaGallery.open('image','bulk-0');
-assert.equal(fakeEl('noraViewerCounter').textContent,'1 / 12',
-  'Viewer counter should only traverse currently requested results');
+assert.equal(fakeEl('noraViewerCounter').textContent,'1 / 12');
 win.vantaGallery.close();
-const moreEvent=provider=>({target:{closest:selector=>
-  selector==='[data-gallery-more]'?{dataset:{galleryMore:provider}}:null}});
-fakeEl('kieHistoryGrid').events.click(moreEvent('image'));
-assert.equal((fakeEl('kieHistoryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,24);
-assert.ok(fakeEl('kieHistoryGrid').innerHTML.includes('Menampilkan 24 dari 49 hasil'));
-fakeEl('kieHistoryGrid').events.click(moreEvent('image'));
-fakeEl('kieHistoryGrid').events.click(moreEvent('image'));
-fakeEl('kieHistoryGrid').events.click(moreEvent('image'));
-assert.equal((fakeEl('kieHistoryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,49);
-assert.ok(!fakeEl('kieHistoryGrid').innerHTML.includes('data-gallery-more'),
-  'No load-more button should remain after the last batch');
+imageGrid.events.click(pageEvent('image',2));
+assert.equal(countTiles(imageGrid),12,'Page 2 replaces rather than appends tiles');
+assert.ok(imageGrid.innerHTML.includes('Menampilkan 13–24 dari 49 hasil'));
+assert.ok(imageGrid.innerHTML.includes('bulk-12'));
+assert.ok(imageGrid.innerHTML.includes('bulk-23'));
+assert.ok(!imageGrid.innerHTML.includes('bulk-0"')&&!imageGrid.innerHTML.includes('bulk-24"'),
+  'Page 1/3 thumbnails must be removed from the DOM');
+assert.ok(imageGrid.innerHTML.includes('aria-current="page" disabled>2</button>'));
+win.vantaGallery.open('image','bulk-12');
+assert.equal(fakeEl('noraViewerCounter').textContent,'1 / 12',
+  'Viewer navigation must be scoped to the current page');
+win.vantaGallery.close();
+imageGrid.events.click(pageEvent('image',5));
+assert.equal(countTiles(imageGrid),1,'Last page only renders remaining one item');
+assert.ok(imageGrid.innerHTML.includes('Menampilkan 49–49 dari 49 hasil'));
+assert.ok(imageGrid.innerHTML.includes('Halaman 5 dari 5'));
+imageGrid.events.click(pageEvent('image',6));
+assert.equal(countTiles(imageGrid),1,'Invalid page must be ignored');
+imageGrid.events.click(pageEvent('image',1));
+assert.equal(countTiles(imageGrid),12,'Returning to page 1 restores its original 12 tiles');
 win.vantaGallery.reset('image');
 win.vantaGallery.renderImage(many.slice(0,20));
-assert.equal((fakeEl('kieHistoryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,12,
-  'Applying a filter must reset gallery to its first 12 items');
+assert.equal(countTiles(imageGrid),12);
+assert.ok(imageGrid.innerHTML.includes('Halaman 1 dari 2'),'Filter resets to first page');
 
 const bigMotion=Array.from({length:37},(_,i)=>({
   taskId:String(2109126366731990000+i),status:'success',
-  workflow:'Current Workflow',mode:'plus',
-  account:'Account 05',
+  workflow:'Current Workflow',mode:'plus',account:'Account 05',
   startedAt:new Date(Date.parse('2026-10-19T08:00:00Z')-i*60000).toISOString(),
   resultUrl:'https://vanta.test/api/video-'+i+'.mp4'
 }));
 win.vantaGallery.reset('motion');
 win.vantaGallery.renderMotion(bigMotion);
-const firstMotion=fakeEl('motionGalleryGrid').innerHTML;
-assert.equal((firstMotion.match(/class="nora-gallery-tile"/g)||[]).length,12,
-  'Only 12 recent Motion results may render');
-assert.ok(!firstMotion.includes('<video '),'No MP4/video element may exist on Motion tiles');
-assert.ok(!firstMotion.includes('#t=0.15'),
-  'No server MP4 seek requests from thumbnail rendering');
-fakeEl('motionGalleryGrid').events.click(moreEvent('motion'));
-assert.equal((fakeEl('motionGalleryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,24);
-assert.equal((fakeEl('kieHistoryGrid').innerHTML.match(/class="nora-gallery-tile"/g)||[]).length,12,
-  'Image and Motion pagination state must remain independent');
-assert.ok(main.includes('if(window.vantaGallery){')&&main.includes('window.vantaGallery.renderMotion(items);'),
-  'Motion History must bypass legacy hidden table updates each second');
+assert.equal(countTiles(motionGridEl),12,'Motion page 1 renders exactly 12 items');
+assert.ok(!motionGridEl.innerHTML.includes('<video '),'No motion tile may load MP4');
+motionGridEl.events.click(pageEvent('motion',2));
+assert.equal(countTiles(motionGridEl),12,'Motion page 2 replaces old thumbnails');
+assert.ok(motionGridEl.innerHTML.includes('Halaman 2 dari 4'));
+assert.equal(countTiles(imageGrid),12,'Image and Motion pages remain independent');
+motionGridEl.events.click(pageEvent('motion',4));
+assert.equal(countTiles(motionGridEl),1);
+win.vantaGallery.renderMotion(bigMotion.slice(0,15));
+assert.equal(countTiles(motionGridEl),3,'Removing results clamps page 4 to the last existing page 2');
+assert.ok(motionGridEl.innerHTML.includes('Halaman 2 dari 2'));
+
+// A large archive remains navigable without rendering it in full.
+const large=Array.from({length:145},(_,i)=>({
+  ...many[i%many.length],id:'large-'+i,
+  createdAt:new Date(Date.parse('2026-10-19T08:00:00Z')-i*60000).toISOString()
+}));
+win.vantaGallery.reset('image');
+win.vantaGallery.renderImage(large);
+assert.equal(countTiles(imageGrid),12);
+assert.ok(imageGrid.innerHTML.includes('nora-page-ellipsis'),
+  'Compact pagination must use ellipses for archives with many pages');
+assert.ok(imageGrid.innerHTML.includes('Halaman 1 dari 13'));
+imageGrid.events.click(pageEvent('image',8));
+assert.equal(countTiles(imageGrid),12);
+assert.ok(imageGrid.innerHTML.includes('Halaman 8 dari 13'));
+assert.ok(imageGrid.innerHTML.includes('aria-current="page" disabled>8</button>'));
+assert.ok(!imageGrid.innerHTML.includes('large-0"'),'Current page replaces former thumbnails');
 assert.ok(main.includes("window.vantaGallery?.reset('motion')")&&image.includes("window.vantaGallery?.reset('image')"),
-  'History filters must reset their respective batches');
+  'Changing History filters resets page to 1');
+assert.ok(main.includes('if(window.vantaGallery){')&&main.includes('window.vantaGallery.renderMotion(items);'),
+  'Legacy hidden history table must not render on every poll');
+assert.ok(css.includes('.nora-page-btn.active')&&css.includes('.nora-page-ellipsis'),
+  'Pagination must have a distinct active page and professional compact styling');
 
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-gallery-delete-'));
 try{
