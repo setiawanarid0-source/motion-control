@@ -637,6 +637,12 @@ function renderHistory(){
   const allItems=history();
   const items=allItems.filter(historyFilterMatches);
   const root=$('#historyBody');
+  // The table is a legacy fallback. Do not construct rows for every task
+  // on each one-second refresh when the Nora gallery is available.
+  if(window.vantaGallery){
+    window.vantaGallery.renderMotion(items);
+    return;
+  }
   if(!items.length){
     window.vantaGallery?.renderMotion([]);
     const message=allItems.length?'Tidak ada generation pada filter ini.':'Belum ada riwayat generation.';
@@ -922,6 +928,7 @@ if(historyFilters) historyFilters.onclick=e=>{
   const btn=e.target.closest('[data-history-filter]');
   if(!btn)return;
   state.historyFilter=btn.dataset.historyFilter||'all';
+  window.vantaGallery?.reset('motion');
   renderHistory();
 };
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
