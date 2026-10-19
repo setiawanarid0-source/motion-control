@@ -641,6 +641,7 @@ function renderHistory(){
   // on each one-second refresh when the Nora gallery is available.
   if(window.vantaGallery){
     window.vantaGallery.renderMotion(items);
+    if(state.workflow==='r4Lab')refreshLabNotice();
     return;
   }
   if(!items.length){
