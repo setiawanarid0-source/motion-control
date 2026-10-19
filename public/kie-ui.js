@@ -291,7 +291,7 @@
     finally{kie.busy=false;b.disabled=false;b.querySelector('span').textContent=kie.mode==='edit'?'Edit Image':'Generate Image';}
   }
   document.querySelectorAll('[data-image-mode]').forEach(b=>b.onclick=()=>setImageMode(b.dataset.imageMode));
-  document.querySelectorAll('[data-kie-filter]').forEach(b=>b.onclick=()=>{kie.filter=b.dataset.kieFilter;renderHistory();});
+  document.querySelectorAll('[data-kie-filter]').forEach(b=>b.onclick=()=>{kie.filter=b.dataset.kieFilter;window.vantaGallery?.reset('image');renderHistory();});
   el('kieModel').onchange=updateModel;
   el('kieRefs').onchange=addSelectedRefs;
   el('kieRefsPreview').addEventListener('click',e=>{
