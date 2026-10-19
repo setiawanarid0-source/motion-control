@@ -61,10 +61,12 @@
   const signatures={image:'',motion:''};
   function refreshDurations(){
     const root=rootOf('motion');if(!root)return;
-    for(const item of state.motion){
-      const target=[...root.querySelectorAll('[data-motion-duration]')]
-        .find(el=>el.dataset.motionDuration===idOf('motion',item));
-      if(target)target.textContent=timeText(item);
+    const labels=root.querySelectorAll('[data-motion-duration]');
+    if(!labels.length)return;
+    const visible=new Map(visibleItems('motion').map(t=>[idOf('motion',t),t]));
+    for(const target of labels){
+      const item=visible.get(target.dataset.motionDuration);
+      if(item)target.textContent=timeText(item);
     }
   }
   function render(p,items){
