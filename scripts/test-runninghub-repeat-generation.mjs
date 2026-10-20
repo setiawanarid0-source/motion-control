@@ -121,7 +121,7 @@ const acceptedContext={
   lastSam3Diagnostic:()=>null,refreshLabNotice(){},
   history:()=>[],clearSubmission(){
     completed.submission=null;
-    this.updateGenerate();
+    acceptedContext.updateGenerate();
   },showTask(){calls.push('showTask');},
   saveHistory:item=>saved.push(item),
   saveReferenceMedia:async()=>{},
