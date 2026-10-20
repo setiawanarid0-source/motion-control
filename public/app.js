@@ -295,8 +295,11 @@ async function checkSubmission(){
     if(data.stage==='accepted'){
       completedSubmission(data);
     }else if(data.stage==='error'){
-      $('#taskStatus').textContent='Persiapan belum berhasil';
-      $('#taskEstimate').textContent='Task belum dikirim ke RunningHub';
+      const capacityFull=/TASK_QUEUE_MAXED/i.test(String(data.error||''));
+      $('#taskStatus').textContent=capacityFull?'Antrean akun RunningHub penuh':'Persiapan belum berhasil';
+      $('#taskEstimate').textContent=capacityFull?
+        'Task ditolak RunningHub · kredit belum terpakai untuk task ini':
+        'Task belum dikirim ke RunningHub';
       toast(data.error||'Persiapan gagal sebelum task dikirim.',true);
       clearSubmission();
     }else if(data.stage==='uncertain'){
