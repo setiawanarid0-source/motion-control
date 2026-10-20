@@ -14,6 +14,7 @@ import { referenceAvailability, referenceFile, stageReferences, commitReferences
 import {createTaskRegistry} from './task-registry.js';
 import {createGenerationQueue} from './generation-queue.js';
 import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance.js';
+import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,mayTryNextAccountAfterCreate} from './runninghub-capacity.js';
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import crypto from 'node:crypto';
@@ -424,6 +425,10 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   if(onBeforeSubmit)onBeforeSubmit();
   const data = await rhJson('/task/openapi/create', apiKey, payload, 60000);
   if (!data || Number(data.code) !== 0 || !data.data?.taskId) {
+    // A structured provider rejection with TASK_QUEUE_MAXED and no taskId
+    // confirms that THIS attempted create did not enter RunningHub's queue.
+    // A timeout, missing response, or arbitrary error is never safe to retry.
+    if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const tips = data?.data?.promptTips;
     throw new Error(data?.msg || tips || 'RunningHub gagal membuat task.');
   }
@@ -599,6 +604,7 @@ async function handleGeneration(req,res){
     stagedReferences=await stageReferences(imageFile,videoFile);
     taskRegistry.ensureWritable();
     let lastError = null;
+    let rejectedAtCapacity=0;
     for (const account of candidates) {
       try {
         req.progress?.('uploading_inputs');
@@ -663,10 +669,22 @@ async function handleGeneration(req,res){
         });
       } catch (error) {
         lastError = error;
-        // After a paid create request may have reached RunningHub, never try another account.
-        if (requestedAccountId !== 'auto'||req.submissionAttempted) break;
+        if(isDefinitelyRejectedAtCapacity(error)){
+          rejectedAtCapacity++;
+          // RunningHub explicitly returned TASK_QUEUE_MAXED and no taskId.
+          // The preceding request was REJECTED, not an unknown accepted job.
+          req.submissionAttempted=false;
+          console.info('RunningHub account at task capacity; checking next eligible account',account.id);
+        }
+        // Never re-submit a paid create after a transport timeout, ambiguous
+        // response or other unconfirmed acknowledgement.
+        if(!mayTryNextAccountAfterCreate({
+          error,selectedAccount:requestedAccountId,attemptedCreate:req.submissionAttempted
+        }))break;
       }
     }
+    if(rejectedAtCapacity===candidates.length)
+      throw new Error('Semua akun RunningHub yang memenuhi syarat sedang penuh (TASK_QUEUE_MAXED). Task belum diterima; tunggu slot akun tersedia.');
     throw lastError || new Error('Tidak ada akun RunningHub yang dapat membuat task.');
   } catch (error) {
     cleanup();
