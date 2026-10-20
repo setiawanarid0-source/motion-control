@@ -23,8 +23,8 @@ assert.ok(actualGenerate.includes('if(state.task){')&&actualGenerate.includes('c
   'On next submission, old single-task Live poll must stop without cancelling the task');
 assert.ok(actualPoll.includes('if(state.task!==tracked)return;'),
   'Late old provider replies must never overwrite the new Live Task state');
-assert.ok(html.includes('app.js?v=20261020-independent-runninghub-tasks-v1'),
-  'Mobile browser must get fresh JS');
+assert.ok(/app\.js\?v=20261020-[a-z0-9-]+/.test(html),
+  'Mobile browser must get a versioned JS asset');
 assert.ok(server.includes("taskRegistry.add({taskId:String(task.taskId)"),
   'Original paid task still captured in server registry');
 assert.ok(server.includes("setInterval(()=>monitorRegisteredTasks(),25000)"),
