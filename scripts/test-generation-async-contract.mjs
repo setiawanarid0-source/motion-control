@@ -11,7 +11,12 @@ has(server,"app.get('/api/generate/jobs/:jobId'");
 has(server,"req.progress?.('preparing_motion')");
 has(server,"req.progress?.('saving_references')");
 has(server,"req.progress?.('submitting')");
-has(server,"if (requestedAccountId !== 'auto'||req.submissionAttempted) break;");
+has(server,"if(!mayTryNextAccountAfterCreate({");
+has(server,"error,selectedAccount:requestedAccountId,attemptedCreate:req.submissionAttempted");
+has(server,"if(isDefinitelyRejectedAtCapacity(error)){");
+has(server,"req.submissionAttempted=false;");
+// Ambiguous post-submit responses still cannot be retried across accounts.
+has(server,"if(req.submissionAttempted){");
 has(server,"generationQueue.resume();");
 has(app,'function uploadReferences(fd,requestId,progress)');
 has(app,'xhr.upload.onprogress=');
