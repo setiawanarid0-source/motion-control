@@ -184,7 +184,17 @@ function updateEstimates(){
   $('#standardTime').textContent=`± ${fmtTime(standardRuntime)}`;
   $('#standardCredits').textContent=`~ ${(standardRuntime*.20).toFixed(1)} RH`;
 }
-function updateGenerate(){ const ready=state.image&&state.video&&state.accounts.some(a=>a.canGenerate!==false)&&!state.task&&!state.submission&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()); $('#generateBtn').disabled=!ready; if(!state.task)$('#generateBtn').querySelector('span:first-child').textContent=state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion'; refreshLabNotice(); }
+function updateGenerate(){
+  // RunningHub accepts independent paid tasks; only the current reference
+  // upload/submission is exclusive. Accepted tasks continue in History.
+  const ready=Boolean(state.image&&state.video&&state.accounts.some(a=>a.canGenerate===true)&&
+    !state.submission&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()));
+  $('#generateBtn').disabled=!ready;
+  if(!state.submission)$('#generateBtn').querySelector('span:first-child').textContent=
+    state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':
+    state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':'Generate motion';
+  refreshLabNotice();
+}
 function workflowName(){
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
@@ -336,7 +346,11 @@ async function resumeSubmission(){
   if(id)trackSubmission(id);
 }
 async function generate(){
-  if(!state.image||!state.video||state.submission||state.task)return;
+  if(!state.image||!state.video||state.submission)return;
+  if(!state.accounts.some(a=>a.canGenerate===true)){
+    toast('Tidak ada akun RunningHub siap dengan saldo 100–600 RH. Perbarui Account Pool.',true);
+    return;
+  }
   const fd=new FormData();
   fd.append('referenceImage',state.image);
   fd.append('videoReference',state.video);
@@ -348,6 +362,14 @@ async function generate(){
     if(!maskSource)return toast('Jalankan tes SAM3 terlebih dahulu.',true);
     fd.append('diagnosticTaskId',maskSource.taskId);
     fd.append('diagnosticAccountId',resolveHistoryAccountId(maskSource));
+  }
+  // Stop the old single-task Live panel poll before showing a new upload.
+  // No provider cancel/delete is sent: the accepted task remains in the
+  // encrypted server registry and is monitored in Motion History.
+  if(state.task){
+    clearInterval(state.pollTimer);
+    state.pollTimer=null;
+    state.task=null;
   }
   const id=crypto.randomUUID();
   state.submission={jobId:id};
@@ -398,13 +420,17 @@ function showTask(data){
   const est=estimateSeconds();
   $('#taskEstimate').textContent=est?`Estimasi ± ${fmtTime(est)}`:'Estimasi —';
   renderLiveTaskDuration();
-  toast('Task sudah dikirim ke RunningHub. Status dapat dipantau di History.');
+  toast('Task dikirim ke RunningHub. Kamu bisa generate lagi; prosesnya tetap dipantau di Motion History.');
 }
 function startPolling(){clearInterval(state.pollTimer);pollTask();state.pollTimer=setInterval(pollTask,6000)}
 async function pollTask(){
-  if(!state.task)return;
+  const tracked=state.task;
+  if(!tracked)return;
   try{
-    const data=await api(`/api/tasks/${state.task.taskId}`,{method:'POST',body:JSON.stringify({accountId:state.task.accountId})});
+    const data=await api(`/api/tasks/${tracked.taskId}`,{method:'POST',body:JSON.stringify({accountId:tracked.accountId})});
+    // An older request may finish after the next generation begins. Never
+    // let its delayed result overwrite the new upload/Live Task UI.
+    if(state.task!==tracked)return;
     if(data.state==='queued'||data.state==='running'||data.state==='finalizing'||data.state==='waiting_output'){
       const labels={queued:'Antrean RunningHub',running:'Diproses RunningHub',
         finalizing:'Menyiapkan video 40 FPS',waiting_output:'Menunggu hasil RunningHub'};
@@ -431,6 +457,7 @@ async function pollTask(){
       finishSuccess(results);
     }
   }catch(e){
+    if(state.task!==tracked)return;
     console.warn('poll',e.message);
     $('#taskStatus').textContent='Menghubungkan kembali…';
     $('#taskEstimate').textContent='Memeriksa status secara otomatis';
