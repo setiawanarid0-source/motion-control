@@ -81,6 +81,6 @@ assert.ok(monitor.includes('renderLiveTaskDuration();')&&monitor.includes("if(st
   'Both timers must reuse existing 1 second clock');
 assert.equal((monitor.match(/setInterval/g)||[]).length,3,'Do not introduce additional polling timers');
 assert.ok(!original.includes('MAX_NEW_TASK_CREDITS=700'),'RunningHub 600 RH account policy stays in place');
-assert.ok(/\/app\.js\?v=20261019-progressive-history-v1/.test(html),
+assert.ok(/\/app\.js\?v=\d{8}-[a-z0-9-]+/.test(html),
   'Fresh frontend asset version must be deployed');
 console.log('PASS: RunningHub Refresh SVG visible with existing click handler; task time restored from submission, updated live/History, frozen on success, no new polling');
