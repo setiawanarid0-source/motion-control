@@ -728,12 +728,12 @@ async function pollHistoryTasks(){
   state.historyPollBusy=true;
   try{
     // Server registry independently monitors registered jobs. Avoid hammering removed/legacy accounts.
-    const legacy=history().filter(item=>isActiveHistoryStatus(item.status)&&item.taskId&&!state.registeredTaskIds.has(String(item.taskId)));
+    const legacy=history().filter(item=>isActiveHistoryStatus(item.status)&&String(item.status).toLowerCase()!=='unavailable'&&item.taskId&&!state.registeredTaskIds.has(String(item.taskId)));
     const active=legacy.slice(0,2);
     for(const item of active){
       if(state.task&&String(state.task.taskId)===String(item.taskId))continue;
       const accountId=resolveHistoryAccountId(item);
-      if(!accountId){updateHistory(item.taskId,{status:'check_error',error:'Menunggu pemulihan koneksi task.',runtimeMs:null});continue;}
+      if(!accountId){updateHistory(item.taskId,{status:'unavailable',error:'Akun pemilik task belum ditemukan. Gunakan Pulihkan akun task di detail History.',runtimeMs:null});continue;}
       try{
         const data=await api(`/api/tasks/${item.taskId}`,{method:'POST',body:JSON.stringify({accountId})});
         if(['queued','running','finalizing','waiting_output'].includes(data.state)){
@@ -752,8 +752,13 @@ async function pollHistoryTasks(){
         }
       }catch(e){
         console.warn('history poll',item.taskId,e.message);
-        updateHistory(item.taskId,{status:'check_error',
-          error:'Koneksi sementara terputus. Pemantauan akan diulang.',runtimeMs:null});
+        if(e.status===409){
+          updateHistory(item.taskId,{status:'unavailable',
+            error:'Akun pemilik task belum ditemukan. Gunakan Pulihkan akun task di detail History.',runtimeMs:null});
+        }else{
+          updateHistory(item.taskId,{status:'check_error',
+            error:'Koneksi sementara terputus. Pemantauan akan diulang.',runtimeMs:null});
+        }
       }
     }
   }finally{
@@ -904,6 +909,18 @@ window.vantaMotionGallery={
     await syncServerHistory();
     await pollHistoryTasks();
     renderHistory();
+  },
+  async recover(item){
+    const id=String(item.taskId||'');
+    if(!/^\d{10,25}$/.test(id))throw Error('Task ID tidak valid.');
+    // Recovery only checks existing RunningHub outputs; never creates a paid task.
+    const found=await api('/api/tasks/'+encodeURIComponent(id)+'/recover',{method:'POST',body:'{}'});
+    state.registeredTaskIds.add(id);
+    updateHistory(id,{accountId:found.accountId,account:found.accountName,
+      status:'check_error',error:null,statusDetail:'Akun berhasil dipulihkan; status akan diperiksa.',runtimeMs:null});
+    await syncServerHistory();
+    renderHistory();
+    toast('Akun task berhasil dipulihkan. Pemantauan History dilanjutkan.');
   },
   async diagnose(item){
     await diagnoseFailedTask(item);
