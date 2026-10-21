@@ -135,6 +135,8 @@
       all.push('<button type="button" class="nora-action" data-nora-action="references">Lihat referensi</button>');
     if(!completed(t))
       all.push('<button type="button" class="nora-action" data-nora-action="refresh">Refresh status</button>');
+    if(p==='motion'&&t.status==='unavailable')
+      all.push('<button type="button" class="nora-action" data-nora-action="recover">Pulihkan akun task</button>');
     if(t.status==='failed'){
       if(p==='motion')all.push('<button type="button" class="nora-action" data-nora-action="diagnose">Periksa penyebab</button>');
       all.push('<button type="button" class="nora-action" data-nora-action="retry">Buat lagi</button>');
@@ -207,6 +209,13 @@
     if(kind==='references'){close();adapter?.showReferences?.(item);return;}
     if(kind==='retry'){close();adapter?.retry?.(item);return;}
     if(kind==='refresh'){button.disabled=true;try{await adapter?.refresh?.();}finally{button.disabled=false;}return;}
+    if(kind==='recover'){
+      button.disabled=true;
+      try{await adapter?.recover?.(item);drawModal();}
+      catch(e){alert(e.message||'Akun task belum dapat ditemukan.');}
+      finally{button.disabled=false;}
+      return;
+    }
     if(kind==='diagnose'){button.disabled=true;try{await adapter?.diagnose?.(item);drawModal();}finally{button.disabled=false;}return;}
     if(kind==='delete'){
       if(!completed(item))return;
