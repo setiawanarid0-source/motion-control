@@ -10,7 +10,7 @@ export const CHARACTER_SWAP_FRAME_CAP = 360;
 export const CHARACTER_SWAP_NATIVE_FPS = 24;
 
 function uploadedFileName(value, label) {
-  if (typeof value !== 'string' || !value.trim() || value.length > 1024 || /[\\u0000-\\u001f]/.test(value)) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 1024 || [...value].some(char => char.charCodeAt(0) < 32)) {
     throw new Error(label + ' belum diunggah secara valid ke RunningHub.');
   }
   return value;
