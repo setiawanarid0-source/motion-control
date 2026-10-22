@@ -1,0 +1,10 @@
+# VANTA HTTPS. The VANTA_DOMAIN variable is provided from compose.oracle.yaml.
+{$VANTA_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy vanta:8080 {
+    transport http {
+      dial_timeout 10s
+      response_header_timeout 600s
+    }
+  }
+}

@@ -1,0 +1,57 @@
+# OCI Always Free: run the existing VANTA image with persistent state.
+# The application is never publicly exposed: Caddy owns HTTPS.
+services:
+  vanta:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      VANTA_DATA_DIR: /data
+      APP_MASTER_KEY: "${APP_MASTER_KEY:?Set APP_MASTER_KEY from your existing Railway environment}"
+      RUNNINGHUB_WORKFLOW_ID: "${RUNNINGHUB_WORKFLOW_ID:?Copy existing RunningHub template workflow ID}"
+      RUNNINGHUB_H3_WORKFLOW_ID: "${RUNNINGHUB_H3_WORKFLOW_ID:-}"
+      VANTA_WEB_RELEASE: "${VANTA_WEB_RELEASE:-}"
+    volumes:
+      - type: bind
+        source: ./data
+        target: /data
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      start_period: 20s
+      interval: 30s
+      timeout: 8s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      VANTA_DOMAIN: "${VANTA_DOMAIN:?Set a real domain pointing to this VM}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/oracle/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      vanta:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  caddy_data:
+  caddy_config:
