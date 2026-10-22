@@ -7,7 +7,7 @@ const graph=first.graph;
 assert.equal(Object.keys(graph).length,25);
 assert.equal(graph['1283'].class_type,'BFSShotPlanner');
 assert.equal(graph['1267'].class_type,'LoraLoaderModelOnly');
-assert.match(graph['1267'].inputs.lora_name,/character_swap_v1\\.1/);
+assert.ok(graph['1267'].inputs.lora_name.includes('character_swap_v1.1'));
 assert.equal(graph['1177'].inputs.guide_mode,'aligned guide (Add Guide)');
 assert.equal(graph['751'].class_type,'VHS_VideoCombine');
 assert.equal(graph['1202'].inputs.crossfade,0);
