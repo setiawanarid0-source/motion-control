@@ -17,6 +17,7 @@ import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance
 import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,mayTryNextAccountAfterCreate} from './runninghub-capacity.js';
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
+import {buildCharacterSwapWorkflow} from './character-swap.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -41,6 +42,7 @@ const workflowGraphs = {
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
   koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-sam3-diagnostic-api.json'), 'utf8')),
   r4Lab: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-full-controlled-api.json'), 'utf8')),
+  characterSwap: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/minimax-h3-character-swap-v1.1-api.json'), 'utf8')),
 };
 
 const workflowMeta = {
@@ -63,6 +65,13 @@ const workflowMeta = {
     subtitle: 'Diagnostik SAM3 · 35 FPS · tanpa generasi AI video',
     detail: 'Upload video driving yang SUDAH dikompensasi 35 FPS. Hasil: video mask orang + gambar mask referensi. Memakai kredit RunningHub; belum menguji kamera hasil generasi.',
     outputKind: 'diagnostic'
+  },
+  characterSwap: {
+    id: 'characterSwap',
+    name: 'MiniMax H3 · Character Swap v1.1',
+    subtitle: 'H3 Ref2VA · 24 FPS native · sampai 15 detik · tanpa prompt manual',
+    detail: 'Pipeline Alissonerdx v1.1 menggunakan reference image dan driving video. Instruksi model dibuat otomatis; tidak ada prompt pengguna. Eksperimental: membutuhkan MiniMax H3, BFSNodes dan LoRA v1.1 yang kompatibel dengan RunningHub.',
+    outputKind: 'video', experimental: true
   },
   r4Lab: {
     id: 'r4Lab',
@@ -404,16 +413,17 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   const imageName = await uploadToRunningHub(apiKey, imageFile);
   const videoName = await uploadToRunningHub(apiKey, videoFile);
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
+  const h3=workflowKey==='characterSwap' ? buildCharacterSwapWorkflow({ imageName, videoName }) : null;
   const payload = {
     apiKey,
-    workflowId,
-    nodeInfoList: [
+    workflowId: h3 ? (process.env.RUNNINGHUB_H3_WORKFLOW_ID || workflowId) : workflowId,
+    nodeInfoList: h3 ? h3.nodeInfoList : [
       { nodeId: '30', fieldName: 'image', fieldValue: imageName },
       { nodeId: '33', fieldName: 'video', fieldValue: videoName },
       ...(workflowKey === 'koh1AntiObject' ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
       ...(masks ? [{ nodeId: '500', fieldName: 'image', fieldValue: masks.imageName }, { nodeId: '501', fieldName: 'video', fieldValue: masks.videoName }] : []),
     ],
-    workflow: JSON.stringify(workflowGraphs[workflowKey]),
+    workflow: JSON.stringify(h3?.graph || workflowGraphs[workflowKey]),
     addMetadata: true,
     retainSeconds: 259200,
   };
@@ -566,6 +576,7 @@ async function handleGeneration(req,res){
     if(workflowKey==='r4Lab' && (!/^\d{10,25}$/.test(diagnosticTaskId)||!diagnosticAccountId))
       throw new Error('R4 Full membutuhkan tes SAM3 berhasil di History untuk memakai ulang mask.');
     if (!['standard','plus','lite'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
+    if(workflowKey==='characterSwap' && mode!=='plus') throw new Error('MiniMax H3 Character Swap memerlukan mode Plus untuk uji pertama; kebutuhan VRAM belum tervalidasi.');
     // Lite accepted here only to let already-queued legacy tasks finish.
 
     const { deviceId, accounts } = getPersistentAccounts(req);
