@@ -63,9 +63,9 @@
 
       <section id="view-create" class="view active">
         <div class="hero-copy">
-          <div class="hero-kicker"><span class="pulse"></span>3 WORKFLOWS + 1 TEST</div>
+          <div class="hero-kicker"><span class="pulse"></span>4 WORKFLOWS + 1 TEST</div>
           <h2>Direct motion.<br><span>Choose the pipeline.</span></h2>
-          <p>Gunakan gambar karakter dan video gerakan yang sama, lalu pilih workflow yang ingin diuji. Ketiga workflow berjalan terpisah tanpa saling mengubah.</p>
+          <p>Unggah satu gambar karakter dan satu driving video, kemudian pilih workflow. Setiap workflow berjalan terpisah tanpa mengubah pipeline lain.</p>
         </div>
 
         <div class="workspace-grid">
@@ -114,10 +114,16 @@
                 <p>35 FPS · 337 frame · 1080 × 1920 · 6 steps / CFG 1</p>
                 <small>Gunakan kembali mask tes SAM3 berhasil. Ini tes generasi penuh, bukan workflow final.</small>
               </button>
+              <button class="workflow-card" data-workflow="characterSwap" type="button">
+                <div class="workflow-row"><strong>MiniMax H3 · Character Swap v1.1</strong><span class="badge">H3</span></div>
+                <p>24 FPS native · maksimal 15 detik · 8 steps</p>
+                <small>Ganti keseluruhan karakter mengikuti driving video. Cukup unggah foto + video; tidak perlu menulis prompt.</small>
+              </button>
             </div>
 
             <div id="diagnosticNotice" class="diagnostic-notice hidden" role="note"><strong>Mode diagnosis SAM3</strong><p>Wajib upload driving video yang sudah dikompensasi ke 35 FPS, bukan video mentah. Tes ini menghasilkan mask saja dan tetap dapat menggunakan kredit RunningHub. Belum ada estimasi biaya yang tervalidasi.</p></div>
             <div id="fullLabNotice" class="diagnostic-notice hidden" role="note"><strong>R4 Full Controlled · Tes berbayar</strong><p id="r4LabMaskSource"></p><p>Upload kembali gambar referensi dan driving video hasil kompensasi 35 FPS yang sama dengan tes SAM3. Dua mask akan dipakai ulang otomatis dari task tersebut. Mask belum menjalani refinement offline. Proses 337 frame dengan RunningHub dan membutuhkan kredit. Kamera statis belum terbukti.</p></div>
+            <div id="characterSwapNotice" class="diagnostic-notice hidden" role="note"><strong>Character Swap v1.1 · Eksperimental</strong><p>Tanpa prompt manual. Mode Plus dipilih otomatis untuk tes; inferensi H3 membutuhkan model, LoRA dan BFSNodes yang kompatibel di RunningHub. Video diproses hingga sekitar 15 detik pada 24 FPS native. Penggunaan kredit hanya setelah RunningHub menerima task.</p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
             <div class="mode-grid">
               <button class="mode-card selected" data-mode="standard" type="button">
@@ -219,7 +225,7 @@
       </section>
 
       <section id="view-accounts" class="view">
-        <div class="section-title account-pool-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>Tambahkan API key RunningHub. Ketiga workflow sudah dikunci otomatis di backend.</p></div><button class="ghost-btn refresh-account-btn" id="refreshAccounts" type="button" aria-label="Perbarui status dan saldo RunningHub" title="Perbarui status dan saldo RunningHub"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M5.7 9a7 7 0 0 1 12-2L20 12M4 12l2.3 5a7 7 0 0 0 12-2"/></svg></span></button></div>
+        <div class="section-title account-pool-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>Tambahkan API key RunningHub. Workflow disiapkan otomatis dari server VANTA.</p></div><button class="ghost-btn refresh-account-btn" id="refreshAccounts" type="button" aria-label="Perbarui status dan saldo RunningHub" title="Perbarui status dan saldo RunningHub"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M5.7 9a7 7 0 0 1 12-2L20 12M4 12l2.3 5a7 7 0 0 0 12-2"/></svg></span></button></div>
         <div class="account-layout">
           <div class="panel add-account">
             <h3>Add RunningHub API key</h3>
@@ -323,7 +329,7 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261021-history-recovery-v1" defer></script>
+  <script src="/app.js?v=20261022-character-swap-v11" defer></script>
   <script src="/kie-ui.js?v=20261019-progressive-history-v1" defer></script>
   <script src="/history-gallery.js?v=20261021-history-recovery-v1" defer></script>
 </body>
