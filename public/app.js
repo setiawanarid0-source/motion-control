@@ -193,14 +193,13 @@ function updateGenerate(){
   if(!state.submission)$('#generateBtn').querySelector('span:first-child').textContent=
     state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':
     state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':
-    state.workflow==='characterSwap'?'Generate Character Swap':'Generate motion';
+'Generate motion';
   refreshLabNotice();
 }
 function workflowName(){
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
   if(state.workflow==='r4Lab')return 'MotionFly R4 · Full Controlled Test';
-  if(state.workflow==='characterSwap')return 'MiniMax H3 · Character Swap v1.1';
   return 'Current Workflow';
 }
 function estimateSeconds(){ if(state.workflow!=='current'||state.mode!=='standard'||!state.videoDuration)return 0; return state.videoDuration*21.2; }
@@ -975,15 +974,9 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   b.classList.add('selected'); state.workflow=b.dataset.workflow;
   $('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');
   $('#fullLabNotice').classList.toggle('hidden',state.workflow!=='r4Lab');
-  $('#characterSwapNotice').classList.toggle('hidden',state.workflow!=='characterSwap');
-  if(state.workflow==='characterSwap'){
-    state.mode='plus';
-    $$('.mode-card').forEach(x=>x.classList.toggle('selected',x.dataset.mode==='plus'));
-  }
   updateEstimates();updateGenerate();
 });
 $$('.mode-card').forEach(b=>b.onclick=()=>{
-  if(state.workflow==='characterSwap'&&b.dataset.mode!=='plus')return toast('MiniMax H3 membutuhkan mode Plus untuk pengujian awal.',true);
   $$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode;
 });
 initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');
