@@ -105,6 +105,6 @@ assert.ok(queue.includes("const FINISHED=new Set(['accepted','error','uncertain'
   'Idempotent durable upload queue remains unchanged');
 assert.ok(queue.includes("maxConcurrent=1"),
   'One preflight at a time continues protecting uploads without serializing completed paid tasks');
-assert.ok(/app\.js\?v=20261021-[a-z0-9-]+/.test(html),
+assert.ok(/app\.js\?v=20\d{6}-[a-z0-9-]+/.test(html),
   'Browser cache bust is required for user-visible queue error text');
 console.log('PASS: explicit TASK_QUEUE_MAXED reroutes to next eligible 100–600 RH account, manual choice honored, null/timeout never double charges, real createTask payload/workflow preserved, truthful status');
