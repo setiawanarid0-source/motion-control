@@ -1,18 +1,21 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {MAX_NEW_TASK_CREDITS,canGenerateWithAccount,rankGenerationAccounts} from '../runninghub-account-priority.js';
+import {MIN_ELIGIBLE_CREDITS,canGenerateWithAccount,rankGenerationAccounts} from '../runninghub-account-priority.js';
 import {canStartNewTask,partitionAccountRefresh} from '../account-eligibility.js';
 
-assert.equal(MAX_NEW_TASK_CREDITS,600);
+assert.equal(MIN_ELIGIBLE_CREDITS,100);
 for(const [status,expected] of [
   [{remainCoins:600,currentTaskCounts:3},true],
   [{remainCoins:599.99},true],
   [{remainCoins:100},true],
   [{remainCoins:99},false],
-  [{remainCoins:600.01},false],
-  [{remainCoins:700},false],
-  [{remainCoins:2500},false],
+  [{remainCoins:600.01},true],
+  [{remainCoins:700},true],
+  [{remainCoins:2500},true],
+  [{remainCoins:1000000},true],
+  [{remainCoins:Infinity},false],
+  [{remainCoins:-1},false],
   [{remainCoins:null},false],
   [{error:'network',remainCoins:600},false],
   [null,false],
@@ -22,7 +25,7 @@ for(const [status,expected] of [
 const entry=(id,credits,addedAt='2026-10-17T10:00:00.000Z',lastUsedAt=null,tasks=0)=>
   ({account:{id,name:id,addedAt,lastUsedAt},status:{remainCoins:credits,currentTaskCounts:tasks}});
 const checked=[
-  entry('protected-1000',1000),
+  entry('high-1000',1000),
   entry('old600',600,'2026-10-14T10:00:00.000Z','2026-10-16T11:00:00.000Z',0),
   entry('new600',600,'2026-10-18T10:00:00.000Z',null,2),
   entry('older600unused',600,'2026-10-16T10:00:00.000Z',null,0),
@@ -34,39 +37,39 @@ const checked=[
 ];
 const copy=JSON.stringify(checked);
 const ranked=rankGenerationAccounts(checked).map(x=>x.account.id);
-assert.deepEqual(ranked,['new600','older600unused','old600','fresh590','mid480','low100'],
-  'Highest eligible credits first, newer unused key wins equal credit, >600 excluded');
+assert.deepEqual(ranked,['high-1000','new600','older600unused','old600','fresh590','mid480','low100'],
+  'Highest eligible balance wins even above 600, newer unused key wins equal credit');
 assert.equal(JSON.stringify(checked),copy,'Sorting must not mutate the account vault representation');
-assert.deepEqual(rankGenerationAccounts([entry('high',800),entry('low',50)]),[],
-  'No eligible accounts means zero candidates and no paid RunningHub request');
+assert.deepEqual(rankGenerationAccounts([entry('high',800),entry('low',50)]).map(x=>x.account.id),['high'],
+  'Account above 600 is eligible; account below 100 remains ineligible');
 assert.deepEqual(rankGenerationAccounts([entry('ready',600),entry('blocked',900)])
-  .map(x=>x.account.id),['ready'],'Over-600 keys cannot appear in auto generation candidates');
-// 600 RH not used up? Next refresh at 599 still ranks above lower accounts.
-// Current RH account-retirement rules must remain unchanged and never erase >600.
+  .map(x=>x.account.id),['blocked','ready'],'Over-600 keys must be included in auto generation candidates');
+// High credit accounts take priority, and a lower credit balance only changes ordering.
+// Current RH account-retirement rules must remain unchanged and never erase accounts above 100.
 assert.equal(canStartNewTask({remainCoins:700}),true,'Original minimum-credit helper unchanged for account addition');
 assert.deepEqual(partitionAccountRefresh([entry('high',800),entry('low',99)]).retained.map(x=>x.account.id),
-  ['high'],'Above-limit accounts remain stored in pool rather than being deleted');
+  ['high'],'High-credit accounts remain stored in pool rather than being deleted');
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const browser=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const backend=server.slice(server.indexOf('let candidates=[]'),server.indexOf("if(workflowKey==='r15'){",server.indexOf('let candidates=[]')));
-assert.ok(backend.includes('if(!canGenerateWithAccount(status,MIN_POOL_CREDITS,MAX_NEW_TASK_CREDITS))'),
-  'Manual selection must enforce credit cap on backend after fresh balance check');
-assert.ok(backend.includes('rankGenerationAccounts(checked,MIN_POOL_CREDITS,MAX_NEW_TASK_CREDITS)'),
-  'Automatic selection must use cap and priority after live status refresh');
-assert.ok(server.includes('canGenerate: canGenerateWithAccount(status, MIN_POOL_CREDITS, MAX_NEW_TASK_CREDITS)'),
-  'Browser account readiness must accurately match backend cap');
+assert.ok(backend.includes('if(!canGenerateWithAccount(status,MIN_POOL_CREDITS))'),
+  'Manual selection must enforce minimum only after fresh balance check');
+assert.ok(backend.includes('rankGenerationAccounts(checked,MIN_POOL_CREDITS)'),
+  'Automatic selection must use minimum and highest balance after live refresh');
+assert.ok(server.includes('canGenerate: canGenerateWithAccount(status, MIN_POOL_CREDITS)'),
+  'Browser account readiness must accurately match backend minimum');
 assert.ok(server.includes('partitionAccountRefresh(checked,MIN_POOL_CREDITS)'),
-  'Old below-100 automatic retirement preserved, >600 never auto deleted');
+  'Old below-100 automatic retirement preserved; high balances never removed');
 assert.ok(server.includes('taskRegistry.add({taskId:'),
   'Existing RunningHub task monitoring retained');
 assert.ok(!backend.includes('x.s.currentTaskCounts-y.s.currentTaskCounts'),
   'Old task-count-first ranking must not override balance priority');
 assert.ok(browser.includes('sortedRunningHubAccounts().map(a=>'),
   'Pool cards must render sorted by credit');
-assert.ok(browser.includes('protectedBalance'),
-  'Above-600 pool accounts must visibly indicate restriction');
+assert.ok(!browser.includes('protectedBalance'),
+  'High-balance accounts must not show an artificial lock');
 assert.ok(browser.includes('a.canGenerate===false?\'disabled\''),
-  'Manual UI cannot select protected account');
+  'UI disables only accounts that are actually ineligible');
 // Run actual browser comparator with mocked account state, not static search alone.
 const begin=browser.indexOf('function sortedRunningHubAccounts(){');
 const end=browser.indexOf('function renderAccountSelect(){',begin);
@@ -83,4 +86,4 @@ const got=Array.from(vm.runInContext(js+'\nsortedRunningHubAccounts().map(x=>x.i
 assert.deepEqual(got,['over','600new','600old','500','missing'],
   'Account Pool visual sorting is DESC by credit, including >600 keys for visibility');
 assert.equal(context.state.accounts[0].id,'missing','UI sorting cannot reorder encrypted vault data');
-console.log('PASS: RH 100–600 new-task policy, newest 600 first, fallback balances, over-600 blocked even manually, descending pool sorting, history/retirement unchanged');
+console.log('PASS: RH 100+ balance eligible without upper cap; priority, automatic and manual selection, history/retirement unchanged');

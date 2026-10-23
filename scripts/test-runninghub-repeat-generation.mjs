@@ -31,8 +31,8 @@ assert.ok(server.includes("setInterval(()=>monitorRegisteredTasks(),25000)"),
   'Server keeps tracking all RunningHub tasks independently');
 assert.ok(queue.includes("maxConcurrent=1"),
   'Existing upload/preflight queue remains serial, idempotent per request ID');
-assert.ok(server.includes("MAX_NEW_TASK_CREDITS"),
-  'Previously agreed <=600 RH policy preserved');
+assert.ok(!server.includes('MAX_NEW_TASK_CREDITS') && server.includes('MIN_POOL_CREDITS = 100'),
+  'RunningHub minimum 100 RH is preserved without an upper credit cap');
 
 function makeButton(){
   const span={textContent:'Memproses…'};
@@ -94,7 +94,7 @@ state.task={taskId:'2109126366731984902'};
 state.pollTimer=321;
 state.accounts=[{canGenerate:false}];
 context.updateGenerate();
-assert.equal(btn.disabled,true,'Account eligibility still blocks when no account has 100–600 RH');
+assert.equal(btn.disabled,true,'Account eligibility still blocks when no account has at least 100 RH');
 await context.generate();
 assert.equal(uploads.length,1,'No submission without eligible RH credit');
 assert.equal(state.task.taskId,'2109126366731984902',

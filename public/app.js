@@ -132,9 +132,9 @@ function sortedRunningHubAccounts(){
     return Number.isFinite(recent)&&recent!==0?recent:String(a.id).localeCompare(String(b.id));
   });
 }
-function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic · 100–600 RH</option>'+sortedRunningHubAccounts().map(a=>{
+function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic · minimal 100 RH</option>'+sortedRunningHubAccounts().map(a=>{
   const credits=a.status&&!a.status.error?Number(a.status.remainCoins):NaN;
-  const reason=a.canGenerate===false?(Number.isFinite(credits)&&credits>600?' (di atas 600 RH)':Number.isFinite(credits)&&credits<100?' (di bawah 100 RH)':' (status belum tersedia)'):'';
+  const reason=a.canGenerate===false?(Number.isFinite(credits)&&credits<100?' (di bawah 100 RH)':' (status belum tersedia)'):'';
   return `<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)}${reason}</option>`;
 }).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
 
@@ -164,7 +164,7 @@ async function refreshAccounts(){
 function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada API key di pool.<br>Tambahkan akun pertama dari panel di sebelah kiri.</div>';return;}
-  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true,protectedBalance=ok&&Number(s.remainCoins)>600;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ready?'Siap digunakan':protectedBalance?'Saldo di atas 600 RH · tidak dipakai untuk generate':ok&&Number(s.currentTaskCounts||0)>0?'Menunggu task berjalan selesai':ok?'Saldo tidak memenuhi syarat':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
+  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ready?'Siap digunakan':ok&&Number(s.currentTaskCounts||0)>0?'Menunggu task berjalan selesai':ok?'Saldo tidak memenuhi syarat':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
   $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{await api(`/api/accounts/${btn.dataset.delete}`,{method:'DELETE'});toast('Akun dihapus.');await loadSession();}catch(e){toast(e.message,true)}});
 }
 
@@ -353,7 +353,7 @@ async function resumeSubmission(){
 async function generate(){
   if(!state.image||!state.video||state.submission)return;
   if(!state.accounts.some(a=>a.canGenerate===true)){
-    toast('Tidak ada akun RunningHub siap dengan saldo 100–600 RH. Perbarui Account Pool.',true);
+    toast('Tidak ada akun RunningHub siap dengan saldo minimal 100 RH. Perbarui Account Pool.',true);
     return;
   }
   const fd=new FormData();
@@ -967,21 +967,21 @@ function startHistoryMonitor(){
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
 $$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');
-$('.workflow-card').forEach(b=>b.onclick=()=>{
-  $('.workflow-card').forEach(x=>x.classList.remove('selected'));
+$$('.workflow-card').forEach(b=>b.onclick=()=>{
+  $$('.workflow-card').forEach(x=>x.classList.remove('selected'));
   b.classList.add('selected'); state.workflow=b.dataset.workflow;
   $('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');
   $('#fullLabNotice').classList.toggle('hidden',state.workflow!=='r4Lab');
   $('#characterSwapNotice').classList.toggle('hidden',state.workflow!=='characterSwap');
   if(state.workflow==='characterSwap'){
     state.mode='plus';
-    $('.mode-card').forEach(x=>x.classList.toggle('selected',x.dataset.mode==='plus'));
+    $$('.mode-card').forEach(x=>x.classList.toggle('selected',x.dataset.mode==='plus'));
   }
   updateEstimates();updateGenerate();
 });
-$('.mode-card').forEach(b=>b.onclick=()=>{
+$$('.mode-card').forEach(b=>b.onclick=()=>{
   if(state.workflow==='characterSwap'&&b.dataset.mode!=='plus')return toast('MiniMax H3 membutuhkan mode Plus untuk pengujian awal.',true);
-  $('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode;
+  $$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode;
 });
 initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');
 $('#generateBtn').onclick=generate;$('#refreshAccounts').onclick=refreshAccounts;

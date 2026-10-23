@@ -87,8 +87,8 @@ const accounts=[
   {account:{id:'next',addedAt:'2026-10-19T10:00:00Z'},status:{remainCoins:500}},
   {account:{id:'low',addedAt:'2026-10-19T10:00:00Z'},status:{remainCoins:99}}
 ];
-assert.deepEqual(rankGenerationAccounts(accounts).map(x=>x.account.id),['top','next'],
-  'Fall back only within 100–600 RH range, highest balance first');
+assert.deepEqual(rankGenerationAccounts(accounts).map(x=>x.account.id),['unusable','top','next'],
+  'Fall back on all accounts with at least 100 RH, highest balance first');
 assert.ok(server.includes("if(isDefinitelyRejectedAtCapacity(error)){") &&
   server.includes("req.submissionAttempted=false;"),
   'Server must reset uncertain marker ONLY for definitive queue rejections');
@@ -107,4 +107,4 @@ assert.ok(queue.includes("maxConcurrent=1"),
   'One preflight at a time continues protecting uploads without serializing completed paid tasks');
 assert.ok(/app\.js\?v=20\d{6}-[a-z0-9-]+/.test(html),
   'Browser cache bust is required for user-visible queue error text');
-console.log('PASS: explicit TASK_QUEUE_MAXED reroutes to next eligible 100–600 RH account, manual choice honored, null/timeout never double charges, real createTask payload/workflow preserved, truthful status');
+console.log('PASS: explicit TASK_QUEUE_MAXED reroutes to next eligible 100+ RH account, manual choice honored, null/timeout never double charges, real createTask payload/workflow preserved, truthful status');
