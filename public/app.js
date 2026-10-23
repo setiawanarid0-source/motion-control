@@ -298,9 +298,12 @@ async function checkSubmission(){
       completedSubmission(data);
     }else if(data.stage==='error'){
       const capacityFull=/TASK_QUEUE_MAXED/i.test(String(data.error||''));
-      $('#taskStatus').textContent=capacityFull?'Antrean akun RunningHub penuh':'Persiapan belum berhasil';
-      $('#taskEstimate').textContent=capacityFull?
-        'Task ditolak RunningHub · kredit belum terpakai untuk task ini':
+      const rejectedGraph=/prompt_outputs_failed_validation/i.test(String(data.error||''));
+      const missingH3=/Character Swap H3 belum siap di RunningHub/i.test(String(data.error||''));
+      $('#taskStatus').textContent=capacityFull?'Antrean akun RunningHub penuh':
+        rejectedGraph?'Workflow ditolak RunningHub':missingH3?'Workflow H3 belum tersedia':'Persiapan belum berhasil';
+      $('#taskEstimate').textContent=capacityFull||rejectedGraph||missingH3?
+        'Task tidak diterima · tidak ada konfirmasi biaya generasi':
         'Task belum dikirim ke RunningHub';
       toast(data.error||'Persiapan gagal sebelum task dikirim.',true);
       clearSubmission();
