@@ -1,6 +1,5 @@
 // RunningHub generation policy only. Account retention and existing tasks stay independent.
-// Accounts over 600 RH remain visible in the pool but cannot fund NEW generation.
-export const MAX_NEW_TASK_CREDITS=600;
+// All verified balances above the minimum are eligible; no upper credit limit.
 export const MIN_ELIGIBLE_CREDITS=100;
 
 const balanceOf=status=>{
@@ -9,9 +8,9 @@ const balanceOf=status=>{
   return Number.isFinite(credits)?credits:null;
 };
 
-export function canGenerateWithAccount(status,minimum=MIN_ELIGIBLE_CREDITS,maximum=MAX_NEW_TASK_CREDITS){
+export function canGenerateWithAccount(status,minimum=MIN_ELIGIBLE_CREDITS){
   const credits=balanceOf(status);
-  return credits!==null&&credits>=minimum&&credits<=maximum;
+  return credits!==null&&credits>=minimum;
 }
 
 function timeOf(value){
@@ -19,11 +18,11 @@ function timeOf(value){
   return Number.isFinite(date)?date:0;
 }
 
-// Higher eligible RH balance first (600 before 599); at equal balance,
+// Higher eligible RH balance first (including balances above 600); at equal balance,
 // newly added keys take precedence, then accounts not used before, then fewer tasks.
 // This never mutates vault storage order and does not change RunningHub task identity.
-export function rankGenerationAccounts(checked,minimum=MIN_ELIGIBLE_CREDITS,maximum=MAX_NEW_TASK_CREDITS){
-  return checked.filter(x=>x?.account&&canGenerateWithAccount(x.status,minimum,maximum))
+export function rankGenerationAccounts(checked,minimum=MIN_ELIGIBLE_CREDITS){
+  return checked.filter(x=>x?.account&&canGenerateWithAccount(x.status,minimum))
     .sort((x,y)=>{
       const creditDiff=Number(y.status.remainCoins)-Number(x.status.remainCoins);
       if(creditDiff)return creditDiff;
