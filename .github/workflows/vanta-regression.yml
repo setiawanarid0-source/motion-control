@@ -18,6 +18,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install FFmpeg and OpenCV runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg python3-opencv python3-numpy gzip
+          gzip -dk camera-engine/camera_motion.py.gz
       - name: Install production dependencies
         run: npm install --omit=dev --no-audit --no-fund
       - name: Full VANTA regression suite
