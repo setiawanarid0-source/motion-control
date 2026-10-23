@@ -123,7 +123,7 @@
 
             <div id="diagnosticNotice" class="diagnostic-notice hidden" role="note"><strong>Mode diagnosis SAM3</strong><p>Wajib upload driving video yang sudah dikompensasi ke 35 FPS, bukan video mentah. Tes ini menghasilkan mask saja dan tetap dapat menggunakan kredit RunningHub. Belum ada estimasi biaya yang tervalidasi.</p></div>
             <div id="fullLabNotice" class="diagnostic-notice hidden" role="note"><strong>R4 Full Controlled · Tes berbayar</strong><p id="r4LabMaskSource"></p><p>Upload kembali gambar referensi dan driving video hasil kompensasi 35 FPS yang sama dengan tes SAM3. Dua mask akan dipakai ulang otomatis dari task tersebut. Mask belum menjalani refinement offline. Proses 337 frame dengan RunningHub dan membutuhkan kredit. Kamera statis belum terbukti.</p></div>
-            <div id="characterSwapNotice" class="diagnostic-notice hidden" role="note"><strong>Character Swap v1.1 · Eksperimental</strong><p>Tanpa prompt manual. Mode Plus dipilih otomatis untuk tes; inferensi H3 membutuhkan model, LoRA dan BFSNodes yang kompatibel di RunningHub. Video diproses hingga sekitar 15 detik pada 24 FPS native. Penggunaan kredit hanya setelah RunningHub menerima task.</p></div>
+            <div id="characterSwapNotice" class="diagnostic-notice hidden" role="note"><strong>Character Swap v1.1 · Eksperimental</strong><p>Tanpa prompt manual. Workflow H3 memerlukan template khusus yang telah dipasang dan diverifikasi di RunningHub, termasuk BFSNodes, model, dan LoRA v1.1. Jika belum tersedia, server akan menolak pengiriman sebelum membuat task—tanpa mencoba workflow lama. Video H3 dirancang pada 24 FPS native; keberhasilan generasi belum terbukti.</p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
             <div class="mode-grid">
               <button class="mode-card selected" data-mode="standard" type="button">
@@ -329,7 +329,7 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20261023-menu-rh-unlimited-v1" defer></script>
+  <script src="/app.js?v=20261023-h3-validation-v2" defer></script>
   <script src="/kie-ui.js?v=20261019-progressive-history-v1" defer></script>
   <script src="/history-gallery.js?v=20261021-history-recovery-v1" defer></script>
 </body>
