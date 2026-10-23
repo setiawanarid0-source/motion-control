@@ -6,6 +6,7 @@ import {
   mayTryNextAccountAfterCreate
 } from '../runninghub-capacity.js';
 import {rankGenerationAccounts} from '../runninghub-account-priority.js';
+import {graphValidationError} from '../runninghub-graph-validation.js';
 
 assert.equal(explicitQueueMaxed({code:500,msg:'TASK_QUEUE_MAXED'}),true);
 assert.equal(explicitQueueMaxed({code:403,data:{message:'TASK_QUEUE_MAXED: no task slots'}}),true);
@@ -48,7 +49,7 @@ const context={
   prepareDiagnosticAssets:()=>null,
   runningHubInstanceType:mode=>mode==='plus'?'plus':'default',
   workflowGraphs:{current:{nodes:'unchanged'}},
-  explicitQueueMaxed,queueCapacityError,
+  explicitQueueMaxed,queueCapacityError,graphValidationError,
   rhJson:async(path,key,payload)=>{
     requests.push({path,key,payload});
     return responses[nextReply++];

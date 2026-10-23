@@ -18,6 +18,7 @@ import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,may
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {buildCharacterSwapWorkflow} from './character-swap.js';
+import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -416,7 +417,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   const h3=workflowKey==='characterSwap' ? buildCharacterSwapWorkflow({ imageName, videoName }) : null;
   const payload = {
     apiKey,
-    workflowId: h3 ? (process.env.RUNNINGHUB_H3_WORKFLOW_ID || workflowId) : workflowId,
+    workflowId: h3 ? process.env.RUNNINGHUB_H3_WORKFLOW_ID : workflowId,
     nodeInfoList: h3 ? h3.nodeInfoList : [
       { nodeId: '30', fieldName: 'image', fieldValue: imageName },
       { nodeId: '33', fieldName: 'video', fieldValue: videoName },
@@ -439,6 +440,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     // confirms that THIS attempted create did not enter RunningHub's queue.
     // A timeout, missing response, or arbitrary error is never safe to retry.
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
+    const validation=graphValidationError(data);
+    if(validation)throw validation;
     const tips = data?.data?.promptTips;
     throw new Error(data?.msg || tips || 'RunningHub gagal membuat task.');
   }
@@ -577,6 +580,10 @@ async function handleGeneration(req,res){
       throw new Error('R4 Full membutuhkan tes SAM3 berhasil di History untuk memakai ulang mask.');
     if (!['standard','plus','lite'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
     if(workflowKey==='characterSwap' && mode!=='plus') throw new Error('MiniMax H3 Character Swap memerlukan mode Plus untuk uji pertama; kebutuhan VRAM belum tervalidasi.');
+    // The v1.1 graph is not interchangeable with the legacy RunningHub workflow ID.
+    // Avoid a paid or ambiguous submission before a verified H3 workflow is registered.
+    if(workflowKey==='characterSwap' && !/^\d{10,25}$/.test(String(process.env.RUNNINGHUB_H3_WORKFLOW_ID||'')))
+      throw new Error('Character Swap H3 belum siap di RunningHub: workflow H3 khusus belum didaftarkan. Tidak ada task yang dikirim atau kredit digunakan.');
     // Lite accepted here only to let already-queued legacy tasks finish.
 
     const { deviceId, accounts } = getPersistentAccounts(req);
@@ -680,6 +687,13 @@ async function handleGeneration(req,res){
         });
       } catch (error) {
         lastError = error;
+        if(isDefinitelyRejectedGraph(error)){
+          // RunningHub explicitly declined this graph before it entered the queue.
+          // Do not resend the same invalid graph to other accounts.
+          req.submissionAttempted=false;
+          console.warn('RunningHub workflow validation rejected',workflowKey,String(error.message).slice(0,900));
+          break;
+        }
         if(isDefinitelyRejectedAtCapacity(error)){
           rejectedAtCapacity++;
           // RunningHub explicitly returned TASK_QUEUE_MAXED and no taskId.
