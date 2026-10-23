@@ -8,7 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { extractTaskFailure } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
-import {MAX_NEW_TASK_CREDITS,canGenerateWithAccount,rankGenerationAccounts} from './runninghub-account-priority.js';
+import {canGenerateWithAccount,rankGenerationAccounts} from './runninghub-account-priority.js';
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences } from './history-references.js';
 import {createTaskRegistry} from './task-registry.js';
@@ -307,7 +307,7 @@ function publicAccount(account, status = null) {
     addedAt: account.addedAt,
     lastUsedAt: account.lastUsedAt || null,
     status,
-    canGenerate: canGenerateWithAccount(status, MIN_POOL_CREDITS, MAX_NEW_TASK_CREDITS),
+    canGenerate: canGenerateWithAccount(status, MIN_POOL_CREDITS),
   };
 }
 
@@ -594,17 +594,17 @@ async function handleGeneration(req,res){
       const chosen=accounts.find(a=>a.id===requestedAccountId);
       if(!chosen)throw new Error('Akun yang dipilih tidak ditemukan.');
       const status=await accountStatus(chosen.key);
-      if(!canGenerateWithAccount(status,MIN_POOL_CREDITS,MAX_NEW_TASK_CREDITS))
-        throw new Error('Akun ini tidak dapat digunakan. Generasi RunningHub hanya memakai akun dengan saldo 100–600 RH.');
+      if(!canGenerateWithAccount(status,MIN_POOL_CREDITS))
+        throw new Error('Akun ini tidak dapat digunakan. Generasi RunningHub memerlukan saldo minimal 100 RH.');
       candidates=[chosen];
     }else{
       const checked=await Promise.all(accounts.map(async account=>{
         try{return {account,status:await accountStatus(account.key)};}
         catch(error){return {account,status:{error:error.message}};}
       }));
-      candidates=rankGenerationAccounts(checked,MIN_POOL_CREDITS,MAX_NEW_TASK_CREDITS)
+      candidates=rankGenerationAccounts(checked,MIN_POOL_CREDITS)
         .map(x=>x.account);
-      if(!candidates.length)throw new Error('Tidak ada akun RunningHub yang siap dengan saldo 100–600 RH. Akun di atas 600 RH tidak akan digunakan.');
+      if(!candidates.length)throw new Error('Tidak ada akun RunningHub yang siap dengan saldo minimal 100 RH.');
     }
     if(workflowKey==='r15'){
       req.progress?.('preparing_motion');
