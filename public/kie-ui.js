@@ -89,6 +89,18 @@
   function updateModel(){
     const m=model();if(!m)return;
     el('kieAspectField').classList.toggle('hidden',!m.aspect);
+    if(m.aspectRatios?.length){
+      // Grok 2.0 only accepts these 5 ratios; other models retain the
+      // original complete selector. Preserve the prior choice when valid.
+      const picker=el('kieAspect'),oldRatio=picker.value;
+      picker.innerHTML=m.aspectRatios.map(r=>'<option value="'+esc(r)+'">'+esc(r)+'</option>').join('');
+      picker.value=m.aspectRatios.includes(oldRatio)?oldRatio:'1:1';
+    }else{
+      const picker=el('kieAspect'),oldRatio=picker.value;
+      const allRatios=['1:1','9:16','16:9','3:2','2:3','4:3','3:4','21:9','auto'];
+      picker.innerHTML=allRatios.map(r=>'<option value="'+esc(r)+'">'+esc(r)+'</option>').join('');
+      picker.value=allRatios.includes(oldRatio)?oldRatio:'1:1';
+    }
     el('kieResolutionField').classList.toggle('hidden',!m.resolution);
     el('kieResolutionLabel').textContent=m.resolution==='quality'?'KUALITAS':'RESOLUSI';
     const prev=el('kieResolution').value;
