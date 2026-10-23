@@ -35,7 +35,7 @@ function makeElement(dataset={}){
 }
 const nav=['create','image-create','history','image-history','accounts','kie-accounts']
   .map(view=>makeElement({view}));
-const workflow=['r15','current','koh1AntiObject','r4Lab','characterSwap']
+const workflow=['r15','current','koh1AntiObject','r4Lab']
   .map(id=>makeElement({workflow:id}));
 const modes=['standard','plus'].map(mode=>makeElement({mode}));
 for(const key of ['create','image-create','history','image-history','accounts','kie-accounts']){
@@ -45,7 +45,7 @@ for(const key of workflow.map(x=>x.dataset.workflow)){
   assert.ok(html.includes('data-workflow="'+key+'"'),'Workflow option must exist: '+key);
 }
 const nodeKeys=['#menuBtn','#sidebar','#diagnosticNotice','#fullLabNotice',
-  '#characterSwapNotice','#imageDrop','#referenceImage','#videoDrop',
+  '#imageDrop','#referenceImage','#videoDrop',
   '#videoReference','#generateBtn','#refreshAccounts','#motionGalleryRefresh',
   '#addAccountBtn'];
 const nodes=new Map(nodeKeys.map(key=>[key,makeElement()]));
@@ -90,23 +90,17 @@ assert.ok(requested.includes('image-history'),'Image history navigation is bound
 nodes.get('#menuBtn').onclick();
 assert.equal(nodes.get('#sidebar').classList.contains('open'),true);
 
-const h3=workflow.find(x=>x.dataset.workflow==='characterSwap');
-h3.onclick();
-assert.equal(state.workflow,'characterSwap');
+workflow.find(x=>x.dataset.workflow==='r4Lab').onclick();
+assert.equal(state.workflow,'r4Lab');
+modes.find(x=>x.dataset.mode==='plus').onclick();
 assert.equal(state.mode,'plus');
-assert.equal(h3.classList.contains('selected'),true);
-assert.equal(nodes.get('#characterSwapNotice').classList.contains('hidden'),false);
-assert.equal(modes.find(x=>x.dataset.mode==='plus').classList.contains('selected'),true);
-modes.find(x=>x.dataset.mode==='standard').onclick();
-assert.equal(state.mode,'plus','H3 keeps required Plus mode');
-assert.equal(errors.length,1,'H3 Standard block must display an explanation');
 workflow.find(x=>x.dataset.workflow==='r15').onclick();
 modes.find(x=>x.dataset.mode==='standard').onclick();
-assert.equal(state.mode,'standard','Other workflows can select Standard');
-assert.equal(state.workflow,'r15','Switching workflows must not be blocked');
-assert.equal(nodes.get('#characterSwapNotice').classList.contains('hidden'),true);
-assert.equal(workflow.filter(x=>x.classList.contains('selected')).length,1,
-  'Only one workflow may remain selected');
+assert.equal(state.mode,'standard');
+assert.equal(state.workflow,'r15');
+assert.equal(workflow.filter(x=>x.classList.contains('selected')).length,1);
+assert.ok(!html.includes('data-workflow="characterSwap"'));
+assert.ok(!app.includes("characterSwap"));
 
 assert.equal(typeof nodes.get('#imageDrop').listener('drop'),'function');
 assert.equal(typeof nodes.get('#videoDrop').listener('drop'),'function');

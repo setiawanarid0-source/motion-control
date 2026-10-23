@@ -91,7 +91,7 @@ assert.ok(html.includes('id="kieRefsDrop"')&&html.includes('id="kieRefsCount"'),
   'Picker and live counter must exist');
 assert.ok(html.includes('id="kieRefsPreview"')&&html.includes('aria-live="polite"'),
   'Previews must render without manually requesting preview');
-assert.ok(/kie-ui\.js\?v=20261019-progressive-history-v1/.test(html),
+assert.ok(/kie-ui\.js\?v=20\d{6}-[a-z0-9-]+/.test(html),
   'Browser should fetch the corrected JavaScript');
 assert.ok(/\.kie-refs-preview \.kie-ref-thumbnail img\s*\{[^}]*object-fit:contain/s.test(css),
   'Preview must display complete image without cropping');

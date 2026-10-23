@@ -14,6 +14,7 @@ export const KIE_MODELS=[
  {id:'seedream',name:'Seedream 5.0 Pro',create:'seedream/5-pro-text-to-image',edit:'seedream/5-pro-image-to-image',images:'image_urls',aspect:'aspect_ratio',resolution:'quality',resolutions:['basic','high']},
  {id:'nano2',name:'Nano Banana 2',create:'nano-banana-2',edit:'nano-banana-2',images:'image_input',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
  {id:'nanopro',name:'Nano Banana Pro',create:'nano-banana-pro',edit:'nano-banana-pro',images:'image_input',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
+ {id:'grok2',name:'Grok Image 2.0',create:'grok-imagine-image-2-0/text-to-image',edit:'grok-imagine-image-2-0/image-edit',images:'image_urls',aspect:'aspect_ratio',aspectRatios:['1:1','2:3','3:2','16:9','9:16'],resolutions:[]},
  {id:'gpt2',name:'GPT Image 2',create:'gpt-image-2-text-to-image',edit:'gpt-image-2-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolutions:[]},
  {id:'flare',name:'GPT Image 2.5 Flare',create:'gpt-image-2-5-flare-text-to-image',edit:'gpt-image-2-5-flare-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
  {id:'sunburst',name:'GPT Image 2.5 Sunburst',create:'gpt-image-2-5-sunburst-text-to-image',edit:'gpt-image-2-5-sunburst-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']}
@@ -37,7 +38,7 @@ export function buildKieInput(model,mode,{prompt,aspect,resolution,urls=[]}){
   if(mode==='edit'&&(!urls.length||urls.length>2))throw Error('Edit Image memerlukan 1–2 gambar referensi.');
   if(mode==='create'&&urls.length)throw Error('Create Image tidak menerima gambar referensi.');
   const input={prompt:prompt.trim()};
-  if(model.aspect){if(!RATIOS.has(aspect))throw Error('Aspect ratio tidak tersedia.');input[model.aspect]=aspect;}
+  if(model.aspect){if(!RATIOS.has(aspect)||model.aspectRatios&&!model.aspectRatios.includes(aspect))throw Error('Aspect ratio tidak tersedia untuk model ini.');input[model.aspect]=aspect;}
   if(model.resolution){if(!model.resolutions.includes(resolution))throw Error('Resolusi atau kualitas tidak tersedia.');input[model.resolution]=resolution;}
   if(mode==='edit')input[model.images]=urls;
   if(model.id==='qwen')input.output_format='png';

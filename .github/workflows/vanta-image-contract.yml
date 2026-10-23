@@ -1,0 +1,26 @@
+name: VANTA image model contract checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+jobs:
+  image-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Node dependencies
+        run: npm install --omit=dev --no-audit --no-fund
+      - name: Verify Grok model, VANTA menus, and preserved image workflows
+        run: |
+          node --check server.js
+          node --check public/app.js
+          node --check public/kie-ui.js
+          node scripts/test-grok-image-2.mjs
+          node scripts/test-kie-dashboard.mjs
+          node scripts/test-create-bootstrap.mjs
+          node scripts/test-kie-incremental-references.mjs

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {KIE_MODELS,buildKieInput} from '../kie-studio.js';
-assert.equal(KIE_MODELS.length,8,'Eight selected image models');
-assert.equal(new Set(KIE_MODELS.map(x=>x.id)).size,8,'No duplicated models');
+assert.equal(KIE_MODELS.length,9,'Nine selected image models');
+assert.equal(new Set(KIE_MODELS.map(x=>x.id)).size,9,'No duplicated models');
 for(const m of KIE_MODELS){
   assert.ok(m.create&&m.edit,'Model needs valid separate or combined Create/Edit API IDs');
   const aspect=m.aspect?'1:1':'1:1',res=m.resolutions[0]||'1K';
@@ -37,4 +37,4 @@ const provider=fs.readFileSync(new URL('../kie-studio.js',import.meta.url),'utf8
 assert.ok(provider.includes("'accounts.enc'")&&provider.includes("'tasks.enc'"),'Isolated encrypted kie pool and tasks');
 assert.ok(provider.includes('GET')===false||provider.includes('/api/v1/jobs/recordInfo'),'Status source is kie.ai');
 assert.ok(provider.includes("if(submitted&&!accepted)"),'No automatic paid-task retry after uncertain acknowledgement');
-console.log('PASS: 8 kie.ai models, 1–2 image references, separate encrypted Account Pool/History, responsive expandable sidebar, existing motion workflow untouched');
+console.log('PASS: 9 kie.ai models, 1–2 image references, separate encrypted Account Pool/History, responsive expandable sidebar, existing motion workflow untouched');
