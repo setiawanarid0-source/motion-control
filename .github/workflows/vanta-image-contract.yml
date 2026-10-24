@@ -24,3 +24,4 @@ jobs:
           node scripts/test-kie-dashboard.mjs
           node scripts/test-create-bootstrap.mjs
           node scripts/test-kie-incremental-references.mjs
+          node scripts/test-nora-gallery-history.mjs
