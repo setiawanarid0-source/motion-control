@@ -155,6 +155,18 @@
     if(p==='motion'){details.push(detailLine('Durasi',timeText(t)||'—'));details.push(detailLine('Video',t.video||'—'));}
     return '<dl>'+details.join('')+'</dl>';
   }
+  function setImageExpanded(enabled){
+    const viewer=element('noraGalleryViewer');if(!viewer)return;
+    const active=!!enabled&&state.modalProvider==='image'&&current()?.status==='success';
+    if(active)viewer.classList.add('image-fullscreen');
+    else viewer.classList.remove('image-fullscreen');
+    const button=element('noraViewerMedia')?.querySelector('[data-nora-fullscreen]');
+    if(button){
+      button.setAttribute('aria-label',active?'Kembali ke galeri':'Lihat gambar layar penuh');
+      button.setAttribute('aria-pressed',String(active));
+      button.title=active?'Kembali ke galeri':'Layar penuh';
+    }
+  }
   function showModal(p,id){
     const item=state[p].find(t=>idOf(p,t)===String(id));if(!item)return;
     state.modalProvider=p;state.modalId=String(id);
@@ -166,6 +178,7 @@
   }
   function drawModal(){
     const p=state.modalProvider,t=current();if(!p||!t)return;
+    setImageExpanded(false);
     const idx=getIndex(),count=visibleItems(p).length,media=mediaOf(p,t),poster=posterOf(p,t);
     element('noraViewerContext').textContent=p==='image'?'KIE.AI · IMAGE GALLERY':'RUNNINGHUB · MOTION GALLERY';
     element('noraViewerTitle').textContent=labelOf(p,t);
@@ -174,7 +187,15 @@
     element('noraViewerNext').disabled=count<=1;
     const host=element('noraViewerMedia');
     const file=media||poster;
-    if(file&&p==='image')host.innerHTML='<img class="nora-viewer-image" alt="Hasil gambar" src="'+safeText(file)+'">';
+    if(file&&p==='image'){
+      const picture='<img class="nora-viewer-image" alt="Hasil gambar" src="'+safeText(file)+'">';
+      host.innerHTML=t.status==='success'&&media
+        ?'<div class="nora-viewer-photo">'+picture+
+          '<button type="button" class="nora-image-fullscreen-trigger" data-nora-fullscreen aria-label="Lihat gambar layar penuh" aria-pressed="false" title="Layar penuh">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
+          '<path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"/></svg></button></div>'
+        :picture;
+    }
     else if(file&&p==='motion'&&media)host.innerHTML='<video class="nora-viewer-video" src="'+safeText(file)+'" controls playsinline preload="metadata"></video>';
     else if(file)host.innerHTML='<img class="nora-viewer-image" alt="Gambar referensi" src="'+safeText(file)+'">';
     else host.innerHTML='<div class="nora-viewer-media-empty"><span>◇</span><p>'+safeText(t.status==='failed'?'Generasi gagal':'Hasil belum tersedia')+'</p></div>';
@@ -196,6 +217,7 @@
   }
   function close(){
     const modal=element('noraGalleryViewer');if(!modal||modal.classList.contains('hidden'))return;
+    setImageExpanded(false);
     modal.classList.add('hidden');
     const video=element('noraViewerMedia')?.querySelector('video');if(video){video.pause();video.removeAttribute('src');video.load();}
     state.modalProvider=null;state.modalId=null;
@@ -246,6 +268,11 @@
   element('noraGalleryViewer')?.querySelector('[data-nora-close]')?.addEventListener('click',close);
   element('noraViewerPrev')?.addEventListener('click',()=>move(-1));
   element('noraViewerNext')?.addEventListener('click',()=>move(1));
+  element('noraViewerMedia')?.addEventListener('click',e=>{
+    const trigger=e.target.closest('[data-nora-fullscreen]');
+    if(!trigger||state.modalProvider!=='image')return;
+    setImageExpanded(!element('noraGalleryViewer').classList.contains('image-fullscreen'));
+  });
   element('noraViewerCopy')?.addEventListener('click',async()=>{
     const t=current();if(!t?.prompt)return;
     try{
@@ -260,7 +287,13 @@
   });
   document.addEventListener('keydown',e=>{
     if(!state.modalProvider)return;
-    if(e.key==='Escape'){e.preventDefault();close();}
+    if(e.key==='Escape'){
+      e.preventDefault();
+      if(element('noraGalleryViewer').classList.contains('image-fullscreen'))setImageExpanded(false);
+      else close();
+      return;
+    }
+    if(element('noraGalleryViewer').classList.contains('image-fullscreen'))return;
     if(e.key==='ArrowRight'){e.preventDefault();move(1);}
     if(e.key==='ArrowLeft'){e.preventDefault();move(-1);}
   });
