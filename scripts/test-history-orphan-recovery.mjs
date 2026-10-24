@@ -44,6 +44,6 @@ assert.equal(calls,3,'No account ID means no futile provider request');
 assert.ok(app.includes('async recover(item){') && app.includes("+'/recover',{method:'POST',body:'{}'}"),'Orphan History recovery call must stay available');
 assert.ok(gallery.includes('data-nora-action="recover"')&&gallery.includes("adapter?.recover?.(item)"));
 assert.ok(/app\.js\?v=20\d{6}-[a-z0-9-]+/.test(html) &&
-  html.includes('/history-gallery.js?v=20261021-history-recovery-v1'));
+  /history-gallery\.js\?v=20\d{6}-[a-z0-9-]+/.test(html));
 assert.ok(!polling.includes('/task/openapi/create')&&!polling.includes('/task/openapi/delete'));
 console.log('PASS: 409 orphan tasks stop polling; transient errors retry; gallery recovery never creates paid tasks');
