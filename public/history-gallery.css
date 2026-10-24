@@ -225,16 +225,16 @@
 }
 @media(prefers-reduced-motion:reduce){.nora-pagination-controls .nora-page-btn{transition:none}}
 
-/* Image-only immersive preview. Trigger stays inside the lower-right corner
-   of the displayed picture; no browser navigation, download, or second modal. */
-.nora-viewer-photo{position:relative;display:inline-flex;align-items:center;justify-content:center;
+/* Image-only immersive preview. Keep the small control in the dark stage margin,
+   aligned to the stage bottom-right (outside a narrower portrait photo). */
+.nora-viewer-photo{position:static;display:inline-flex;align-items:center;justify-content:center;
   max-width:100%;max-height:100%;min-width:0;min-height:0}
 .nora-viewer-photo>.nora-viewer-image{max-width:100%;max-height:min(78dvh,860px)}
-.nora-image-fullscreen-trigger{position:absolute;right:10px;bottom:10px;z-index:5;
-  display:grid;place-items:center;width:42px;height:42px;border:1px solid #647588;
-  border-radius:11px;background:rgba(9,16,24,.82);color:#fff;cursor:pointer;
+.nora-image-fullscreen-trigger{position:absolute;right:9px;bottom:14px;z-index:5;
+  display:grid;place-items:center;width:32px;height:32px;border:1px solid #536474;
+  border-radius:8px;background:rgba(9,16,24,.78);color:#fff;cursor:pointer;
   box-shadow:0 3px 12px #0008;backdrop-filter:blur(5px)}
-.nora-image-fullscreen-trigger svg{width:21px;height:21px}
+.nora-image-fullscreen-trigger svg{width:16px;height:16px}
 .nora-image-fullscreen-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .nora-viewer.image-fullscreen{padding:0}
 .nora-viewer.image-fullscreen .nora-viewer-backdrop{background:#000;backdrop-filter:none}
@@ -250,8 +250,8 @@
 .nora-viewer.image-fullscreen .nora-viewer-photo{width:100%;height:100%;max-width:100%;max-height:100%}
 .nora-viewer.image-fullscreen .nora-viewer-photo>.nora-viewer-image{width:100%;height:100%;
   max-width:100%;max-height:100%;object-fit:contain}
-.nora-viewer.image-fullscreen .nora-image-fullscreen-trigger{right:max(12px,env(safe-area-inset-right));
-  bottom:max(12px,env(safe-area-inset-bottom))}
+.nora-viewer.image-fullscreen .nora-image-fullscreen-trigger{right:max(9px,env(safe-area-inset-right));
+  bottom:max(14px,env(safe-area-inset-bottom))}
 @media(max-width:700px){
   .nora-viewer-photo>.nora-viewer-image{max-height:52dvh}
   .nora-viewer.image-fullscreen .nora-viewer-photo>.nora-viewer-image{max-height:100%}

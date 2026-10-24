@@ -39,8 +39,14 @@ assert.ok(css.includes('.nora-viewer-image')&&css.includes('object-fit:contain')
   'Viewer must show full image without cropping');
 assert.ok(css.includes('.nora-image-fullscreen-trigger')&&css.includes('.nora-viewer.image-fullscreen'),
   'Fullscreen control must overlay image and use a same-page immersive layout');
+assert.ok(css.includes('.nora-viewer-photo{position:static;')&&
+  /\.nora-image-fullscreen-trigger\{position:absolute;right:9px;bottom:14px;z-index:5;/.test(css)&&
+  css.includes('width:32px;height:32px'),
+  'Fullscreen button must be small and anchored to the stage right-bottom, not the portrait image');
+assert.ok(css.includes('.nora-image-fullscreen-trigger svg{width:16px;height:16px}'),
+  'Fullscreen icon must be compact');
 assert.ok(html.includes('/history-gallery.js?v=20261024-image-fullscreen-v1')&&
-  html.includes('/history-gallery.css?v=20261024-image-fullscreen-v1'),
+  html.includes('/history-gallery.css?v=20261024-image-fullscreen-stage-v2'),
   'Mobile browsers must receive fresh viewer JS and CSS');
 assert.ok(gallery.includes("e.key==='ArrowRight'")&&gallery.includes("e.key==='ArrowLeft'"));
 assert.ok(gallery.includes("addEventListener('touchend'"));
