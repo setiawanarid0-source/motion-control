@@ -37,6 +37,11 @@ assert.ok(css.includes('grid-template-columns:repeat(3,minmax(0,1fr))'),
   'Mobile Nora gallery must be three columns');
 assert.ok(css.includes('.nora-viewer-image')&&css.includes('object-fit:contain'),
   'Viewer must show full image without cropping');
+assert.ok(css.includes('.nora-image-fullscreen-trigger')&&css.includes('.nora-viewer.image-fullscreen'),
+  'Fullscreen control must overlay image and use a same-page immersive layout');
+assert.ok(html.includes('/history-gallery.js?v=20261024-image-fullscreen-v1')&&
+  html.includes('/history-gallery.css?v=20261024-image-fullscreen-v1'),
+  'Mobile browsers must receive fresh viewer JS and CSS');
 assert.ok(gallery.includes("e.key==='ArrowRight'")&&gallery.includes("e.key==='ArrowLeft'"));
 assert.ok(gallery.includes("addEventListener('touchend'"));
 assert.ok(!gallery.includes('createTask')&&!gallery.includes('submitImage('),
@@ -96,6 +101,15 @@ win.vantaGallery.open('image','a');
 assert.equal(fakeEl('noraViewerTitle').textContent,'WAN Image Pro');
 assert.equal(fakeEl('noraViewerCounter').textContent,'1 / 3');
 assert.equal(fakeEl('noraViewerPrompt').textContent,entries[0].prompt);
+assert.ok(fakeEl('noraViewerMedia').innerHTML.includes('data-nora-fullscreen'),
+  'Completed image displays fullscreen control on picture itself');
+const fullscreenClick={target:{closest:s=>s==='[data-nora-fullscreen]'?{}:null}};
+fakeEl('noraViewerMedia').events.click(fullscreenClick);
+assert.ok(fakeEl('noraGalleryViewer').classList.contains('image-fullscreen'),
+  'Fullscreen preview stays in existing gallery dialog');
+fakeEl('noraViewerMedia').events.click(fullscreenClick);
+assert.ok(!fakeEl('noraGalleryViewer').classList.contains('image-fullscreen'),
+  'Second click restores full gallery with actions');
 assert.ok(fakeEl('noraViewerActions').innerHTML.includes('data-nora-action="edit"'));
 assert.ok(fakeEl('noraViewerActions').innerHTML.includes('data-nora-action="delete"'));
 fakeEl('noraViewerNext').events.click();
@@ -108,6 +122,8 @@ win.vantaGallery.open('image','c');
 assert.ok(!fakeEl('noraViewerActions').innerHTML.includes('data-nora-action="delete"'),
   'Active paid task cannot be deleted');
 assert.ok(fakeEl('noraViewerActions').innerHTML.includes('data-nora-action="refresh"'));
+assert.ok(!fakeEl('noraViewerMedia').innerHTML.includes('data-nora-fullscreen'),
+  'Pending image must not offer fullscreen of its reference photo');
 win.vantaGallery.close();
 win.vantaGallery.renderMotion([
   {taskId:'2109126366731984898',status:'processing',workflow:'Current Workflow',
@@ -121,6 +137,8 @@ assert.ok(!motionGrid.includes('<video '),'Motion gallery must never preload hea
 win.vantaGallery.open('motion','2109126366731984899');
 assert.ok(fakeEl('noraViewerMedia').innerHTML.includes('<video '),
   'Motion video loads on explicit viewer open, not before');
+assert.ok(!fakeEl('noraViewerMedia').innerHTML.includes('data-nora-fullscreen'),
+  'Motion player remains unaffected by image fullscreen feature');
 win.vantaGallery.close();
 assert.ok(motionGrid.includes('Memproses'),'Active Motion must clearly show status');
 assert.equal((motionGrid.match(/class="nora-gallery-tile"/g)||[]).length,2);
