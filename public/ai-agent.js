@@ -18,7 +18,12 @@ function entry(container, title, description, subtitle) {
   return div;
 }
 function empty(container, message) {
-  container.replaceChildren(el('p', message, 'muted'));
+  const wrap = el('div', undefined, 'empty-state');
+  const icon = el('span', '✦', 'empty-icon'); icon.setAttribute('aria-hidden', 'true');
+  const title = el('strong', message);
+  const subtitle = el('p', message.includes('tugas') ? 'Mulai dengan membuat tugas, lalu tinjau persetujuannya di sini.' : 'Aktivitas akan tampil setelah tersedia.');
+  wrap.append(icon, title, subtitle);
+  container.replaceChildren(wrap);
 }
 function say(message, error = false) {
   const target = $('feedback');
@@ -89,8 +94,14 @@ async function refresh() {
     ]);
     $('worker').textContent = status.worker === 'not_installed' ? 'Belum terpasang' : status.worker;
     $('supervisor').textContent = status.supervisor === 'not_installed' ? 'Belum terpasang' : status.supervisor;
-    $('browser').textContent = status.browser === 'not_installed' ? 'Belum terpasang' : status.browser;
-    $('execution').textContent = status.executionEnabled ? 'Aktif' : 'Nonaktif · aman';
+    $('browser').textContent = status.browser === 'ready_readonly' ? 'Siap · baca saja' :
+      status.browser === 'not_installed' ? 'Belum tersedia' : status.browser;
+    $('execution').textContent = status.executionEnabled ? 'Aktif' : 'Nonaktif';
+    document.querySelectorAll('.stat').forEach((node, index) => {
+      node.classList.toggle('is-ready', index === 2 && status.browser === 'ready_readonly' ||
+        index === 3 && Boolean(status.executionEnabled));
+      node.classList.toggle('is-disabled', index === 3 && !status.executionEnabled);
+    });
     state.tasks = tasks.tasks || [];
     const sel = $('discussionTask'), selected = sel?.value;
     if (sel) {
@@ -158,17 +169,51 @@ $('taskForm').addEventListener('submit', async event => {
   try {
     await request('/bridge/v1/tasks', 'POST', body);
     $('instruction').value = '';
-    say('Tugas berhasil dibuat. Persetujuan Owner tetap diperlukan.');
+    $('taskDialog').close();
+    say('Tugas tersimpan dan menunggu persetujuan Owner.');
     await refresh();
   } catch (error) { say(error.message, true); }
   finally { if (button) button.disabled = false; }
 });
 document.querySelectorAll('[data-refresh]').forEach(b => b.onclick = refresh);
-document.querySelectorAll('[data-tab]').forEach(b => {
-  b.onclick = () => {
-    document.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('active', x === b));
-    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('hidden', x.id !== 'tab-' + b.dataset.tab));
+const tabButtons = [...document.querySelectorAll('[data-tab]')];
+function selectTab(button, focus = false) {
+  tabButtons.forEach(b => {
+    const active = b === button;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-selected', String(active));
+    b.tabIndex = active ? 0 : -1;
+  });
+  document.querySelectorAll('.tab').forEach(panel => {
+    panel.classList.toggle('hidden', panel.id !== 'tab-' + button.dataset.tab);
+  });
+  if (focus) button.focus();
+}
+tabButtons.forEach((button, index) => {
+  button.onclick = () => selectTab(button);
+  button.onkeydown = event => {
+    const next = event.key === 'ArrowRight' ? index + 1 :
+      event.key === 'ArrowLeft' ? index - 1 : null;
+    if (next !== null) {
+      event.preventDefault();
+      selectTab(tabButtons[(next + tabButtons.length) % tabButtons.length], true);
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      selectTab(tabButtons[event.key === 'Home' ? 0 : tabButtons.length - 1], true);
+    }
   };
+});
+const taskDialog = $('taskDialog');
+const closeTaskDialog = () => taskDialog.open && taskDialog.close();
+$('openTaskDialog').onclick = () => {
+  if (!taskDialog.open) taskDialog.showModal();
+  $('instruction').focus();
+};
+$('closeTaskDialog').onclick = closeTaskDialog;
+$('cancelTaskDialog').onclick = closeTaskDialog;
+taskDialog.addEventListener('click', event => {
+  if (event.target === taskDialog) closeTaskDialog();
 });
 function wireForm(id,path,collect,message){
   $(id).addEventListener('submit',async event=>{
