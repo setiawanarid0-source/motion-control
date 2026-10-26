@@ -67,10 +67,14 @@ try{
   assert.ok(Date.now()-started<8000,'Upload must respond before expensive preprocessing');
   const owned=await fetch(url+'/api/generate/jobs/'+jobId,{headers});
   assert.equal(owned.status,200);
-  const foreign=await fetch(url+'/api/generate/jobs/'+jobId,{
+  const foreignUnauth=await fetch(url+'/api/generate/jobs/'+jobId,{
     headers:{'X-Vanta-Device':'other-device-012345678901234567'}
   });
-  assert.equal(foreign.status,404);
+  assert.equal(foreignUnauth.status,401,'Owner session required before checking device isolation');
+  const foreign=await fetch(url+'/api/generate/jobs/'+jobId,{
+    headers:{...headers,'X-Vanta-Device':'other-device-012345678901234567'}
+  });
+  assert.equal(foreign.status,404,'Authorized Owner cannot cross device-scoped jobs');
   let state=null;
   for(let i=0;i<50;i++){
     const r=await fetch(url+'/api/generate/jobs/'+jobId,{headers});
