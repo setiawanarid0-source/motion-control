@@ -1,4 +1,5 @@
 import express from 'express';
+import { createAgentBridge } from './agent-bridge.js';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import axios from 'axios';
@@ -446,6 +447,8 @@ const upload = multer({
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+// Owner-authenticated private agent proxy. Does not alter existing VANTA APIs.
+app.use('/api/agent', createAgentBridge());
 // Independent provider: never shares RunningHub credits, task history, or account vault.
 app.use('/api/kie',createKieStudio({encrypt,decrypt,dir:DATA_DIR}));
 app.use(express.static(path.join(__dirname, 'public'), {
