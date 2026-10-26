@@ -6,7 +6,8 @@
 <meta name="theme-color" content="#090b0e"/>
 <title>VANTA · AI Agent</title>
 <link rel="stylesheet" href="/ai-agent.css?v=20261026"/>
-<script src="/ai-agent.js?v=20261026" defer></script>
+<script src="/auth.js?v=20261026-global-login" defer></script>
+<script src="/ai-agent.js?v=20261026-global-login" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -18,13 +19,8 @@
     <div class="side-meta">Worker and Supervisor<br/>Model setup comes last</div>
   </aside>
   <main class="main">
-    <div class="top"><div><div class="eyebrow">VANTA / AUTOMATION</div><h1>AI Agent</h1><p>Kontrol pekerjaan, persetujuan, dan pembelajaran dalam satu dashboard.</p></div><div class="top-actions"><span id="connection" class="tag">Memeriksa koneksi</span><button id="logout" class="secondary hidden">Keluar</button></div></div>
-    <section id="locked" class="auth panel hidden">
-      <div class="eyebrow">OWNER ACCESS</div><h2>Verifikasi pemilik</h2><p>Untuk keamanan, akses AI Agent memerlukan autentikasi terpisah dari sesi perangkat VANTA.</p>
-      <form id="loginForm"><label for="password">Password Owner</label><input id="password" type="password" autocomplete="current-password" required minlength="20" placeholder="Masukkan password Owner"/><button type="submit">Masuk ke AI Agent</button></form>
-      <p id="authMessage" class="message"></p>
-    </section>
-    <div id="workspace" class="hidden">
+    <div class="top"><div><div class="eyebrow">VANTA / AUTOMATION</div><h1>AI Agent</h1><p>Kontrol pekerjaan, persetujuan, dan pembelajaran dalam satu dashboard.</p></div><div class="top-actions"><span id="connection" class="tag">Memeriksa koneksi</span><button class="secondary" data-vanta-logout type="button">Keluar</button></div></div>
+    <div id="workspace">
       <div class="stats">
         <div class="stat"><span>Worker</span><strong id="worker">Belum terpasang</strong></div>
         <div class="stat"><span>Supervisor</span><strong id="supervisor">Belum terpasang</strong></div>
