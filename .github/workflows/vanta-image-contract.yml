@@ -15,6 +15,18 @@ jobs:
           node-version: '22'
       - name: Install Node dependencies
         run: npm install --omit=dev --no-audit --no-fund
+      - name: Install mobile browser verifier
+        run: npm install --no-save --no-audit --no-fund playwright-core@1.56.1
+      - name: Verify mobile Agent layout with real Chromium
+        run: node scripts/test-agent-mobile-browser.mjs
+      - name: Save viewport screenshots for UI review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-dashboard-mobile-screenshots
+          path: /tmp/vanta-agent-mobile-screens/*.png
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Verify Grok model, VANTA menus, and preserved image workflows
         run: |
           NODE_ENV=production node --test scripts/test-agent-bridge.mjs
