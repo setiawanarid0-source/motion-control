@@ -2,7 +2,7 @@ const $ = id => document.getElementById(id);
 const state = { busy: false, tasks: [] };
 const label = status => ({
   awaiting_approval: 'Menunggu persetujuan',
-  approved_pending_worker: 'Disetujui · menunggu pemasangan Worker',
+  approved_pending_worker: 'Disetujui · menunggu Worker',
   rejected: 'Ditolak', cancelled: 'Dibatalkan', paused: 'Dijeda'
 }[status] || status);
 function el(tag, value, className) {
@@ -87,10 +87,18 @@ async function refresh() {
       request('/bridge/v1/discussions'), request('/bridge/v1/memories'),
       request('/bridge/v1/skills')
     ]);
-    $('worker').textContent = status.worker === 'not_installed' ? 'Belum terpasang' : status.worker;
-    $('supervisor').textContent = status.supervisor === 'not_installed' ? 'Belum terpasang' : status.supervisor;
-    $('browser').textContent = status.browser === 'not_installed' ? 'Belum terpasang' : status.browser;
-    $('execution').textContent = status.executionEnabled ? 'Aktif' : 'Nonaktif · aman';
+    const displayState = value => ({
+      not_installed: 'Belum terpasang',
+      ready_readonly: 'Siap · baca saja',
+      inactive: 'Nonaktif',
+      ready: 'Siap'
+    }[value] || String(value || 'Tidak diketahui').replaceAll('_', ' '));
+    $('worker').textContent = displayState(status.worker);
+    $('supervisor').textContent = displayState(status.supervisor);
+    $('browser').textContent = displayState(status.browser);
+    $('execution').textContent = status.executionEnabled ? 'Aktif' : 'Nonaktif';
+    $('connection').textContent = 'Owner aktif';
+
     state.tasks = tasks.tasks || [];
     const sel = $('discussionTask'), selected = sel?.value;
     if (sel) {
@@ -164,12 +172,31 @@ $('taskForm').addEventListener('submit', async event => {
   finally { if (button) button.disabled = false; }
 });
 document.querySelectorAll('[data-refresh]').forEach(b => b.onclick = refresh);
-document.querySelectorAll('[data-tab]').forEach(b => {
-  b.onclick = () => {
-    document.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('active', x === b));
-    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('hidden', x.id !== 'tab-' + b.dataset.tab));
-  };
+const tabs = [...document.querySelectorAll('[data-tab]')];
+function activateTab(tab, moveFocus = false) {
+  for (const t of tabs) {
+    const selected = t === tab;
+    t.classList.toggle('active', selected);
+    t.setAttribute('aria-selected', String(selected));
+    t.tabIndex = selected ? 0 : -1;
+  }
+  for (const panel of document.querySelectorAll('.tab')) {
+    panel.classList.toggle('hidden', panel.id !== 'tab-' + tab.dataset.tab);
+  }
+  if (moveFocus) tab.focus();
+}
+tabs.forEach((tab, index) => {
+  tab.addEventListener('click', () => activateTab(tab));
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowRight','ArrowLeft','Home','End'].includes(event.key)) return;
+    event.preventDefault();
+    const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    const destination = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
+      (index + offset + tabs.length) % tabs.length;
+    activateTab(tabs[destination], true);
+  });
 });
+if (tabs.length) activateTab(tabs[0]);
 function wireForm(id,path,collect,message){
   $(id).addEventListener('submit',async event=>{
     event.preventDefault();
