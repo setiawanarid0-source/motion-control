@@ -11,6 +11,9 @@ const listen = async app => {
   return { server, origin: 'http://127.0.0.1:' + server.address().port };
 };
 test('VANTA Agent requires strong Owner gate and limits private proxy paths', async () => {
+  // Railway pre-deploy runs with NODE_ENV=production; localhost endpoints are test-only.
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'test';
   const token = 'agent-test-internal-token-not-for-production-987654';
   const password = 'owner-test-only-long-password-123456789';
   const agent = express();
@@ -66,5 +69,7 @@ test('VANTA Agent requires strong Owner gate and limits private proxy paths', as
     delete process.env.AGENT_INTERNAL_TOKEN;
     delete process.env.VANTA_AGENT_OWNER_KEY;
     delete process.env.VANTA_AGENT_PRIVATE_URL;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
   }
 });
