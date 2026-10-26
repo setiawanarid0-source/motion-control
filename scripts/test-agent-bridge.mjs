@@ -77,7 +77,7 @@ test('One VANTA Owner login protects studio, pools and Agent; first login forces
     const cross=await post('/api/agent/bridge/v1/tasks',{instruction:'test'},cookie,{Origin:'https://evil.example'});
     assert.equal(cross.status,403);
     const fresh= createOwnerAuth({dataDir:dir,initialPassword:bootstrap,token});
-    assert.equal(fresh.isOwner({cookies:{vanta_owner_session:cookie}}),true);
+    assert.equal(fresh.isOwner({cookies:{vanta_owner_session:cookie.split('=')[1]}}),true);
     const wrong=await post('/api/auth/login',{password:bootstrap});
     assert.equal(wrong.status,401);
     const logout=await post('/api/auth/logout',{},cookie);
