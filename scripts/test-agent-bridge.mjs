@@ -82,7 +82,7 @@ test('One VANTA Owner login protects studio, pools and Agent; first login forces
     assert.equal(wrong.status,401);
     const logout=await post('/api/auth/logout',{},cookie);
     assert.equal(logout.status,200);
-    assert.match(logout.headers.get('set-cookie'),'Max-Age=0');
+    assert.match(logout.headers.get('set-cookie'),/Max-Age=0/);
   } finally {
     await Promise.all([close(web.server),close(upstream.server)]);
     await rm(dir,{recursive:true,force:true});
