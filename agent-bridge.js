@@ -83,7 +83,7 @@ export function createAgentBridge() {
   const allowedPaths = [
     /^\/v1\/(status|browser\/status|audit|tasks|memories|skills|incidents|discussions)$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}$/,
-    /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|reject|pause|resume|cancel|checkpoint)$/,
+    /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|reject|pause|resume|cancel|checkpoint|inspect)$/,
     /^\/v1\/skills\/[0-9a-f-]{36}\/(verify|reject)$/
   ];
   router.use('/bridge', async (req, res) => {
