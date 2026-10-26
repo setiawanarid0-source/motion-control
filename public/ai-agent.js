@@ -97,7 +97,7 @@ async function refresh() {
     $('supervisor').textContent = displayState(status.supervisor);
     $('browser').textContent = displayState(status.browser);
     $('execution').textContent = status.executionEnabled ? 'Aktif' : 'Nonaktif';
-    $('connection').textContent = 'Owner aktif';
+    $('connectionLabel').textContent = 'Owner aktif';
 
     state.tasks = tasks.tasks || [];
     const sel = $('discussionTask'), selected = sel?.value;
@@ -213,7 +213,7 @@ wireForm('skillForm','/bridge/v1/skills',()=>({owner:$('skillOwner').value,name:
   procedure:$('skillProcedure').value,evidence:$('skillEvidence').value}),'Skill diajukan untuk verifikasi.');
 wireForm('discussionForm','/bridge/v1/discussions',()=>({taskId:$('discussionTask').value,
   content:$('discussionContent').value}),'Diskusi tercatat.');
-$('connection').textContent = 'Owner aktif';
+$('connectionLabel').textContent = 'Owner aktif';
 refresh();
 // Lightweight dashboard-only refresh. Stops naturally when the page is closed.
 setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 15000);
