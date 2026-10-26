@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#090b0e"/>
+<title>VANTA · AI Agent</title>
+<link rel="stylesheet" href="/ai-agent.css?v=20261026"/>
+<script src="/ai-agent.js?v=20261026" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <a class="brand" href="/"><span class="logo">V</span><strong>VANTA</strong></a>
+    <div class="side-caption">WORKSPACE</div>
+    <a class="side-link" href="/">← Motion Studio</a>
+    <a class="side-link selected" href="/ai-agent.html">✦ AI Agent</a>
+    <div class="side-meta">Worker and Supervisor<br/>Model setup comes last</div>
+  </aside>
+  <main class="main">
+    <div class="top"><div><div class="eyebrow">VANTA / AUTOMATION</div><h1>AI Agent</h1><p>Kontrol pekerjaan, persetujuan, dan pembelajaran dalam satu dashboard.</p></div><div class="top-actions"><span id="connection" class="tag">Memeriksa koneksi</span><button id="logout" class="secondary hidden">Keluar</button></div></div>
+    <section id="locked" class="auth panel hidden">
+      <div class="eyebrow">OWNER ACCESS</div><h2>Verifikasi pemilik</h2><p>Untuk keamanan, akses AI Agent memerlukan autentikasi terpisah dari sesi perangkat VANTA.</p>
+      <form id="loginForm"><label for="password">Password Owner</label><input id="password" type="password" autocomplete="current-password" required minlength="20" placeholder="Masukkan password Owner"/><button type="submit">Masuk ke AI Agent</button></form>
+      <p id="authMessage" class="message"></p>
+    </section>
+    <div id="workspace" class="hidden">
+      <div class="stats">
+        <div class="stat"><span>Worker</span><strong id="worker">Belum terpasang</strong></div>
+        <div class="stat"><span>Supervisor</span><strong id="supervisor">Belum terpasang</strong></div>
+        <div class="stat"><span>Browser</span><strong id="browser">Belum terpasang</strong></div>
+        <div class="stat"><span>Eksekusi agent</span><strong id="execution">Nonaktif</strong></div>
+      </div>
+      <div class="tabs" role="tablist" aria-label="AI Agent navigation">
+        <button data-tab="tasks" class="active">Tugas</button>
+        <button data-tab="approvals">Persetujuan</button>
+        <button data-tab="activity">Aktivitas</button>
+        <button data-tab="knowledge">Memory & Skills</button>
+      </div>
+      <section class="tab" id="tab-tasks">
+        <div class="grid">
+          <div class="panel">
+            <div class="panel-title"><h2>Tugas baru</h2><span class="small">Memerlukan persetujuan Owner</span></div>
+            <form id="taskForm">
+              <label for="instruction">Instruksi pekerjaan</label>
+              <textarea id="instruction" rows="5" maxlength="8000" required placeholder="Jelaskan tugas untuk Worker. Contoh: buka halaman login kie.ai dan periksa apakah tampil normal."></textarea>
+              <div class="form-grid"><div><label for="domain">Website</label><select id="domain"><option value="kie.ai">kie.ai</option><option value="runninghub.ai">RunningHub</option></select></div>
+              <div><label for="duration">Batas waktu (menit)</label><input id="duration" type="number" min="1" max="1440" value="30" required/></div></div>
+              <div><label for="actions">Izin tindakan</label><select id="actions"><option value="inspect">Inspeksi halaman (tanpa perubahan)</option><option value="login_assisted">Login dengan bantuan Owner</option><option value="form_fill">Navigasi & pengisian formulir (tanpa submit berbayar)</option></select></div>
+              <button type="submit">Buat tugas untuk ditinjau</button>
+            </form>
+            <p class="notice">Platform belum menjalankan tugas otomatis sampai Otak 2 dan browser selesai dikonfigurasi serta diuji. Persetujuan saat ini hanya tercatat, bukan eksekusi.</p>
+          </div>
+          <div class="panel">
+            <div class="panel-title"><h2>Daftar tugas</h2><button class="secondary small-btn" data-refresh>Segarkan</button></div>
+            <div id="tasksList" class="entries"><p class="muted">Belum ada tugas.</p></div>
+          </div>
+        </div>
+      </section>
+      <section class="tab hidden" id="tab-approvals"><div class="panel"><div class="panel-title"><h2>Menunggu persetujuan</h2><span class="small">Setujui · Tolak · Batalkan</span></div><div id="approvalsList" class="entries"></div></div></section>
+      <section class="tab hidden" id="tab-activity"><div class="grid">
+        <div class="panel"><h2>Audit pekerjaan</h2><div id="auditList" class="entries"></div></div>
+        <div class="panel"><h2>Insiden & diskusi</h2>
+        <form id="discussionForm" class="compact-form">
+          <label for="discussionTask">Tugas</label><select id="discussionTask" required></select>
+          <label for="discussionContent">Catatan Owner</label><textarea id="discussionContent" rows="3" maxlength="10000" required placeholder="Tambahkan keputusan atau catatan untuk riwayat diskusi."></textarea>
+          <button type="submit">Catat diskusi</button>
+        </form>
+        <div id="incidentsList" class="entries"></div><div id="discussionList" class="entries"></div></div>
+      </div></section>
+      <section class="tab hidden" id="tab-knowledge"><div class="grid">
+        <div class="panel"><h2>Memory</h2>
+        <form id="memoryForm" class="compact-form"><label for="memoryOwner">Pemilik memori</label>
+        <select id="memoryOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Pengetahuan bersama</option></select>
+        <label for="memoryContent">Isi memori</label><textarea id="memoryContent" rows="3" maxlength="12000" required></textarea>
+        <label for="memoryEvidence">Bukti</label><input id="memoryEvidence" maxlength="4000" required/>
+        <button type="submit">Simpan memori</button></form>
+        <div id="memoryList" class="entries"></div></div>
+        <div class="panel"><h2>Skills</h2>
+        <form id="skillForm" class="compact-form">
+        <label for="skillOwner">Pemilik skill</label><select id="skillOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Bersama</option></select>
+        <label for="skillName">Nama skill</label><input id="skillName" maxlength="100" required/>
+        <label for="skillProcedure">Prosedur</label><textarea id="skillProcedure" rows="3" maxlength="12000" required></textarea>
+        <label for="skillEvidence">Bukti / hasil tes</label><input id="skillEvidence" maxlength="4000" required/>
+        <button type="submit">Usulkan skill</button></form>
+        <div id="skillList" class="entries"></div></div>
+      </div></section>
+      <p id="feedback" role="status" class="feedback"></p>
+    </div>
+  </main>
+</div>
+</body>
+</html>
