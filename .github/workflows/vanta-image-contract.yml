@@ -17,6 +17,7 @@ jobs:
         run: npm install --omit=dev --no-audit --no-fund
       - name: Verify Grok model, VANTA menus, and preserved image workflows
         run: |
+          NODE_ENV=production node --test scripts/test-agent-bridge.mjs
           node --check server.js
           node --check public/app.js
           node --check public/kie-ui.js
