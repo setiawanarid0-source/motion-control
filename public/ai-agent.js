@@ -77,6 +77,21 @@ function taskCard(target, task, approvalOnly = false) {
       };
       actions.append(button);
     }
+    if (task.status === 'approved_pending_worker') {
+      const test = el('button', 'Tes browser (read-only)', 'secondary');
+      test.type = 'button';
+      test.onclick = async () => {
+        test.disabled = true;
+        try {
+          const inspection = await request('/bridge/v1/tasks/' + task.id + '/inspect', 'POST',
+            { domain: task.scope.domains[0], mode: 'isolated' });
+          say('Browser: ' + (inspection.result?.title || inspection.result?.url || 'Inspeksi selesai'));
+          await refresh();
+        } catch (error) { say(error.message, true); }
+        finally { test.disabled = false; }
+      };
+      actions.append(test);
+    }
     div.append(actions);
   }
 }
