@@ -80,9 +80,9 @@ export function createOwnerAuth({ dataDir = process.env.VANTA_DATA_DIR || '/data
   router.post('/change-password', (req, res) => {
     if (!csrf(req) || !isOwner(req)) return res.status(401).json({ error: 'Autentikasi diperlukan.' });
     const { oldPassword, newPassword } = req.body || {};
-    if (!verified(oldPassword) || typeof newPassword !== 'string' || newPassword.length < 16 ||
+    if (!verified(oldPassword) || typeof newPassword !== 'string' || newPassword.length < 6 ||
       newPassword.length > 256 || newPassword === oldPassword) {
-      return res.status(400).json({ error: 'Password lama atau password baru tidak valid. Minimum 16 karakter.' });
+      return res.status(400).json({ error: 'Password lama atau password baru tidak valid. Minimum 6 karakter.' });
     }
     const salt = crypto.randomBytes(16).toString('hex');
     const next = { schema: 1, salt, hash: digest(newPassword, salt), version: crypto.randomBytes(16).toString('hex') };
