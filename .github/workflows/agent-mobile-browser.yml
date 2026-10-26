@@ -1,0 +1,41 @@
+name: VANTA Agent Mobile Browser Check
+
+on:
+  pull_request:
+    paths:
+      - 'public/ai-agent.*'
+      - 'scripts/test-agent-mobile-browser.mjs'
+      - 'scripts/test-agent-mobile-ui.mjs'
+      - '.github/workflows/agent-mobile-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-viewport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install UI test dependencies
+        run: |
+          npm install --omit=dev --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund playwright-core@1.56.1
+      - name: Verify Chromium is present
+        run: |
+          command -v google-chrome || command -v chromium
+      - name: Browser test 320, 375, 430, 768, 1024 and 1280 pixels
+        run: |
+          node scripts/test-agent-mobile-browser.mjs
+      - name: Upload before-release screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vanta-agent-mobile-review
+          path: /tmp/vanta-agent-mobile-screens/*.png
+          retention-days: 7
+          if-no-files-found: ignore
