@@ -1,5 +1,6 @@
 import express from 'express';
 import { createAgentBridge } from './agent-bridge.js';
+import { createOwnerAuth } from './owner-auth.js';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import axios from 'axios';
@@ -447,8 +448,22 @@ const upload = multer({
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
-// Owner-authenticated private agent proxy. Does not alter existing VANTA APIs.
-app.use('/api/agent', createAgentBridge());
+// Owner login is the ONLY entry into VANTA. Public exceptions: login assets and Railway health.
+const ownerAuth = createOwnerAuth({ dataDir: DATA_DIR });
+app.use('/api/auth', ownerAuth.router);
+app.get('/login.html', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public/login.html'));
+});
+for (const name of ['auth.css', 'auth.js']) {
+  app.get('/' + name, (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, 'public', name));
+  });
+}
+app.use(ownerAuth.requireOwner);
+// Agent bridge now inherits the same Owner session as every other VANTA feature.
+app.use('/api/agent', createAgentBridge({ isOwner: ownerAuth.isOwner }));
 // Independent provider: never shares RunningHub credits, task history, or account vault.
 app.use('/api/kie',createKieStudio({encrypt,decrypt,dir:DATA_DIR}));
 app.use(express.static(path.join(__dirname, 'public'), {
