@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-const state = { loggedIn: false, busy: false, tasks: [] };
+const state = { busy: false, tasks: [] };
 const label = status => ({
   awaiting_approval: 'Menunggu persetujuan',
   approved_pending_worker: 'Disetujui · menunggu pemasangan Worker',
@@ -37,24 +37,6 @@ async function request(path, method = 'GET', body = undefined) {
     e.status = res.status; throw e;
   }
   return data;
-}
-function setLoggedIn(value) {
-  state.loggedIn = value;
-  $('locked').classList.toggle('hidden', value);
-  $('workspace').classList.toggle('hidden', !value);
-  $('logout').classList.toggle('hidden', !value);
-  $('connection').textContent = value ? 'Owner terverifikasi' : 'Akses terkunci';
-}
-async function checkAuth() {
-  try {
-    const data = await request('/auth');
-    setLoggedIn(Boolean(data.authenticated));
-    if (data.authenticated) await refresh();
-  } catch (error) {
-    $('connection').textContent = 'Perlu konfigurasi';
-    $('locked').classList.remove('hidden');
-    $('authMessage').textContent = error.message;
-  }
 }
 function taskCard(target, task, approvalOnly = false) {
   const div = entry(target, label(task.status), task.instruction,
@@ -96,7 +78,7 @@ function taskCard(target, task, approvalOnly = false) {
   }
 }
 async function refresh() {
-  if (!state.loggedIn || state.busy) return;
+  if (state.busy) return;
   state.busy = true;
   try {
     const [status, tasks, audit, incidents, discussions, memories, skills] = await Promise.all([
@@ -156,26 +138,10 @@ async function refresh() {
       }
     }
   } catch (error) {
-    if (error.status === 401) setLoggedIn(false);
+    if (error.status === 401) location.replace('/login.html?next=%2Fai-agent.html');
     say('Gagal memuat agent: ' + error.message, true);
   } finally { state.busy = false; }
 }
-$('loginForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  const field = $('password'), button = event.submitter;
-  if (button) button.disabled = true;
-  try {
-    await request('/login', 'POST', { password: field.value });
-    field.value = '';
-    $('authMessage').textContent = '';
-    setLoggedIn(true); await refresh();
-  } catch (error) { $('authMessage').textContent = error.message; }
-  finally { if (button) button.disabled = false; }
-});
-$('logout').onclick = async () => {
-  try { await request('/logout', 'POST', {}); } catch {}
-  setLoggedIn(false);
-};
 $('taskForm').addEventListener('submit', async event => {
   event.preventDefault();
   const button = event.submitter;
@@ -220,6 +186,7 @@ wireForm('skillForm','/bridge/v1/skills',()=>({owner:$('skillOwner').value,name:
   procedure:$('skillProcedure').value,evidence:$('skillEvidence').value}),'Skill diajukan untuk verifikasi.');
 wireForm('discussionForm','/bridge/v1/discussions',()=>({taskId:$('discussionTask').value,
   content:$('discussionContent').value}),'Diskusi tercatat.');
-checkAuth();
+$('connection').textContent = 'Owner aktif';
+refresh();
 // Lightweight dashboard-only refresh. Stops naturally when the page is closed.
-setInterval(() => { if (state.loggedIn && document.visibilityState === 'visible') refresh(); }, 15000);
+setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 15000);

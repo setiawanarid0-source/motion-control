@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#090b0e"/>
+<title>Masuk · VANTA</title>
+<link rel="stylesheet" href="/auth.css?v=20261026-global-login"/>
+<script defer src="/auth.js?v=20261026-global-login"></script>
+</head>
+<body>
+<main class="login-wrap">
+<section class="login-panel">
+  <div class="branding"><span class="brand-icon">V</span><span><strong>VANTA</strong><small>PRIVATE WORKSPACE</small></span></div>
+  <div id="loginArea">
+    <p class="eyebrow">OWNER ACCESS</p>
+    <h1>Selamat datang kembali.</h1>
+    <p class="description">Masuk sekali untuk mengakses seluruh fitur VANTA, termasuk AI Agent.</p>
+    <form id="ownerLoginForm">
+      <label for="ownerPassword">Password</label>
+      <input id="ownerPassword" type="password" autocomplete="current-password" required placeholder="Masukkan password VANTA"/>
+      <button id="ownerLoginButton" type="submit">Masuk ke VANTA</button>
+    </form>
+  </div>
+  <div id="changeArea" hidden>
+    <p class="eyebrow">FIRST-TIME SETUP</p>
+    <h1>Amankan akun Owner.</h1>
+    <p class="description">Ganti password sementara Anda. Ini hanya diperlukan satu kali; password baru berlaku untuk seluruh VANTA.</p>
+    <form id="ownerChangeForm">
+      <label for="oldPassword">Password sementara</label>
+      <input id="oldPassword" type="password" autocomplete="current-password" required/>
+      <label for="newPassword">Password baru (minimal 16 karakter)</label>
+      <input id="newPassword" type="password" autocomplete="new-password" minlength="16" maxlength="256" required/>
+      <label for="confirmPassword">Ulangi password baru</label>
+      <input id="confirmPassword" type="password" autocomplete="new-password" minlength="16" maxlength="256" required/>
+      <button type="submit">Simpan dan buka VANTA</button>
+    </form>
+  </div>
+  <p id="authMessage" class="message" role="status" aria-live="polite"></p>
+  <p class="footer">VANTA · Private Studio & AI Agent</p>
+</section>
+</main>
+</body>
+</html>
