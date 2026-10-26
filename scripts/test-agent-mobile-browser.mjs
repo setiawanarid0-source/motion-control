@@ -1,7 +1,8 @@
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 import express from 'express';
 import { createServer } from 'node:http';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
 const app=express();
@@ -25,7 +26,10 @@ app.use(express.static(new URL('../public/',import.meta.url).pathname));
 const server=createServer(app);
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const origin='http://127.0.0.1:'+server.address().port;
-const browser=await chromium.launch({headless:true});
+const executablePath = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
+if (!executablePath) throw new Error('Chrome or Chromium is required for responsive smoke tests');
+const browser=await chromium.launch({headless:true,executablePath,args:['--no-sandbox','--disable-dev-shm-usage']});
 try{
  for(const width of [320,375,430,768,1280]){
   const context=await browser.newContext({viewport:{width,height:850},deviceScaleFactor:1,
@@ -61,7 +65,7 @@ try{
    await page.screenshot({path:'/tmp/vanta-mobile-agent-375.png',fullPage:false});
    await page.locator('#instruction').fill('Periksa halaman login kie.ai saja.');
    await page.getByRole('button',{name:'Simpan tugas'}).click();
-   assert.equal(await dialog.evaluate(x=>x.open),false);
+   await page.waitForFunction(()=>!document.getElementById('taskDialog').open);
    assert.equal(mockTasks[0].instruction,'Periksa halaman login kie.ai saja.');
   } else {
    await page.locator('#cancelTaskDialog').click();
