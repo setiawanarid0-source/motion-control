@@ -1,0 +1,37 @@
+name: VANTA Agent responsive browser QA
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'public/ai-agent.*'
+      - 'scripts/test-agent-mobile-*'
+      - '.github/workflows/agent-mobile-qa.yml'
+  workflow_dispatch:
+jobs:
+  responsive-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install website and browser test dependencies
+        run: |
+          npm install --omit=dev --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Check responsive layout and interactive flows
+        run: node scripts/test-agent-mobile-browser.mjs
+      - name: Keep visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-mobile-responsive-screens
+          path: |
+            /tmp/vanta-mobile-agent-320.png
+            /tmp/vanta-mobile-agent-375.png
+            /tmp/vanta-agent-desktop.png
+          if-no-files-found: ignore
