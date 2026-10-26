@@ -23,6 +23,9 @@ export function createAgentBridge() {
     const y = crypto.createHash('sha256').update(String(b)).digest();
     return crypto.timingSafeEqual(x, y);
   }
+  function secureCookie(req) {
+    return process.env.NODE_ENV === 'production' || req.get('x-forwarded-proto') === 'https' || req.secure;
+  }
   function issueCookie() {
     const exp = Date.now() + 2 * 60 * 60 * 1000;
     const nonce = crypto.randomBytes(16).toString('hex');
@@ -70,13 +73,13 @@ export function createAgentBridge() {
       return res.status(401).json({ error: 'Kata sandi Owner tidak sesuai.' });
     }
     failures.delete(address);
-    res.cookie(cookieName, issueCookie(), { httpOnly: true, secure: process.env.NODE_ENV === 'production',
+    res.cookie(cookieName, issueCookie(), { httpOnly: true, secure: secureCookie(req),
       sameSite: 'strict', path: '/api/agent', maxAge: 2 * 60 * 60 * 1000 });
     res.json({ authenticated: true });
   });
   router.post('/logout', (req, res) => {
     if (!mutationAllowed(req)) return res.status(403).json({ error: 'Ditolak.' });
-    res.clearCookie(cookieName, { httpOnly: true, secure: process.env.NODE_ENV === 'production',
+    res.clearCookie(cookieName, { httpOnly: true, secure: secureCookie(req),
       sameSite: 'strict', path: '/api/agent' });
     res.json({ authenticated: false });
   });
