@@ -15,6 +15,20 @@ jobs:
           node-version: '22'
       - name: Install Node dependencies
         run: npm install --omit=dev --no-audit --no-fund
+      - name: Install lightweight Chromium controller
+        run: npm install --no-save --no-audit --no-fund playwright-core@1.56.1
+      - name: Test Agent layout in real Chrome at mobile and desktop widths
+        run: node scripts/test-agent-mobile-browser.mjs
+      - name: Attach before-release responsive screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vanta-agent-responsive-screenshots
+          path: |
+            /tmp/vanta-mobile-agent-*.png
+            /tmp/vanta-agent-desktop.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Verify Grok model, VANTA menus, and preserved image workflows
         run: |
           NODE_ENV=production node --test scripts/test-agent-bridge.mjs
