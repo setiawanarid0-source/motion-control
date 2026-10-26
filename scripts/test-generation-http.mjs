@@ -14,7 +14,9 @@ const port=await new Promise((resolve,reject)=>{
 const server=spawn(process.execPath,['server.js'],{
   cwd:new URL('..',import.meta.url).pathname,
   env:{...process.env,PORT:String(port),VANTA_DATA_DIR:dir,
-    APP_MASTER_KEY:'integration-test-only-not-production',VANTA_REFERENCE_AUDIT_TASK:''},
+    APP_MASTER_KEY:'integration-test-only-not-production',VANTA_REFERENCE_AUDIT_TASK:'',
+    AGENT_INTERNAL_TOKEN:'integration-fixture-for-http-agent-private-network-123',
+    VANTA_AGENT_OWNER_KEY:'integration-fixture-for-http-owner-login-1234'},
   stdio:['ignore','pipe','pipe']
 });
 let output='';
@@ -32,6 +34,21 @@ async function waitForServer(){
 }
 try{
   await waitForServer();
+  const guest = await fetch(url+'/api/generate/jobs',{headers});
+  assert.equal(guest.status,401);
+  const initial = process.env.VANTA_HTTP_TEST_PASSWORD || 'integration-fixture-for-http-owner-login-1234';
+  const res = await fetch(url+'/api/auth/login', {
+    method:'POST',headers:{'Content-Type':'application/json','X-Vanta-Auth':'1'},
+    body:JSON.stringify({password:initial})
+  });
+  assert.equal(res.status,200);
+  const firstCookie = res.headers.get('set-cookie').split(';')[0];
+  const changed = await fetch(url+'/api/auth/change-password', {
+    method:'POST',headers:{'Content-Type':'application/json','X-Vanta-Auth':'1',Cookie:firstCookie},
+    body:JSON.stringify({oldPassword:initial,newPassword:'integration-fixture-changed-password-5678'})
+  });
+  assert.equal(changed.status,200);
+  headers.Cookie = changed.headers.get('set-cookie').split(';')[0];
   const jobId=crypto.randomUUID();
   const form=(mode='standard')=>{
     const data=new FormData();
