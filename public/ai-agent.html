@@ -63,28 +63,28 @@
       <section class="tab hidden" id="tab-activity" role="tabpanel" aria-labelledby="nav-activity"><div class="grid">
         <div class="panel"><h2>Audit pekerjaan</h2><div id="auditList" class="entries"></div></div>
         <div class="panel"><h2>Insiden & diskusi</h2>
-        <form id="discussionForm" class="compact-form">
+        <details class="disclosure"><summary><span>Tambahkan catatan diskusi</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary><form id="discussionForm" class="compact-form">
           <label for="discussionTask">Tugas</label><select id="discussionTask" required></select>
           <label for="discussionContent">Catatan Owner</label><textarea id="discussionContent" rows="3" maxlength="10000" required placeholder="Tambahkan keputusan atau catatan untuk riwayat diskusi."></textarea>
           <button type="submit">Catat diskusi</button>
-        </form>
+        </form></details>
         <div id="incidentsList" class="entries"></div><div id="discussionList" class="entries"></div></div>
       </div></section>
       <section class="tab hidden" id="tab-knowledge" role="tabpanel" aria-labelledby="nav-knowledge"><div class="grid">
         <div class="panel"><h2>Memory</h2>
-        <form id="memoryForm" class="compact-form"><label for="memoryOwner">Pemilik memori</label>
+        <details class="disclosure"><summary><span>Tambah memori</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary><form id="memoryForm" class="compact-form"><label for="memoryOwner">Pemilik memori</label>
         <select id="memoryOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Pengetahuan bersama</option></select>
         <label for="memoryContent">Isi memori</label><textarea id="memoryContent" rows="3" maxlength="12000" required></textarea>
         <label for="memoryEvidence">Bukti</label><input id="memoryEvidence" maxlength="4000" required/>
-        <button type="submit">Simpan memori</button></form>
+        <button type="submit">Simpan memori</button></form></details>
         <div id="memoryList" class="entries"></div></div>
         <div class="panel"><h2>Skills</h2>
-        <form id="skillForm" class="compact-form">
+        <details class="disclosure"><summary><span>Usulkan skill baru</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary><form id="skillForm" class="compact-form">
         <label for="skillOwner">Pemilik skill</label><select id="skillOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Bersama</option></select>
         <label for="skillName">Nama skill</label><input id="skillName" maxlength="100" required/>
         <label for="skillProcedure">Prosedur</label><textarea id="skillProcedure" rows="3" maxlength="12000" required></textarea>
         <label for="skillEvidence">Bukti / hasil tes</label><input id="skillEvidence" maxlength="4000" required/>
-        <button type="submit">Usulkan skill</button></form>
+        <button type="submit">Usulkan skill</button></form></details>
         <div id="skillList" class="entries"></div></div>
       </div></section>
       <p id="feedback" role="status" aria-live="polite" class="feedback"></p>
