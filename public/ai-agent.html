@@ -4,84 +4,153 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <meta name="theme-color" content="#090b0e"/>
-<title>VANTA · AI Agent</title>
-<link rel="stylesheet" href="/ai-agent.css?v=20261026"/>
+<title>AI Agent · VANTA</title>
+<link rel="stylesheet" href="/ai-agent.css?v=20261027-mobile-v2"/>
 <script src="/auth.js?v=20261026-global-login" defer></script>
-<script src="/ai-agent.js?v=20261026-global-login" defer></script>
+<script src="/ai-agent.js?v=20261027-mobile-v2" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#mainContent">Lewati ke konten utama</a>
 <div class="shell">
-  <aside class="side">
-    <a class="brand" href="/"><span class="logo">V</span><strong>VANTA</strong></a>
+  <aside class="side" aria-label="Navigasi VANTA">
+    <a class="brand" href="/" aria-label="VANTA — Halaman utama">
+      <span class="logo" aria-hidden="true">V</span><strong>VANTA</strong>
+    </a>
     <div class="side-caption">WORKSPACE</div>
-    <a class="side-link" href="/">← Motion Studio</a>
-    <a class="side-link selected" href="/ai-agent.html">✦ AI Agent</a>
-    <div class="side-meta">Worker and Supervisor<br/>Model setup comes last</div>
+    <nav class="side-navigation" aria-label="Workspace">
+      <a class="side-link" href="/"><span class="side-icon" aria-hidden="true">↗</span>Studio</a>
+      <a class="side-link selected" href="/ai-agent.html" aria-current="page"><span class="side-icon" aria-hidden="true">✦</span>AI Agent</a>
+    </nav>
+    <div class="side-meta">
+      <span class="side-meta-mark" aria-hidden="true"></span>
+      <span>VANTA Automations<small>Private workspace</small></span>
+    </div>
   </aside>
-  <main class="main">
-    <div class="top"><div><div class="eyebrow">VANTA / AUTOMATION</div><h1>AI Agent</h1><p>Kontrol pekerjaan, persetujuan, dan pembelajaran dalam satu dashboard.</p></div><div class="top-actions"><span id="connection" class="tag">Memeriksa koneksi</span><button class="secondary" data-vanta-logout type="button">Keluar</button></div></div>
+  <main class="main" id="mainContent">
+    <header class="top">
+      <div class="top-heading">
+        <span class="eyebrow">VANTA / WORKSPACE</span>
+        <h1>AI Agent<span class="title-dot" aria-hidden="true">.</span></h1>
+        <p>Kelola tugas, persetujuan, dan pengetahuan dalam satu tempat.</p>
+      </div>
+      <div class="top-actions">
+        <span id="connection" class="connection-pill"><span class="connection-dot" aria-hidden="true"></span>Owner aktif</span>
+        <button class="logout-button" data-vanta-logout type="button" aria-label="Keluar dari VANTA">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5M15 12H3M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"/></svg>
+          <span>Keluar</span>
+        </button>
+      </div>
+    </header>
+
     <div id="workspace">
-      <div class="stats">
-        <div class="stat"><span>Worker</span><strong id="worker">Belum terpasang</strong></div>
-        <div class="stat"><span>Supervisor</span><strong id="supervisor">Belum terpasang</strong></div>
-        <div class="stat"><span>Browser</span><strong id="browser">Belum terpasang</strong></div>
-        <div class="stat"><span>Eksekusi agent</span><strong id="execution">Nonaktif</strong></div>
-      </div>
-      <div class="tabs" role="tablist" aria-label="AI Agent navigation">
-        <button data-tab="tasks" class="active">Tugas</button>
-        <button data-tab="approvals">Persetujuan</button>
-        <button data-tab="activity">Aktivitas</button>
-        <button data-tab="knowledge">Memory & Skills</button>
-      </div>
-      <section class="tab" id="tab-tasks">
-        <div class="grid">
-          <div class="panel">
-            <div class="panel-title"><h2>Tugas baru</h2><span class="small">Memerlukan persetujuan Owner</span></div>
-            <form id="taskForm">
-              <label for="instruction">Instruksi pekerjaan</label>
-              <textarea id="instruction" rows="5" maxlength="8000" required placeholder="Jelaskan tugas untuk Worker. Contoh: buka halaman login kie.ai dan periksa apakah tampil normal."></textarea>
-              <div class="form-grid"><div><label for="domain">Website</label><select id="domain"><option value="kie.ai">kie.ai</option><option value="runninghub.ai">RunningHub</option></select></div>
-              <div><label for="duration">Batas waktu (menit)</label><input id="duration" type="number" min="1" max="1440" value="30" required/></div></div>
-              <div><label for="actions">Izin tindakan</label><select id="actions"><option value="inspect">Inspeksi halaman (tanpa perubahan)</option><option value="login_assisted">Login dengan bantuan Owner</option><option value="form_fill">Navigasi & pengisian formulir (tanpa submit berbayar)</option></select></div>
-              <button type="submit">Buat tugas untuk ditinjau</button>
-            </form>
-            <p class="notice">Platform belum menjalankan tugas otomatis sampai Otak 2 dan browser selesai dikonfigurasi serta diuji. Persetujuan saat ini hanya tercatat, bukan eksekusi.</p>
+      <section class="overview" aria-labelledby="overviewTitle">
+        <div class="overview-heading">
+          <div>
+            <span class="eyebrow">STATUS SISTEM</span>
+            <h2 id="overviewTitle">Ringkasan agent</h2>
           </div>
-          <div class="panel">
-            <div class="panel-title"><h2>Daftar tugas</h2><button class="secondary small-btn" data-refresh>Segarkan</button></div>
-            <div id="tasksList" class="entries"><p class="muted">Belum ada tugas.</p></div>
-          </div>
+          <span class="phase-pill"><span class="phase-dot" aria-hidden="true"></span>Mode persiapan</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>Worker</span><strong id="worker">Belum terpasang</strong></div>
+          <div class="stat"><span>Supervisor</span><strong id="supervisor">Belum terpasang</strong></div>
+          <div class="stat"><span>Browser</span><strong id="browser">Memeriksa…</strong></div>
+          <div class="stat"><span>Eksekusi AI</span><strong id="execution">Nonaktif</strong></div>
         </div>
       </section>
-      <section class="tab hidden" id="tab-approvals"><div class="panel"><div class="panel-title"><h2>Menunggu persetujuan</h2><span class="small">Setujui · Tolak · Batalkan</span></div><div id="approvalsList" class="entries"></div></div></section>
-      <section class="tab hidden" id="tab-activity"><div class="grid">
-        <div class="panel"><h2>Audit pekerjaan</h2><div id="auditList" class="entries"></div></div>
-        <div class="panel"><h2>Insiden & diskusi</h2>
-        <form id="discussionForm" class="compact-form">
-          <label for="discussionTask">Tugas</label><select id="discussionTask" required></select>
-          <label for="discussionContent">Catatan Owner</label><textarea id="discussionContent" rows="3" maxlength="10000" required placeholder="Tambahkan keputusan atau catatan untuk riwayat diskusi."></textarea>
-          <button type="submit">Catat diskusi</button>
-        </form>
-        <div id="incidentsList" class="entries"></div><div id="discussionList" class="entries"></div></div>
-      </div></section>
-      <section class="tab hidden" id="tab-knowledge"><div class="grid">
-        <div class="panel"><h2>Memory</h2>
-        <form id="memoryForm" class="compact-form"><label for="memoryOwner">Pemilik memori</label>
-        <select id="memoryOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Pengetahuan bersama</option></select>
-        <label for="memoryContent">Isi memori</label><textarea id="memoryContent" rows="3" maxlength="12000" required></textarea>
-        <label for="memoryEvidence">Bukti</label><input id="memoryEvidence" maxlength="4000" required/>
-        <button type="submit">Simpan memori</button></form>
-        <div id="memoryList" class="entries"></div></div>
-        <div class="panel"><h2>Skills</h2>
-        <form id="skillForm" class="compact-form">
-        <label for="skillOwner">Pemilik skill</label><select id="skillOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Bersama</option></select>
-        <label for="skillName">Nama skill</label><input id="skillName" maxlength="100" required/>
-        <label for="skillProcedure">Prosedur</label><textarea id="skillProcedure" rows="3" maxlength="12000" required></textarea>
-        <label for="skillEvidence">Bukti / hasil tes</label><input id="skillEvidence" maxlength="4000" required/>
-        <button type="submit">Usulkan skill</button></form>
-        <div id="skillList" class="entries"></div></div>
-      </div></section>
-      <p id="feedback" role="status" class="feedback"></p>
+
+      <nav class="tabs" role="tablist" aria-label="Menu AI Agent">
+        <button type="button" role="tab" id="nav-tasks" data-tab="tasks" aria-controls="tab-tasks" aria-selected="true" class="active">Tugas</button>
+        <button type="button" role="tab" id="nav-approvals" data-tab="approvals" aria-controls="tab-approvals" aria-selected="false">Persetujuan</button>
+        <button type="button" role="tab" id="nav-activity" data-tab="activity" aria-controls="tab-activity" aria-selected="false">Aktivitas</button>
+        <button type="button" role="tab" id="nav-knowledge" data-tab="knowledge" aria-controls="tab-knowledge" aria-selected="false">Memori & Skills</button>
+      </nav>
+
+      <section class="tab" role="tabpanel" aria-labelledby="nav-tasks" id="tab-tasks">
+        <div class="grid tasks-grid">
+          <section class="panel task-compose" aria-labelledby="taskFormTitle">
+            <div class="panel-title">
+              <div><span class="eyebrow">BUAT TUGAS</span><h2 id="taskFormTitle">Tugas baru</h2></div>
+              <span class="mini-label">Butuh persetujuan</span>
+            </div>
+            <p class="panel-description">Tentukan instruksi dan batas pekerjaan sebelum disetujui.</p>
+            <form id="taskForm">
+              <div class="field"><label for="instruction">Instruksi</label>
+                <textarea id="instruction" rows="3" maxlength="8000" required placeholder="Contoh: periksa tampilan login kie.ai tanpa mengubah data."></textarea>
+              </div>
+              <div class="form-grid">
+                <div class="field"><label for="domain">Website</label>
+                  <select id="domain"><option value="kie.ai">kie.ai</option><option value="runninghub.ai">RunningHub</option></select>
+                </div>
+                <div class="field"><label for="duration">Durasi maksimum</label>
+                  <div class="input-unit"><input id="duration" type="number" min="1" max="1440" value="30" required inputmode="numeric"/><span aria-hidden="true">menit</span></div>
+                </div>
+              </div>
+              <div class="field"><label for="actions">Izin tindakan</label>
+                <select id="actions">
+                  <option value="inspect">Inspeksi halaman · baca saja</option>
+                  <option value="login_assisted">Login dengan bantuan Owner</option>
+                  <option value="form_fill">Navigasi & isi formulir (tanpa pembayaran)</option>
+                </select>
+              </div>
+              <button class="primary-action" type="submit"><span>Buat tugas</span><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+            </form>
+            <p class="notice"><span class="notice-icon" aria-hidden="true">i</span><span>Otak 1 dan 2 belum terpasang. Tugas yang disetujui belum dijalankan otomatis.</span></p>
+          </section>
+          <section class="panel task-history" aria-labelledby="tasksTitle">
+            <div class="panel-title"><div><span class="eyebrow">RIWAYAT</span><h2 id="tasksTitle">Daftar tugas</h2></div>
+              <button type="button" class="secondary small-btn" data-refresh aria-label="Segarkan daftar tugas">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5M5.7 9a7 7 0 0 1 12.5-2L20 12M4 12l1.8 5a7 7 0 0 0 12.5-2"/></svg><span>Segarkan</span>
+              </button>
+            </div>
+            <div id="tasksList" class="entries"><p class="muted">Belum ada tugas.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab hidden" role="tabpanel" aria-labelledby="nav-approvals" id="tab-approvals">
+        <section class="panel" aria-labelledby="approvalsTitle">
+          <div class="panel-title"><div><span class="eyebrow">KENDALI OWNER</span><h2 id="approvalsTitle">Menunggu persetujuan</h2></div><span class="mini-label">Tinjau sebelum berjalan</span></div>
+          <div id="approvalsList" class="entries"></div>
+        </section>
+      </section>
+
+      <section class="tab hidden" role="tabpanel" aria-labelledby="nav-activity" id="tab-activity">
+        <div class="grid">
+          <section class="panel" aria-labelledby="auditTitle"><div class="panel-title"><div><span class="eyebrow">LINIMASA</span><h2 id="auditTitle">Audit pekerjaan</h2></div></div><div id="auditList" class="entries"></div></section>
+          <section class="panel" aria-labelledby="discussionTitle"><div class="panel-title"><div><span class="eyebrow">CATATAN</span><h2 id="discussionTitle">Insiden & diskusi</h2></div></div>
+            <form id="discussionForm" class="compact-form">
+              <div class="field"><label for="discussionTask">Tugas</label><select id="discussionTask" required></select></div>
+              <div class="field"><label for="discussionContent">Catatan Owner</label><textarea id="discussionContent" rows="3" maxlength="10000" required placeholder="Tambahkan keputusan untuk riwayat diskusi."></textarea></div>
+              <button type="submit">Catat diskusi</button>
+            </form>
+            <div id="incidentsList" class="entries"></div><div id="discussionList" class="entries"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab hidden" role="tabpanel" aria-labelledby="nav-knowledge" id="tab-knowledge">
+        <div class="grid">
+          <section class="panel" aria-labelledby="memoryTitle"><div class="panel-title"><div><span class="eyebrow">PENGETAHUAN</span><h2 id="memoryTitle">Memori</h2></div></div>
+            <form id="memoryForm" class="compact-form">
+              <div class="field"><label for="memoryOwner">Pemilik memori</label><select id="memoryOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Pengetahuan bersama</option></select></div>
+              <div class="field"><label for="memoryContent">Isi memori</label><textarea id="memoryContent" rows="3" maxlength="12000" required></textarea></div>
+              <div class="field"><label for="memoryEvidence">Bukti</label><input id="memoryEvidence" maxlength="4000" required/></div>
+              <button type="submit">Simpan memori</button>
+            </form><div id="memoryList" class="entries"></div>
+          </section>
+          <section class="panel" aria-labelledby="skillsTitle"><div class="panel-title"><div><span class="eyebrow">KEMAMPUAN</span><h2 id="skillsTitle">Skills</h2></div></div>
+            <form id="skillForm" class="compact-form">
+              <div class="field"><label for="skillOwner">Pemilik skill</label><select id="skillOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Bersama</option></select></div>
+              <div class="field"><label for="skillName">Nama skill</label><input id="skillName" maxlength="100" required/></div>
+              <div class="field"><label for="skillProcedure">Prosedur</label><textarea id="skillProcedure" rows="3" maxlength="12000" required></textarea></div>
+              <div class="field"><label for="skillEvidence">Bukti / hasil tes</label><input id="skillEvidence" maxlength="4000" required/></div>
+              <button type="submit">Usulkan skill</button>
+            </form><div id="skillList" class="entries"></div>
+          </section>
+        </div>
+      </section>
+      <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
     </div>
   </main>
 </div>
