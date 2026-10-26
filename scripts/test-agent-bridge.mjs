@@ -19,7 +19,7 @@ test('One VANTA Owner login protects studio, pools and Agent; first login forces
   process.env.NODE_ENV = 'test';
   const dir = await mkdtemp(path.join(tmpdir(), 'vanta-owner-auth-'));
   const bootstrap = 'example-initial-password-for-test-only-12345';
-  const changed = 'new-test-vanta-password-67890-strong';
+  const changed = 'k7Q!2x';
   const token = 'agent-test-internal-token-not-for-production-987654';
   const agent = express();
   agent.use(express.json());
@@ -64,6 +64,8 @@ test('One VANTA Owner login protects studio, pools and Agent; first login forces
     assert.equal((await send('/',{headers:{Cookie:cookie}})).status,302);
     const mismatch=await post('/api/auth/change-password',{oldPassword:bootstrap,newPassword:changed},cookie,{Origin:'https://evil.example'});
     assert.equal(mismatch.status,401);
+    const tooShort=await post('/api/auth/change-password',{oldPassword:bootstrap,newPassword:'a3B!5'},cookie);
+    assert.equal(tooShort.status,400,'Five characters must be rejected');
     const changedResponse=await post('/api/auth/change-password',{oldPassword:bootstrap,newPassword:changed},cookie);
     assert.equal(changedResponse.status,200);
     const oldCookie=cookie;
