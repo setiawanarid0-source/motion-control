@@ -110,6 +110,15 @@ async function refresh() {
     $('browser').textContent = status.browser === 'not_installed' ? 'Belum terpasang' : status.browser;
     $('execution').textContent = status.executionEnabled ? 'Aktif' : 'Nonaktif · aman';
     state.tasks = tasks.tasks || [];
+    const sel = $('discussionTask'), selected = sel?.value;
+    if (sel) {
+      sel.replaceChildren();
+      for (const task of state.tasks) {
+        const option = el('option', task.instruction.slice(0,80));
+        option.value=task.id; sel.append(option);
+      }
+      if (state.tasks.some(x=>x.id===selected))sel.value=selected;
+    }
     const t = $('tasksList'), a = $('approvalsList');
     t.replaceChildren(); a.replaceChildren();
     if (!state.tasks.length) empty(t, 'Belum ada tugas.');
@@ -128,7 +137,22 @@ async function refresh() {
       const node = $(id); node.replaceChildren();
       if (!items.length) empty(node, 'Belum ada catatan.');
       for (const item of items.slice(0,30)) {
-        const [title, desc, info] = format(item); entry(node, title, desc, info);
+        const [title, desc, info] = format(item);
+        const row=entry(node,title,desc,info);
+        if (id==='skillList' && item.status==='proposed') {
+          const buttons=el('div',undefined,'entry-actions');
+          for(const decision of ['verify','reject']) {
+            const b=el('button',decision==='verify'?'Verifikasi':'Tolak','secondary');
+            b.onclick=async()=>{
+              b.disabled=true;
+              try{await request('/bridge/v1/skills/'+item.id+'/'+decision,'POST',{});
+                say('Review skill tersimpan.');await refresh();}
+              catch(e){say(e.message,true);b.disabled=false;}
+            };
+            buttons.append(b);
+          }
+          row.append(buttons);
+        }
       }
     }
   } catch (error) {
@@ -180,6 +204,22 @@ document.querySelectorAll('[data-tab]').forEach(b => {
     document.querySelectorAll('.tab').forEach(x => x.classList.toggle('hidden', x.id !== 'tab-' + b.dataset.tab));
   };
 });
+function wireForm(id,path,collect,message){
+  $(id).addEventListener('submit',async event=>{
+    event.preventDefault();
+    const button=event.submitter;
+    if(button)button.disabled=true;
+    try{await request(path,'POST',collect());$(id).reset();say(message);await refresh();}
+    catch(e){say(e.message,true);}
+    finally{if(button)button.disabled=false;}
+  });
+}
+wireForm('memoryForm','/bridge/v1/memories',()=>({owner:$('memoryOwner').value,
+  content:$('memoryContent').value,evidence:$('memoryEvidence').value}),'Memori tersimpan.');
+wireForm('skillForm','/bridge/v1/skills',()=>({owner:$('skillOwner').value,name:$('skillName').value,
+  procedure:$('skillProcedure').value,evidence:$('skillEvidence').value}),'Skill diajukan untuk verifikasi.');
+wireForm('discussionForm','/bridge/v1/discussions',()=>({taskId:$('discussionTask').value,
+  content:$('discussionContent').value}),'Diskusi tercatat.');
 checkAuth();
 // Lightweight dashboard-only refresh. Stops naturally when the page is closed.
 setInterval(() => { if (state.loggedIn && document.visibilityState === 'visible') refresh(); }, 15000);
