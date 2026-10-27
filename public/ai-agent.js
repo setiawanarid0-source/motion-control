@@ -187,7 +187,7 @@ $('taskForm').addEventListener('submit', async event => {
   if (button) button.disabled = true;
   const selectedAction = $('actions').value;
   const permitted = selectedAction === 'inspect' ? ['navigate','inspect','screenshot'] :
-    selectedAction === 'login_assisted' ? ['navigate','inspect','screenshot','login_assisted'] :
+    selectedAction === 'login_assisted' ? ['navigate','inspect','screenshot','login_assisted','click','form_fill'] :
     ['navigate','inspect','screenshot','form_fill'];
   const body = {
     instruction: $('instruction').value,
