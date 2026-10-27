@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/ai-agent.css?v=20261027-monitor-v6"/>
 <script src="/auth.js?v=20261026-global-login" defer></script>
-<script src="/ai-agent.js?v=20261027-memory-v7" defer></script>
+<script src="/ai-agent.js?v=20261027-skill-v8" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -81,10 +81,11 @@
         <div class="panel"><h2>Skills</h2>
         <details class="disclosure"><summary><span>Usulkan skill baru</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary><form id="skillForm" class="compact-form">
         <label for="skillOwner">Pemilik skill</label><select id="skillOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Bersama</option></select>
+        <label for="skillDomain">Website terkait</label><select id="skillDomain"><option value="kie.ai">KIE.ai</option><option value="runninghub.ai">RunningHub</option></select>
         <label for="skillName">Nama skill</label><input id="skillName" maxlength="100" required/>
-        <label for="skillProcedure">Prosedur</label><textarea id="skillProcedure" rows="3" maxlength="12000" required></textarea>
-        <label for="skillEvidence">Bukti / hasil tes</label><input id="skillEvidence" maxlength="4000" required/>
-        <button type="submit">Usulkan skill</button></form></details>
+        <label for="skillProcedure">Prosedur</label><textarea id="skillProcedure" rows="5" maxlength="3500" placeholder="1. Periksa kondisi awal...&#10;2. Ikuti langkah aman...&#10;3. Verifikasi hasil..." required></textarea>
+        <label for="skillEvidence">Bukti / hasil tes</label><input id="skillEvidence" maxlength="1000" required/>
+        <p class="disclosure-hint">Skill adalah SOP, bukan skrip yang otomatis dipasang. Setelah audit prosedur, Owner dapat memverifikasi berdasarkan bukti nyata.</p><button type="submit">Usulkan SOP</button></form></details>
         <div id="skillList" class="entries"></div></div>
       </div></section>
       <p id="feedback" role="status" aria-live="polite" class="feedback"></p>

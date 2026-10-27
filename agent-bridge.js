@@ -27,7 +27,7 @@ export function createAgentBridge({ isOwner = () => false } = {}) {
     /^\/v1\/tasks\/[0-9a-f-]{36}\/monitor$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|reject|pause|resume|cancel|checkpoint|inspect|run)$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}\/browser\/(start|act|close)$/,
-    /^\/v1\/(skills|memories)\/[0-9a-f-]{36}\/(verify|reject)$/
+    /^\/v1\/(skills|memories)\/[0-9a-f-]{36}\/(screen|verify|reject)$/
   ];
   router.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');

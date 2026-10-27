@@ -48,6 +48,9 @@ function taskCard(target, task, approvalOnly = false) {
   const div = entry(target, label(task.status), task.instruction,
     [new Date(task.createdAt).toLocaleString('id-ID'),
       (task.scope?.domains || []).join(', '), 'Budget $' + (task.scope?.budgetUsd ?? 0)].join(' · '));
+  if(task.workerRun?.skillIds?.length){
+    div.append(el('small','SOP terverifikasi yang digunakan: '+task.workerRun.skillIds.length));
+  }
   if (task.workerRun?.summary) {
     const outcome=el('div',undefined,'inspection-result');
     outcome.append(el('strong','Laporan Otak 2'),
@@ -183,7 +186,7 @@ async function refresh() {
       ['incidentsList', incidents.incidents || [], x => [x.status, x.description, x.createdAt]],
       ['discussionList', discussions.discussions || [], x => [x.role, x.content, x.at]],
       ['memoryList', memories.memories || [], x => [x.owner+' · '+(x.domain||'Unscoped')+' · '+(x.status||'pending'), x.content, x.evidence]],
-      ['skillList', skills.skills || [], x => [x.name + ' · ' + x.status, x.procedure, x.owner]]
+      ['skillList', skills.skills || [], x => [x.name + ' · ' + x.status + ' · ' +(x.domain||'Legacy / tidak aktif'), x.procedure, x.owner]]
     ];
     for (const [id, items, format] of pairs) {
       const node = $(id); node.replaceChildren();
@@ -205,15 +208,25 @@ async function refresh() {
           }
           row.append(controls);
         }
-        if (id==='skillList' && item.status==='proposed') {
+        if(id==='skillList'&&item.screening?.issues?.length){
+          row.append(el('small','Audit: '+item.screening.issues.join(', ')));
+        }
+        if(id==='skillList'&&['proposed','screened'].includes(item.status)){
           const buttons=el('div',undefined,'entry-actions');
-          for(const decision of ['verify','reject']) {
-            const b=el('button',decision==='verify'?'Verifikasi':'Tolak','secondary');
+          const options=item.status==='proposed'
+            ? [['screen','Audit SOP'],['reject','Tolak']]
+            : [['verify','Verifikasi setelah uji nyata'],['reject','Tolak']];
+          for(const [decision,label] of options){
+            const b=el('button',label,'secondary');
+            b.type='button';
             b.onclick=async()=>{
               b.disabled=true;
-              try{await request('/bridge/v1/skills/'+item.id+'/'+decision,'POST',{});
-                say('Review skill tersimpan.');await refresh();}
-              catch(e){say(e.message,true);b.disabled=false;}
+              try{
+                const response=await request('/bridge/v1/skills/'+item.id+'/'+decision,'POST',{});
+                const passed=response.skill?.screening?.passed;
+                say(decision==='screen'?(passed?'Audit struktur lulus. Verifikasi hasil pengujian nyata sebelum mengaktifkan.':'Audit menemukan masalah; perbaiki SOP sebelum digunakan.'):'Review SOP tersimpan.',!passed&&decision==='screen');
+                await refresh();
+              }catch(error){say(error.message,true);b.disabled=false;}
             };
             buttons.append(b);
           }
@@ -300,8 +313,8 @@ function wireForm(id,path,collect,message){
 }
 wireForm('memoryForm','/bridge/v1/memories',()=>({owner:$('memoryOwner').value,
   content:$('memoryContent').value,domain:$('memoryDomain').value,evidence:$('memoryEvidence').value}),'Memori tersimpan.');
-wireForm('skillForm','/bridge/v1/skills',()=>({owner:$('skillOwner').value,name:$('skillName').value,
-  procedure:$('skillProcedure').value,evidence:$('skillEvidence').value}),'Skill diajukan untuk verifikasi.');
+wireForm('skillForm','/bridge/v1/skills',()=>({owner:$('skillOwner').value,domain:$('skillDomain').value,name:$('skillName').value,
+  procedure:$('skillProcedure').value,evidence:$('skillEvidence').value}),'SOP diajukan untuk audit dan verifikasi.');
 wireForm('discussionForm','/bridge/v1/discussions',()=>({taskId:$('discussionTask').value,
   content:$('discussionContent').value}),'Diskusi tercatat.');
 
