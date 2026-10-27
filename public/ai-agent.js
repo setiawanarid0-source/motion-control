@@ -182,7 +182,7 @@ async function refresh() {
       ['auditList', audit.events || [], x => [x.type, x.actor || 'System', x.at]],
       ['incidentsList', incidents.incidents || [], x => [x.status, x.description, x.createdAt]],
       ['discussionList', discussions.discussions || [], x => [x.role, x.content, x.at]],
-      ['memoryList', memories.memories || [], x => [x.owner, x.content, x.evidence]],
+      ['memoryList', memories.memories || [], x => [x.owner+' · '+(x.domain||'Unscoped')+' · '+(x.status||'pending'), x.content, x.evidence]],
       ['skillList', skills.skills || [], x => [x.name + ' · ' + x.status, x.procedure, x.owner]]
     ];
     for (const [id, items, format] of pairs) {
@@ -191,6 +191,20 @@ async function refresh() {
       for (const item of items.slice(0,30)) {
         const [title, desc, info] = format(item);
         const row=entry(node,title,desc,info);
+        if(id==='memoryList'&&item.status==='pending'&&item.domain) {
+          const controls=el('div',undefined,'entry-actions');
+          for(const op of ['verify','reject']){
+            const b=el('button',op==='verify'?'Verifikasi':'Tolak','secondary');
+            b.onclick=async()=>{
+              b.disabled=true;
+              try{await request('/bridge/v1/memories/'+item.id+'/'+op,'POST',{});
+                say('Status memori diperbarui.');await refresh();
+              }catch(error){say(error.message,true);b.disabled=false;}
+            };
+            controls.append(b);
+          }
+          row.append(controls);
+        }
         if (id==='skillList' && item.status==='proposed') {
           const buttons=el('div',undefined,'entry-actions');
           for(const decision of ['verify','reject']) {
@@ -285,7 +299,7 @@ function wireForm(id,path,collect,message){
   });
 }
 wireForm('memoryForm','/bridge/v1/memories',()=>({owner:$('memoryOwner').value,
-  content:$('memoryContent').value,evidence:$('memoryEvidence').value}),'Memori tersimpan.');
+  content:$('memoryContent').value,domain:$('memoryDomain').value,evidence:$('memoryEvidence').value}),'Memori tersimpan.');
 wireForm('skillForm','/bridge/v1/skills',()=>({owner:$('skillOwner').value,name:$('skillName').value,
   procedure:$('skillProcedure').value,evidence:$('skillEvidence').value}),'Skill diajukan untuk verifikasi.');
 wireForm('discussionForm','/bridge/v1/discussions',()=>({taskId:$('discussionTask').value,
