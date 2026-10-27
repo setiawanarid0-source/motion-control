@@ -191,6 +191,20 @@ async function refresh() {
       for (const item of items.slice(0,30)) {
         const [title, desc, info] = format(item);
         const row=entry(node,title,desc,info);
+        if(id==='memoryList'&&item.status==='pending'&&item.domain) {
+          const controls=el('div',undefined,'entry-actions');
+          for(const op of ['verify','reject']){
+            const b=el('button',op==='verify'?'Verifikasi':'Tolak','secondary');
+            b.onclick=async()=>{
+              b.disabled=true;
+              try{await request('/bridge/v1/memories/'+item.id+'/'+op,'POST',{});
+                say('Status memori diperbarui.');await refresh();
+              }catch(error){say(error.message,true);b.disabled=false;}
+            };
+            controls.append(b);
+          }
+          row.append(controls);
+        }
         if (id==='skillList' && item.status==='proposed') {
           const buttons=el('div',undefined,'entry-actions');
           for(const decision of ['verify','reject']) {
