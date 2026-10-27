@@ -101,6 +101,12 @@ function taskCard(target, task, approvalOnly = false) {
       };
       actions.append(test);
     }
+    if (task.status === 'approved_pending_worker' && task.scope?.actions?.includes('login_assisted')) {
+      const button = el('button','Buka browser Owner','secondary');
+      button.type = 'button';
+      button.onclick = () => openOwnerBrowser(task,button);
+      actions.append(button);
+    }
     div.append(actions);
   }
 }
@@ -181,7 +187,7 @@ $('taskForm').addEventListener('submit', async event => {
   if (button) button.disabled = true;
   const selectedAction = $('actions').value;
   const permitted = selectedAction === 'inspect' ? ['navigate','inspect','screenshot'] :
-    selectedAction === 'login_assisted' ? ['navigate','inspect','screenshot','login_assisted'] :
+    selectedAction === 'login_assisted' ? ['navigate','inspect','screenshot','login_assisted','click','form_fill'] :
     ['navigate','inspect','screenshot','form_fill'];
   const body = {
     instruction: $('instruction').value,
@@ -253,6 +259,76 @@ wireForm('skillForm','/bridge/v1/skills',()=>({owner:$('skillOwner').value,name:
   procedure:$('skillProcedure').value,evidence:$('skillEvidence').value}),'Skill diajukan untuk verifikasi.');
 wireForm('discussionForm','/bridge/v1/discussions',()=>({taskId:$('discussionTask').value,
   content:$('discussionContent').value}),'Diskusi tercatat.');
+
+/* Manual Owner browser. Credentials stay in the transient input, never in audit or task state. */
+let ownerBrowserSession=null;
+let ownerBrowserBusy=false;
+const ownerBrowserDialog=$('ownerBrowserDialog');
+const ownerBrowserNotice=text=>{ $('ownerBrowserInfo').textContent=String(text||''); };
+function showOwnerFrame(frame) {
+  if (!frame || !/^data:image\/jpeg;base64,/.test(frame.image||'')) throw Error('Respons gambar browser tidak valid.');
+  ownerBrowserSession={id:frame.sessionId,taskId:frame.taskId,width:frame.width,height:frame.height};
+  $('ownerBrowserImage').src=frame.image;
+  ownerBrowserNotice((frame.title||'Browser')+' · '+(frame.url||'')+' · diblokir: '+(frame.blockedRequests||0)+' permintaan');
+}
+async function ownerBrowserAction(action) {
+  if (ownerBrowserBusy || !ownerBrowserSession) return;
+  ownerBrowserBusy=true;
+  try {
+    const result=await request('/bridge/v1/tasks/'+ownerBrowserSession.taskId+'/browser/act',
+      'POST',{sessionId:ownerBrowserSession.id,action});
+    showOwnerFrame(result.browser);
+  } catch(error) { ownerBrowserNotice('Gagal: '+error.message); }
+  finally { ownerBrowserBusy=false; }
+}
+async function openOwnerBrowser(task,button) {
+  if(ownerBrowserBusy || ownerBrowserSession) return;
+  ownerBrowserBusy=true;
+  button.disabled=true;
+  ownerBrowserNotice('Menyiapkan sesi browser untuk '+task.scope.domains[0]+'…');
+  if(!ownerBrowserDialog.open) ownerBrowserDialog.showModal();
+  try {
+    const data=await request('/bridge/v1/tasks/'+task.id+'/browser/start','POST',
+      {domain:task.scope.domains[0]});
+    showOwnerFrame(data.browser);
+  } catch(error) { ownerBrowserNotice('Sesi tidak dapat dimulai: '+error.message); }
+  finally { button.disabled=false;ownerBrowserBusy=false; }
+}
+$('ownerBrowserImage').addEventListener('click',async event=>{
+  const img=event.currentTarget,rect=img.getBoundingClientRect();
+  if(!ownerBrowserSession || !rect.width || !rect.height) return;
+  const x=Math.max(0,Math.min(ownerBrowserSession.width-1,Math.round((event.clientX-rect.left)/rect.width*ownerBrowserSession.width)));
+  const y=Math.max(0,Math.min(ownerBrowserSession.height-1,Math.round((event.clientY-rect.top)/rect.height*ownerBrowserSession.height)));
+  await ownerBrowserAction({kind:'click',x,y});
+});
+$('ownerBrowserSecret').addEventListener('change',event=>{
+  $('ownerBrowserText').type=event.target.checked?'password':'text';
+});
+$('ownerBrowserType').addEventListener('click',async()=>{
+  const input=$('ownerBrowserText');
+  const text=input.value;
+  input.value='';
+  if(text) await ownerBrowserAction({kind:'type',text});
+});
+for(const [id,action] of [
+  ['ownerBrowserTab',{kind:'key',key:'Tab'}],
+  ['ownerBrowserEnter',{kind:'key',key:'Enter'}],
+  ['ownerBrowserReload',{kind:'refresh'}]
+]) $(id).addEventListener('click',()=>ownerBrowserAction(action));
+async function closeOwnerBrowser() {
+  const current=ownerBrowserSession;
+  ownerBrowserSession=null;
+  ownerBrowserDialog.close();
+  $('ownerBrowserImage').removeAttribute('src');
+  $('ownerBrowserText').value='';
+  if(current){
+    try { await request('/bridge/v1/tasks/'+current.taskId+'/browser/close','POST',{sessionId:current.id}); }
+    catch { /* Automatic backend timeout also closes abandoned sessions. */ }
+  }
+}
+$('ownerBrowserClose').addEventListener('click',closeOwnerBrowser);
+ownerBrowserDialog.addEventListener('cancel',event=>{event.preventDefault();void closeOwnerBrowser();});
+
 $('connection').textContent = 'Owner aktif';
 refresh();
 // Lightweight dashboard-only refresh. Stops naturally when the page is closed.

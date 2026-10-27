@@ -22,6 +22,27 @@ app.post('/api/agent/bridge/v1/tasks',(req,res)=>{
  mockTasks.unshift(task);
  res.status(201).json({task});
 });
+
+const ownerBrowserActions=[];
+const ownerBrowserFrame=id=>({
+  sessionId:'test-owner-session-1',taskId:id,domain:'kie.ai',url:'https://kie.ai/login',
+  title:'KIE Login',width:960,height:660,blockedRequests:0,image:'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA4KCw0LCQ4NDA0QDw4RFiQXFhQUFiwgIRokNC43NjMuMjI6QVNGOj1OPjIySGJJTlZYXV5dOEVmbWVabFNbXVn/2wBDAQ8QEBYTFioXFypZOzI7WVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVn/wAARCABQAHgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDi6KKKYgooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//2Q=='
+});
+app.post('/api/agent/bridge/v1/tasks/:id/browser/start',(req,res)=>{
+  assert.equal(req.body.domain,'kie.ai');
+  const task=mockTasks.find(t=>t.id===req.params.id);
+  assert.ok(task.scope.actions.includes('login_assisted'));
+  res.json({browser:ownerBrowserFrame(task.id)});
+});
+app.post('/api/agent/bridge/v1/tasks/:id/browser/act',(req,res)=>{
+  ownerBrowserActions.push(req.body.action);
+  res.json({browser:ownerBrowserFrame(req.params.id)});
+});
+app.post('/api/agent/bridge/v1/tasks/:id/browser/close',(req,res)=>{
+  ownerBrowserActions.push({kind:'close'});
+  res.json({browser:{closed:true}});
+});
+
 app.use(express.static(new URL('../public/',import.meta.url).pathname));
 const server=createServer(app);
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -77,6 +98,27 @@ try{
    await page.getByText('Hasil inspeksi browser').first().waitFor();
    assert.ok(await page.getByText(/KIE login/).first().isVisible());
    assert.ok(await page.getByRole('button',{name:'Tes browser (read-only)'}).first().isVisible());
+   mockTasks[0].scope.actions.push('login_assisted','click','form_fill');
+   await page.reload({waitUntil:'networkidle'});
+   const opener=page.getByRole('button',{name:'Buka browser Owner'});
+   await opener.click();
+   const ownerDialog=page.locator('#ownerBrowserDialog');
+   await ownerDialog.waitFor({state:'visible'});
+   assert.equal(await page.locator('#ownerBrowserText').getAttribute('type'),'password');
+   assert.ok(await page.locator('#ownerBrowserImage').isVisible());
+   const rect=await ownerDialog.boundingBox();
+   assert.ok(rect.x>=-1 && rect.x+rect.width<=width+1,'Owner browser modal horizontally clipped on mobile');
+   await page.locator('#ownerBrowserImage').click({position:{x:30,y:30}});
+   await page.getByRole('button',{name:'Tab',exact:true}).click();
+   await page.locator('#ownerBrowserText').fill('demo@example.com');
+   await page.getByRole('button',{name:'Ketik',exact:true}).click();
+   assert.equal(await page.locator('#ownerBrowserText').inputValue(),'');
+   await page.locator('#ownerBrowserClose').click();
+   await page.waitForFunction(()=>!document.getElementById('ownerBrowserDialog').open);
+   assert.ok(ownerBrowserActions.some(a=>a.kind==='click'));
+   assert.ok(ownerBrowserActions.some(a=>a.kind==='key' && a.key==='Tab'));
+   assert.ok(ownerBrowserActions.some(a=>a.kind==='type' && a.text==='demo@example.com'));
+   assert.ok(ownerBrowserActions.some(a=>a.kind==='close'));
   } else {
    await page.locator('#cancelTaskDialog').click();
   }
