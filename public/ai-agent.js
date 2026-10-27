@@ -1,8 +1,9 @@
 const $ = id => document.getElementById(id);
-const state = { busy: false, tasks: [] };
+const state = { busy: false, tasks: [], workerReady: false };
 const label = status => ({
   awaiting_approval: 'Menunggu persetujuan',
-  approved_pending_worker: 'Disetujui · menunggu pemasangan Worker',
+  approved_pending_worker: 'Disetujui · siap dijalankan',
+  running_worker: 'Otak 2 sedang bekerja', completed: 'Selesai', failed: 'Gagal · perlu ditinjau',
   rejected: 'Ditolak', cancelled: 'Dibatalkan', paused: 'Dijeda'
 }[status] || status);
 function el(tag, value, className) {
@@ -47,6 +48,14 @@ function taskCard(target, task, approvalOnly = false) {
   const div = entry(target, label(task.status), task.instruction,
     [new Date(task.createdAt).toLocaleString('id-ID'),
       (task.scope?.domains || []).join(', '), 'Budget $' + (task.scope?.budgetUsd ?? 0)].join(' · '));
+  if (task.workerRun?.summary) {
+    const outcome=el('div',undefined,'inspection-result');
+    outcome.append(el('strong','Laporan Otak 2'),
+      el('p',String(task.workerRun.summary).slice(0,800)),
+      el('small','Langkah: '+(task.workerRun.steps??0)+' · '+(task.workerRun.finishedAt
+        ? new Date(task.workerRun.finishedAt).toLocaleString('id-ID') : 'Sedang diproses')));
+    div.append(outcome);
+  }
   // Display saved read-only browser evidence on the task card after page refresh.
   const checkpoint = (task.checkpoints || []).slice().reverse().find(item => {
     try { const evidence = JSON.parse(item.description); return evidence?.readOnly === true && !!evidence.finishedAt; }
@@ -84,6 +93,19 @@ function taskCard(target, task, approvalOnly = false) {
       };
       actions.append(button);
     }
+    if(task.status === 'approved_pending_worker' && state.workerReady) {
+      const run=el('button','Jalankan Otak 2','');
+      run.type='button';
+      run.onclick=async()=>{
+        run.disabled=true;
+        try{
+          await request('/bridge/v1/tasks/'+task.id+'/run','POST',{});
+          say('Otak 2 mulai menjalankan tugas melalui browser otomatis.');
+          await refresh();
+        }catch(e){say(e.message,true);run.disabled=false;}
+      };
+      actions.append(run);
+    }
     if (task.status === 'approved_pending_worker') {
       const test = el('button', 'Tes browser (read-only)', 'secondary');
       test.type = 'button';
@@ -120,7 +142,8 @@ async function refresh() {
       request('/bridge/v1/discussions'), request('/bridge/v1/memories'),
       request('/bridge/v1/skills')
     ]);
-    $('worker').textContent = status.worker === 'not_installed' ? 'Belum terpasang' : status.worker;
+    state.workerReady=Boolean(status.workerRuntime?.enabled);
+    $('worker').textContent = state.workerReady ? 'Siap digunakan' : 'Belum terpasang';
     $('supervisor').textContent = status.supervisor === 'not_installed' ? 'Belum terpasang' : status.supervisor;
     $('browser').textContent = status.browser === 'ready_readonly' ? 'Siap · baca saja' :
       status.browser === 'not_installed' ? 'Belum tersedia' : status.browser;
