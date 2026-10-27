@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/ai-agent.css?v=20261027-monitor-v6"/>
 <script src="/auth.js?v=20261026-global-login" defer></script>
-<script src="/ai-agent.js?v=20261027-monitor-v6" defer></script>
+<script src="/ai-agent.js?v=20261027-memory-v7" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -74,7 +74,7 @@
         <div class="panel"><h2>Memory</h2>
         <details class="disclosure"><summary><span>Tambah memori</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary><form id="memoryForm" class="compact-form"><label for="memoryOwner">Pemilik memori</label>
         <select id="memoryOwner"><option value="worker">Worker</option><option value="supervisor">Supervisor</option><option value="shared">Pengetahuan bersama</option></select>
-        <label for="memoryContent">Isi memori</label><textarea id="memoryContent" rows="3" maxlength="12000" required></textarea>
+        <label for="memoryDomain">Website memori</label><select id="memoryDomain"><option value="kie.ai">KIE.ai</option><option value="runninghub.ai">RunningHub</option></select><label for="memoryContent">Isi memori</label><textarea id="memoryContent" rows="3" maxlength="12000" required></textarea>
         <label for="memoryEvidence">Bukti</label><input id="memoryEvidence" maxlength="4000" required/>
         <button type="submit">Simpan memori</button></form></details>
         <div id="memoryList" class="entries"></div></div>
