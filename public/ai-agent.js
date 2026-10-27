@@ -182,7 +182,7 @@ async function refresh() {
       ['auditList', audit.events || [], x => [x.type, x.actor || 'System', x.at]],
       ['incidentsList', incidents.incidents || [], x => [x.status, x.description, x.createdAt]],
       ['discussionList', discussions.discussions || [], x => [x.role, x.content, x.at]],
-      ['memoryList', memories.memories || [], x => [x.owner, x.content, x.evidence]],
+      ['memoryList', memories.memories || [], x => [x.owner+' · '+(x.domain||'Unscoped')+' · '+(x.status||'pending'), x.content, x.evidence]],
       ['skillList', skills.skills || [], x => [x.name + ' · ' + x.status, x.procedure, x.owner]]
     ];
     for (const [id, items, format] of pairs) {
