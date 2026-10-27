@@ -8,9 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/ai-agent.css?v=20261027-inspection-v3"/>
+<link rel="stylesheet" href="/ai-agent.css?v=20261027-owner-browser-v4"/>
 <script src="/auth.js?v=20261026-global-login" defer></script>
-<script src="/ai-agent.js?v=20261027-inspection-v3" defer></script>
+<script src="/ai-agent.js?v=20261027-owner-browser-v4" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -112,5 +112,32 @@
   </div>
 </dialog>
 
+
+<dialog id="ownerBrowserDialog" class="owner-browser-dialog" aria-labelledby="ownerBrowserTitle">
+  <div class="owner-browser-shell">
+    <header class="owner-browser-top">
+      <div><div class="section-kicker-label">OWNER BROWSER</div>
+        <h2 id="ownerBrowserTitle">Browser berbantuan Owner</h2></div>
+      <button id="ownerBrowserClose" type="button" class="secondary" aria-label="Tutup browser">Tutup</button>
+    </header>
+    <p class="owner-browser-description">Sesi ini dikendalikan oleh Anda. Tidak ada pekerjaan AI atau pembayaran otomatis. Login Google/OAuth dapat memerlukan alur terpisah.</p>
+    <p id="ownerBrowserInfo" class="owner-browser-info" role="status" aria-live="polite">Menyiapkan browser…</p>
+    <div class="owner-browser-frame">
+      <img id="ownerBrowserImage" alt="Tampilan browser yang dapat diketuk untuk memilih elemen halaman" draggable="false"/>
+    </div>
+    <div class="owner-browser-tools">
+      <label for="ownerBrowserText">Ketik pada kolom yang dipilih di gambar</label>
+      <input id="ownerBrowserText" type="text" maxlength="256" autocomplete="off" spellcheck="false" placeholder="Teks atau password (tidak disimpan)"/>
+      <label class="owner-browser-secret"><input id="ownerBrowserSecret" type="checkbox"/> Sembunyikan input sensitif</label>
+      <div class="owner-browser-actions">
+        <button id="ownerBrowserType" type="button" class="primary">Ketik</button>
+        <button id="ownerBrowserTab" type="button" class="secondary">Tab</button>
+        <button id="ownerBrowserEnter" type="button" class="secondary">Enter</button>
+        <button id="ownerBrowserReload" type="button" class="secondary">Muat ulang</button>
+      </div>
+      <p class="owner-browser-caption">Hanya klik dan input yang Anda lakukan sendiri. Hindari transaksi serta jangan memasukkan kode pemulihan akun.</p>
+    </div>
+  </div>
+</dialog>
 </body>
 </html>
