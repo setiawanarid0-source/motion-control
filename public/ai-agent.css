@@ -204,3 +204,9 @@ select{min-height:45px;appearance:auto}
 @media(prefers-reduced-motion:reduce){
  *,*::before,*::after{scroll-behavior:auto!important;transition-duration:0s!important;animation-duration:0s!important}
 }
+
+/* Read-only inspection evidence is presented inside its task, not as transient feedback. */
+.inspection-result{border:1px solid var(--stroke-strong);border-radius:11px;padding:12px 14px;margin-top:13px;background:var(--surface-elevated)}
+.inspection-result strong{font-size:12px;color:var(--text)}
+.inspection-result p{font-size:12px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere;margin:6px 0}
+.inspection-result small{color:var(--subtle);font-size:11px}
