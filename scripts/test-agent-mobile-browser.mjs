@@ -17,6 +17,7 @@ const mockTasks=[{
       {at:new Date().toISOString(),kind:'navigating',text:'Berpindah ke halaman yang diizinkan',step:2}]}
 }];
 const empty={events:[],incidents:[],discussions:[],memories:[],skills:[]};
+const skillReviews=[];
 app.get('/api/agent/bridge/v1/status',(_req,res)=>res.json({worker:'not_installed',
   supervisor:'not_installed',browser:'ready_readonly',executionEnabled:false}));
 app.get('/api/agent/bridge/v1/tasks',(_req,res)=>res.json({tasks:mockTasks}));
@@ -61,6 +62,22 @@ app.get('/api/agent/bridge/v1/tasks/:id/monitor',(req,res)=>{
     image:ownerBrowserFrame(task.id).image,url:'https://kie.ai/',
     capturedAt:new Date().toISOString()};
   res.json({monitor});
+});
+app.post('/api/agent/bridge/v1/skills',(req,res)=>{
+  const skill={id:'11111111-2222-4333-8444-111111111111',...req.body,status:'proposed',screening:null};
+  empty.skills.unshift(skill);res.status(201).json({skill});
+});
+app.post('/api/agent/bridge/v1/skills/:id/:action',(req,res)=>{
+  const skill=empty.skills.find(x=>x.id===req.params.id);
+  if(!skill)return res.status(404).json({error:'Unknown SOP'});
+  if(req.params.action==='screen'){
+    skill.screening={passed:true,issues:[],mode:'static_screen_only'};
+    skill.status='screened';
+  }else if(req.params.action==='verify'&&skill.status==='screened')skill.status='verified';
+  else if(req.params.action==='reject')skill.status='rejected';
+  else return res.status(409).json({error:'Invalid skill transition'});
+  skillReviews.push(req.params.action);
+  res.json({skill});
 });
 app.use(express.static(new URL('../public/',import.meta.url).pathname));
 const server=createServer(app);
@@ -145,6 +162,19 @@ try{
   assert.equal(await page.locator('#tab-knowledge').isVisible(),true);
   await page.locator('.disclosure').last().evaluate(x=>x.open=true);
   assert.equal(await page.locator('#skillForm').isVisible(),true);
+  if(width===375){
+    await page.locator('#skillOwner').selectOption('worker');
+    await page.locator('#skillDomain').selectOption('kie.ai');
+    await page.locator('#skillName').fill('Inspect login redirect');
+    await page.locator('#skillProcedure').fill('1. Inspect login redirect and observe current status.\n2. Follow approved documentation and confirm destination.');
+    await page.locator('#skillEvidence').fill('Owner tested equivalent navigation during browser inspection');
+    await page.getByRole('button',{name:'Usulkan SOP'}).click();
+    await page.getByRole('button',{name:'Audit SOP'}).first().click();
+    await page.getByRole('button',{name:'Verifikasi setelah uji nyata'}).first().click();
+    assert.deepEqual(skillReviews.slice(-2),['screen','verify']);
+    assert.ok(await page.getByText(/Inspect login redirect · verified/).first().isVisible());
+  }
+
   await page.locator('[data-tab="approvals"]').click();
   assert.equal(await page.locator('#tab-approvals').isVisible(),true);
   await page.locator('[data-tab="tasks"]').click();
