@@ -44,7 +44,7 @@ export function createAgentBridge({ isOwner = () => false } = {}) {
       const upstream = await fetch(endpoint, { method: req.method,
         headers: { authorization: 'Bearer ' + internalToken, 'Content-Type': 'application/json' },
         body: req.method === 'POST' ? JSON.stringify(req.body || {}) : undefined,
-        signal: AbortSignal.timeout(14000), redirect: 'error' });
+        signal: AbortSignal.timeout(remote.endsWith('/inspect') ? 65000 : 14000), redirect: 'error' });
       const response = await upstream.text();
       if (response.length > 512 * 1024) return res.status(502).json({ error: 'Respons backend terlalu besar.' });
       res.status(upstream.status).type('application/json').send(response);
