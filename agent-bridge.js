@@ -24,7 +24,7 @@ export function createAgentBridge({ isOwner = () => false } = {}) {
   const allowedPaths = [
     /^\/v1\/(status|browser\/status|audit|tasks|memories|skills|incidents|discussions)$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}$/,
-    /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|reject|pause|resume|cancel|checkpoint|inspect)$/,
+    /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|reject|pause|resume|cancel|checkpoint|inspect|run)$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}\/browser\/(start|act|close)$/,
     /^\/v1\/skills\/[0-9a-f-]{36}\/(verify|reject)$/
   ];
