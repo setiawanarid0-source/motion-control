@@ -172,7 +172,7 @@ try{
     await page.getByRole('button',{name:'Audit SOP'}).first().click();
     await page.getByRole('button',{name:'Verifikasi setelah uji nyata'}).first().click();
     assert.deepEqual(skillReviews.slice(-2),['screen','verify']);
-    assert.ok(await page.getByText(/Inspect login redirect · verified/).first().isVisible());
+    await page.locator('#skillList strong').filter({hasText:'Inspect login redirect · verified'}).first().waitFor({state:'visible'});
   }
 
   await page.locator('[data-tab="approvals"]').click();
