@@ -210,3 +210,37 @@ select{min-height:45px;appearance:auto}
 .inspection-result strong{font-size:12px;color:var(--text)}
 .inspection-result p{font-size:12px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere;margin:6px 0}
 .inspection-result small{color:var(--subtle);font-size:11px}
+
+/* Owner-assisted browser modal: scoped actions only; no third-party iframe. */
+.owner-browser-dialog{padding:0;border:1px solid var(--stroke-strong);border-radius:18px;
+  background:var(--surface);color:var(--text);width:min(1020px,calc(100vw - 32px));
+  max-width:1020px;max-height:calc(100dvh - 28px);overflow:auto;box-shadow:0 25px 90px #0009}
+.owner-browser-dialog::backdrop{background:rgba(0,0,0,.8);backdrop-filter:blur(4px)}
+.owner-browser-shell{padding:clamp(12px,2.5vw,23px);display:grid;gap:13px}
+.owner-browser-top{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.owner-browser-top h2{font-size:clamp(17px,2.5vw,23px);margin:5px 0 0}
+.owner-browser-top button{min-height:44px}
+.owner-browser-description,.owner-browser-caption{font-size:12px;color:var(--muted);line-height:1.6}
+.owner-browser-info{border:1px solid var(--stroke);border-radius:10px;padding:9px 12px;
+  font-size:12px;color:var(--text);overflow-wrap:anywhere;min-height:40px}
+.owner-browser-frame{background:#171b20;border:1px solid var(--stroke);
+  border-radius:11px;overflow:hidden;width:100%;display:grid;place-items:center;min-height:100px}
+.owner-browser-frame img{display:block;max-width:100%;width:100%;height:auto;
+  user-select:none;touch-action:manipulation;cursor:crosshair;-webkit-user-drag:none}
+.owner-browser-frame img:not([src]){min-height:180px}
+.owner-browser-tools{display:grid;gap:10px}
+.owner-browser-tools label{font-size:12px;color:var(--muted)}
+.owner-browser-tools input[type="text"],.owner-browser-tools input[type="password"]{
+  font-size:16px;min-height:46px;background:#0c1219;border:1px solid var(--stroke-strong);
+  color:var(--text);border-radius:9px;padding:10px 12px;width:100%}
+.owner-browser-secret{display:flex;align-items:center;gap:8px;min-height:40px}
+.owner-browser-secret input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent)}
+.owner-browser-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.owner-browser-actions button{border-radius:10px;min-height:44px;padding:8px;font-size:12px}
+@media(max-width:640px){
+  .owner-browser-dialog{width:100%;max-width:none;max-height:96dvh;margin:auto 0 0;
+    border-radius:18px 18px 0 0;border-bottom:0}
+  .owner-browser-shell{padding:15px;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+  .owner-browser-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .owner-browser-frame{max-height:40dvh;overflow-y:auto}
+}
