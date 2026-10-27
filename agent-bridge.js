@@ -25,6 +25,7 @@ export function createAgentBridge({ isOwner = () => false } = {}) {
     /^\/v1\/(status|browser\/status|audit|tasks|memories|skills|incidents|discussions)$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|reject|pause|resume|cancel|checkpoint|inspect)$/,
+    /^\/v1\/tasks\/[0-9a-f-]{36}\/browser\/(start|act|close)$/,
     /^\/v1\/skills\/[0-9a-f-]{36}\/(verify|reject)$/
   ];
   router.use((req, res, next) => {
@@ -44,7 +45,7 @@ export function createAgentBridge({ isOwner = () => false } = {}) {
       const upstream = await fetch(endpoint, { method: req.method,
         headers: { authorization: 'Bearer ' + internalToken, 'Content-Type': 'application/json' },
         body: req.method === 'POST' ? JSON.stringify(req.body || {}) : undefined,
-        signal: AbortSignal.timeout(remote.endsWith('/inspect') ? 65000 : 14000), redirect: 'error' });
+        signal: AbortSignal.timeout((remote.endsWith('/inspect') || /\/browser\/(start|act|close)$/.test(remote)) ? 65000 : 14000), redirect: 'error' });
       const response = await upstream.text();
       if (response.length > 512 * 1024) return res.status(502).json({ error: 'Respons backend terlalu besar.' });
       res.status(upstream.status).type('application/json').send(response);
