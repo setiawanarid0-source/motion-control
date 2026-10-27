@@ -285,7 +285,7 @@ function wireForm(id,path,collect,message){
   });
 }
 wireForm('memoryForm','/bridge/v1/memories',()=>({owner:$('memoryOwner').value,
-  content:$('memoryContent').value,evidence:$('memoryEvidence').value}),'Memori tersimpan.');
+  content:$('memoryContent').value,domain:$('memoryDomain').value,evidence:$('memoryEvidence').value}),'Memori tersimpan.');
 wireForm('skillForm','/bridge/v1/skills',()=>({owner:$('skillOwner').value,name:$('skillName').value,
   procedure:$('skillProcedure').value,evidence:$('skillEvidence').value}),'Skill diajukan untuk verifikasi.');
 wireForm('discussionForm','/bridge/v1/discussions',()=>({taskId:$('discussionTask').value,
