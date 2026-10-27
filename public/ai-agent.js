@@ -49,7 +49,7 @@ function taskCard(target, task, approvalOnly = false) {
     [new Date(task.createdAt).toLocaleString('id-ID'),
       (task.scope?.domains || []).join(', '), 'Budget $' + (task.scope?.budgetUsd ?? 0)].join(' · '));
   if(task.workerRun?.skillIds?.length){
-    div.append(el('small','SOP terverifikasi yang digunakan: '+task.workerRun.skillIds.length));
+    div.append(el('small','SOP terverifikasi tersedia: '+task.workerRun.skillIds.length+' · Eksekusi tercatat: '+(task.workerRun.skillAttempts?.length||0)));
   }
   if (task.workerRun?.summary) {
     const outcome=el('div',undefined,'inspection-result');
@@ -186,7 +186,7 @@ async function refresh() {
       ['incidentsList', incidents.incidents || [], x => [x.status, x.description, x.createdAt]],
       ['discussionList', discussions.discussions || [], x => [x.role, x.content, x.at]],
       ['memoryList', memories.memories || [], x => [x.owner+' · '+(x.domain||'Unscoped')+' · '+(x.status||'pending'), x.content, x.evidence]],
-      ['skillList', skills.skills || [], x => [x.name + ' · ' + x.status + ' · ' +(x.domain||'Legacy / tidak aktif'), x.procedure, x.owner]]
+      ['skillList', skills.skills || [], x => [x.name + ' · ' + x.status + ' · ' +(x.domain||'Legacy / tidak aktif'), x.procedure, 'v'+(x.version||1)+' · '+(x.invocations||0)+' pemakaian · '+(x.targetUrl||'SOP panduan')]]
     ];
     for (const [id, items, format] of pairs) {
       const node = $(id); node.replaceChildren();
@@ -314,7 +314,7 @@ function wireForm(id,path,collect,message){
 wireForm('memoryForm','/bridge/v1/memories',()=>({owner:$('memoryOwner').value,
   content:$('memoryContent').value,domain:$('memoryDomain').value,evidence:$('memoryEvidence').value}),'Memori tersimpan.');
 wireForm('skillForm','/bridge/v1/skills',()=>({owner:$('skillOwner').value,domain:$('skillDomain').value,name:$('skillName').value,
-  procedure:$('skillProcedure').value,evidence:$('skillEvidence').value}),'SOP diajukan untuk audit dan verifikasi.');
+  procedure:$('skillProcedure').value,targetUrl:$('skillTargetUrl').value.trim(),evidence:$('skillEvidence').value}),'SOP diajukan untuk audit dan verifikasi.');
 wireForm('discussionForm','/bridge/v1/discussions',()=>({taskId:$('discussionTask').value,
   content:$('discussionContent').value}),'Diskusi tercatat.');
 
