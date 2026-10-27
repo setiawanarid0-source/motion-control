@@ -7,7 +7,15 @@ import assert from 'node:assert/strict';
 
 const app=express();
 app.use(express.json());
-const mockTasks=[];
+const mockTasks=[{
+  id:'11111111-2222-4333-8444-555555555555',
+  instruction:'Inspeksi Worker yang dipantau',
+  status:'running_worker',createdAt:new Date().toISOString(),
+  scope:{domains:['kie.ai'],actions:['inspect','navigate'],budgetUsd:0},
+  workerRun:{startedAt:new Date().toISOString(),steps:2,summary:'',
+    timeline:[{at:new Date().toISOString(),kind:'opening',text:'Membuka browser kie.ai',step:0},
+      {at:new Date().toISOString(),kind:'navigating',text:'Berpindah ke halaman yang diizinkan',step:2}]}
+}];
 const empty={events:[],incidents:[],discussions:[],memories:[],skills:[]};
 app.get('/api/agent/bridge/v1/status',(_req,res)=>res.json({worker:'not_installed',
   supervisor:'not_installed',browser:'ready_readonly',executionEnabled:false}));
@@ -43,6 +51,17 @@ app.post('/api/agent/bridge/v1/tasks/:id/browser/close',(req,res)=>{
   res.json({browser:{closed:true}});
 });
 
+app.get('/api/agent/bridge/v1/tasks/:id/monitor',(req,res)=>{
+  const task=mockTasks.find(x=>x.id===req.params.id);
+  if(!task)return res.status(404).json({error:'Missing task'});
+  const monitor={taskId:task.id,status:task.status,active:task.status==='running_worker',
+    steps:task.workerRun?.steps||0,maxSteps:6,summary:task.workerRun?.summary||'',
+    timeline:task.workerRun?.timeline||[],frame:null};
+  if(req.query.frame==='1'&&monitor.active)monitor.frame={
+    image:ownerBrowserFrame(task.id).image,url:'https://kie.ai/',
+    capturedAt:new Date().toISOString()};
+  res.json({monitor});
+});
 app.use(express.static(new URL('../public/',import.meta.url).pathname));
 const server=createServer(app);
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -128,6 +147,22 @@ try{
   assert.equal(await page.locator('#skillForm').isVisible(),true);
   await page.locator('[data-tab="approvals"]').click();
   assert.equal(await page.locator('#tab-approvals').isVisible(),true);
+  await page.locator('[data-tab="tasks"]').click();
+  await page.getByRole('button',{name:'Pantau langsung'}).first().click();
+  const liveMonitor=page.locator('#workerMonitorDialog');
+  await liveMonitor.waitFor({state:'visible'});
+  await page.getByText('Membuka browser kie.ai').first().waitFor();
+  const monitorRect=await liveMonitor.boundingBox();
+  assert.ok(monitorRect.x>=-1 && monitorRect.x+monitorRect.width<=width+1,
+    'Worker monitor clipped horizontally at '+width);
+  assert.ok(await page.locator('#workerMonitorImage').isVisible());
+  assert.equal(await page.locator('#workerMonitorImage').evaluate(el=>getComputedStyle(el).pointerEvents),'none');
+  assert.ok(await page.getByText('2 / 6 langkah').isVisible());
+  if(width===375)await page.screenshot({path:'/tmp/vanta-worker-live-monitor-375.png',fullPage:false});
+  await page.locator('#workerMonitorClose').click();
+  assert.equal(await liveMonitor.evaluate(x=>x.open),false);
+  assert.equal(await page.locator('#workerMonitorImage').getAttribute('src'),null);
+
   assert.equal(errors.length,0,'Browser errors at '+width+': '+errors.join('; '));
   if(width===320)await page.screenshot({path:'/tmp/vanta-mobile-agent-320.png',fullPage:false});
   if(width===1280)await page.screenshot({path:'/tmp/vanta-agent-desktop.png',fullPage:false});
