@@ -76,7 +76,7 @@ function taskCard(target, task, approvalOnly = false) {
       div.append(summary);
     } catch { /* Do not render invalid checkpoint evidence */ }
   }
-    if (['awaiting_approval', 'approved_pending_worker', 'paused'].includes(task.status)) {
+    if (['awaiting_approval', 'approved_pending_worker', 'running_worker', 'paused'].includes(task.status)) {
     const actions = el('div', undefined, 'entry-actions');
     let options = task.status === 'awaiting_approval' ? [['approve','Setujui'],['reject','Tolak']] :
       task.status === 'paused' ? [['resume','Lanjutkan'],['cancel','Batalkan']] : [['pause','Jeda'],['cancel','Batalkan']];
@@ -87,7 +87,7 @@ function taskCard(target, task, approvalOnly = false) {
         button.disabled = true;
         try {
           await request('/bridge/v1/tasks/' + task.id + '/' + op, 'POST', {});
-          say('Status tugas diperbarui. Eksekusi belum aktif.');
+          say('Status tugas berhasil diperbarui.');
           await refresh();
         } catch (error) { say(error.message, true); button.disabled = false; }
       };
@@ -102,6 +102,7 @@ function taskCard(target, task, approvalOnly = false) {
           await request('/bridge/v1/tasks/'+task.id+'/run','POST',{});
           say('Otak 2 mulai menjalankan tugas melalui browser otomatis.');
           await refresh();
+          await openWorkerMonitor(task.id);
         }catch(e){say(e.message,true);run.disabled=false;}
       };
       actions.append(run);
@@ -130,6 +131,13 @@ function taskCard(target, task, approvalOnly = false) {
       actions.append(button);
     }
     div.append(actions);
+  }
+  if(task.status==='running_worker'||task.workerRun?.timeline?.length){
+    const monitor=el('button',task.status==='running_worker'?'Pantau langsung':'Lihat aktivitas','secondary');
+    monitor.type='button';
+    monitor.classList.add('worker-monitor-open');
+    monitor.onclick=()=>openWorkerMonitor(task.id);
+    const tools=el('div',undefined,'entry-actions');tools.append(monitor);div.append(tools);
   }
 }
 async function refresh() {
@@ -351,6 +359,122 @@ async function closeOwnerBrowser() {
 }
 $('ownerBrowserClose').addEventListener('click',closeOwnerBrowser);
 ownerBrowserDialog.addEventListener('cancel',event=>{event.preventDefault();void closeOwnerBrowser();});
+
+
+/* Owner-only, read-only Worker monitor. Browser frames never persisted client-side. */
+const workerMonitorDialog=$('workerMonitorDialog');
+let workerMonitorTaskId=null,workerMonitorTimer=null,workerMonitorBusy=false;
+function workerMonitorStatusText(status){
+  return ({
+    running_worker:'Otak 2 sedang bekerja',completed:'Tugas selesai',failed:'Tugas gagal',
+    cancelled:'Tugas dibatalkan',paused:'Tugas dijeda',approved_pending_worker:'Menunggu eksekusi',
+    awaiting_approval:'Menunggu persetujuan'
+  })[status]||String(status||'Tidak diketahui');
+}
+function clearWorkerMonitorFrame(){
+  $('workerMonitorImage').removeAttribute('src');
+  $('workerMonitorImage').hidden=true;
+  $('workerMonitorUrl').textContent='';
+  $('workerMonitorPlaceholder').hidden=false;
+}
+function drawWorkerMonitor(report) {
+  $('workerMonitorStatus').textContent=workerMonitorStatusText(report.status);
+  $('workerMonitorDot').classList.toggle('is-live',report.active===true);
+  $('workerMonitorSteps').textContent=(report.steps||0)+' / '+(report.maxSteps||6)+' langkah';
+  $('workerMonitorUpdated').textContent='Diperbarui '+new Date().toLocaleTimeString('id-ID');
+  const image=report.frame?.image;
+  if(report.active&&typeof image==='string'&&image.startsWith('data:image/jpeg;base64,')&&image.length<410000){
+    $('workerMonitorImage').src=image;
+    $('workerMonitorImage').hidden=false;
+    $('workerMonitorPlaceholder').hidden=true;
+    $('workerMonitorUrl').textContent=report.frame.url||'';
+  }else if(!report.active){
+    clearWorkerMonitorFrame();
+    $('workerMonitorPlaceholder').textContent='Sesi browser sudah berhenti. Gambar tidak disimpan.';
+  }else if(!$('workerMonitorImage').getAttribute('src')){
+    $('workerMonitorPlaceholder').textContent='Menunggu tampilan browser…';
+  }
+  const timeline=$('workerMonitorTimeline');timeline.replaceChildren();
+  const events=Array.isArray(report.timeline)?report.timeline.slice(-32):[];
+  for(const item of events){
+    const li=el('li',undefined,'worker-monitor-event');
+    const time=el('time',new Date(item.at).toLocaleTimeString('id-ID'));
+    if(item.at)time.dateTime=item.at;
+    li.append(el('span',item.text||'Aktivitas Worker'),time);
+    timeline.append(li);
+  }
+  if(!events.length)timeline.append(el('li','Belum ada aktivitas Worker.','worker-monitor-empty'));
+  const summary=$('workerMonitorSummary');
+  summary.hidden=!report.summary;
+  summary.textContent=report.summary?'Hasil: '+report.summary:'';
+  $('workerMonitorPause').hidden=report.status!=='running_worker';
+  $('workerMonitorCancel').hidden=!['running_worker','paused'].includes(report.status);
+}
+async function pollWorkerMonitor(){
+  if(!workerMonitorDialog.open||!workerMonitorTaskId||workerMonitorBusy||document.visibilityState==='hidden')return;
+  workerMonitorBusy=true;
+  const id=workerMonitorTaskId;
+  try{
+    const payload=await request('/bridge/v1/tasks/'+id+'/monitor?frame=1');
+    if(id===workerMonitorTaskId&&workerMonitorDialog.open){
+      $('workerMonitorError').textContent='';
+      drawWorkerMonitor(payload.monitor);
+    }
+  }catch(error){
+    if(id===workerMonitorTaskId)
+      $('workerMonitorError').textContent='Monitor belum dapat diperbarui: '+error.message;
+  }finally{workerMonitorBusy=false;}
+}
+async function openWorkerMonitor(taskId){
+  workerMonitorTaskId=taskId;
+  const task=state.tasks.find(x=>x.id===taskId);
+  $('workerMonitorInstruction').textContent=task?.instruction||'Memuat tugas…';
+  $('workerMonitorError').textContent='';
+  clearWorkerMonitorFrame();
+  $('workerMonitorTimeline').replaceChildren();
+  $('workerMonitorStatus').textContent='Menghubungkan…';
+  if(!workerMonitorDialog.open)workerMonitorDialog.showModal();
+  if(workerMonitorTimer)clearInterval(workerMonitorTimer);
+  workerMonitorTimer=setInterval(pollWorkerMonitor,4200);
+  await pollWorkerMonitor();
+}
+function closeWorkerMonitor(){
+  workerMonitorTaskId=null;
+  if(workerMonitorTimer)clearInterval(workerMonitorTimer);
+  workerMonitorTimer=null;
+  clearWorkerMonitorFrame();
+  if(workerMonitorDialog.open)workerMonitorDialog.close();
+}
+$('workerMonitorClose').addEventListener('click',closeWorkerMonitor);
+workerMonitorDialog.addEventListener('cancel',event=>{
+  event.preventDefault();closeWorkerMonitor();
+});
+workerMonitorDialog.addEventListener('close',()=>{
+  workerMonitorTaskId=null;
+  if(workerMonitorTimer)clearInterval(workerMonitorTimer);
+  workerMonitorTimer=null;clearWorkerMonitorFrame();
+});
+for(const [buttonId,action] of [['workerMonitorPause','pause'],['workerMonitorCancel','cancel']]){
+  $(buttonId).addEventListener('click',async()=>{
+    if(!workerMonitorTaskId)return;
+    const button=$(buttonId);button.disabled=true;
+    try{
+      await request('/bridge/v1/tasks/'+workerMonitorTaskId+'/'+action,'POST',{});
+      await refresh();
+      await pollWorkerMonitor();
+    }catch(error){
+      $('workerMonitorError').textContent='Tidak dapat memperbarui tugas: '+error.message;
+    }finally{button.disabled=false;}
+  });
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){
+    // Drop screenshots immediately when switching tabs or leaving the mobile app.
+    clearWorkerMonitorFrame();
+  }else if(workerMonitorDialog.open){
+    void pollWorkerMonitor();
+  }
+});
 
 $('connection').textContent = 'Owner aktif';
 refresh();

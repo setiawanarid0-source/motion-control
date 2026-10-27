@@ -8,9 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/ai-agent.css?v=20261027-owner-browser-v4"/>
+<link rel="stylesheet" href="/ai-agent.css?v=20261027-monitor-v6"/>
 <script src="/auth.js?v=20261026-global-login" defer></script>
-<script src="/ai-agent.js?v=20261027-worker-v5" defer></script>
+<script src="/ai-agent.js?v=20261027-monitor-v6" defer></script>
 </head>
 <body>
 <div class="shell">
@@ -137,6 +137,43 @@
       </div>
       <p class="owner-browser-caption">Hanya klik dan input yang Anda lakukan sendiri. Hindari transaksi serta jangan memasukkan kode pemulihan akun.</p>
     </div>
+  </div>
+</dialog>
+
+<dialog id="workerMonitorDialog" class="worker-monitor-dialog" aria-labelledby="workerMonitorTitle">
+  <div class="worker-monitor-shell">
+    <header class="worker-monitor-header">
+      <div><div class="section-kicker-label">WORKER / LIVE MONITOR</div><h2 id="workerMonitorTitle">Pantau Otak 2</h2></div>
+      <button type="button" class="secondary" id="workerMonitorClose">Tutup</button>
+    </header>
+    <div class="worker-monitor-status">
+      <span class="worker-live-dot" id="workerMonitorDot" aria-hidden="true"></span>
+      <strong id="workerMonitorStatus">Memuat aktivitas…</strong>
+      <span id="workerMonitorSteps" class="worker-monitor-step">0 / 6 langkah</span>
+    </div>
+    <p id="workerMonitorInstruction" class="worker-monitor-instruction"></p>
+    <div class="worker-monitor-columns">
+      <section class="worker-monitor-visual" aria-label="Tampilan browser Worker">
+        <div class="worker-monitor-sectionhead"><strong>Browser Worker</strong><span>Hanya lihat</span></div>
+        <div class="worker-monitor-screen">
+          <img id="workerMonitorImage" alt="Tangkapan layar sementara dari browser Otak 2" draggable="false"/>
+          <p id="workerMonitorPlaceholder">Tampilan browser tersedia ketika Otak 2 menjalankan tugas.</p>
+        </div>
+        <p id="workerMonitorUrl" class="worker-monitor-url"></p>
+        <p class="worker-monitor-hint">Gambar diperbarui sekitar 4 detik saat panel terbuka; tidak disimpan dalam riwayat atau backup. Kolom input sensitif ditutupi.</p>
+      </section>
+      <section class="worker-monitor-events" aria-labelledby="workerMonitorActivityTitle">
+        <div class="worker-monitor-sectionhead"><strong id="workerMonitorActivityTitle">Aktivitas Worker</strong><span id="workerMonitorUpdated">—</span></div>
+        <ol id="workerMonitorTimeline" class="worker-monitor-timeline"></ol>
+        <div id="workerMonitorSummary" class="worker-monitor-summary" hidden></div>
+      </section>
+    </div>
+    <p id="workerMonitorError" class="worker-monitor-error" role="status" aria-live="polite"></p>
+    <footer class="worker-monitor-footer">
+      <button type="button" id="workerMonitorPause" class="secondary" hidden>Jeda</button>
+      <button type="button" id="workerMonitorCancel" class="secondary danger" hidden>Batalkan tugas</button>
+      <span class="worker-monitor-owner">Hanya Owner yang dapat mengontrol tugas.</span>
+    </footer>
   </div>
 </dialog>
 </body>
