@@ -47,7 +47,27 @@ function taskCard(target, task, approvalOnly = false) {
   const div = entry(target, label(task.status), task.instruction,
     [new Date(task.createdAt).toLocaleString('id-ID'),
       (task.scope?.domains || []).join(', '), 'Budget $' + (task.scope?.budgetUsd ?? 0)].join(' · '));
-  if (['awaiting_approval', 'approved_pending_worker', 'paused'].includes(task.status)) {
+  // Display saved read-only browser evidence on the task card after page refresh.
+  const checkpoint = (task.checkpoints || []).slice().reverse().find(item => {
+    try { const evidence = JSON.parse(item.description); return evidence?.readOnly === true && !!evidence.finishedAt; }
+    catch { return false; }
+  });
+  if (checkpoint) {
+    try {
+      const evidence = JSON.parse(checkpoint.description);
+      const summary = el('div', undefined, 'inspection-result');
+      summary.append(
+        el('strong', 'Hasil inspeksi browser'),
+        el('p', [typeof evidence.title === 'string' ? evidence.title.slice(0,180) : '',
+          'HTTP ' + (Number.isInteger(evidence.status) ? evidence.status : '—'),
+          evidence.mode === 'persistent' ? 'Sesi tersimpan' : 'Sesi terisolasi'
+        ].filter(Boolean).join(' · ')),
+        el('small', 'Hanya baca · ' + new Date(evidence.finishedAt).toLocaleString('id-ID'))
+      );
+      div.append(summary);
+    } catch { /* Do not render invalid checkpoint evidence */ }
+  }
+    if (['awaiting_approval', 'approved_pending_worker', 'paused'].includes(task.status)) {
     const actions = el('div', undefined, 'entry-actions');
     let options = task.status === 'awaiting_approval' ? [['approve','Setujui'],['reject','Tolak']] :
       task.status === 'paused' ? [['resume','Lanjutkan'],['cancel','Batalkan']] : [['pause','Jeda'],['cancel','Batalkan']];
@@ -69,13 +89,15 @@ function taskCard(target, task, approvalOnly = false) {
       test.type = 'button';
       test.onclick = async () => {
         test.disabled = true;
+        test.textContent = 'Memeriksa halaman…';
+        say('Memeriksa halaman di browser terisolasi. Tidak ada aksi berbayar.');
         try {
           const inspection = await request('/bridge/v1/tasks/' + task.id + '/inspect', 'POST',
             { domain: task.scope.domains[0], mode: 'isolated' });
-          say('Browser: ' + (inspection.result?.title || inspection.result?.url || 'Inspeksi selesai'));
+          say('Inspeksi selesai: ' + (inspection.result?.title || 'Halaman telah diperiksa'));
           await refresh();
-        } catch (error) { say(error.message, true); }
-        finally { test.disabled = false; }
+        } catch (error) { say('Inspeksi gagal: ' + error.message, true); }
+        finally { test.textContent = 'Tes browser (read-only)'; test.disabled = false; }
       };
       actions.append(test);
     }
