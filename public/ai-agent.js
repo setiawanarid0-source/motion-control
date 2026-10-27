@@ -155,6 +155,10 @@ async function refresh() {
     ]);
     state.workerReady=Boolean(status.workerRuntime?.enabled);
     $('worker').textContent = state.workerReady ? 'Siap digunakan' : 'Belum terpasang';
+    const hermes=status.hermes||{};
+    $('hermesRuntimeStatus').textContent=hermes.installed ?
+      'Hermes Agent: terpasang · eksekusi belum diaktifkan' :
+      'Hermes Agent: belum tersedia';
     $('supervisor').textContent = status.supervisor === 'not_installed' ? 'Belum terpasang' : status.supervisor;
     $('browser').textContent = status.browser === 'ready_readonly' ? 'Siap · baca saja' :
       status.browser === 'not_installed' ? 'Belum tersedia' : status.browser;
