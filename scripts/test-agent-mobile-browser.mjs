@@ -67,6 +67,16 @@ try{
    await page.getByRole('button',{name:'Simpan tugas'}).click();
    await page.waitForFunction(()=>!document.getElementById('taskDialog').open);
    assert.equal(mockTasks[0].instruction,'Periksa halaman login kie.ai saja.');
+   // Ensure completed browser evidence survives refresh and is readable in the task card.
+   mockTasks[0].status = 'approved_pending_worker';
+   mockTasks[0].checkpoints = [{
+     description: JSON.stringify({readOnly:true,finishedAt:new Date().toISOString(),
+       status:200,title:'KIE login',mode:'isolated',blockedRequests:2})
+   }];
+   await page.reload({waitUntil:'networkidle'});
+   await page.getByText('Hasil inspeksi browser').first().waitFor();
+   assert.ok(await page.getByText(/KIE login/).first().isVisible());
+   assert.ok(await page.getByRole('button',{name:'Tes browser (read-only)'}).first().isVisible());
   } else {
    await page.locator('#cancelTaskDialog').click();
   }
