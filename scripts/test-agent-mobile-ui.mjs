@@ -32,6 +32,9 @@ assert.ok(js.includes("request('/bridge/v1/tasks'"),'Task creation API must be p
 assert.ok(js.includes("request('/bridge/v1/skills/'"),'Skill approval API must be preserved');
 assert.ok(js.includes("request('/bridge/v1/memories'"),'Memory API must be preserved');
 assert.ok(js.includes("request('/bridge/v1/discussions'"),'Discussion API must be preserved');
+assert.ok(js.includes("request('/bridge/v1/hermes/status')"), 'Hermes readiness must use the protected VANTA bridge');
+assert.ok(js.includes('Hermes terpasang · API belum diaktifkan'), 'Native Hermes execution must not be advertised while disabled');
+assert.ok(!js.includes('/bridge/v1/hermes/run'), 'UI must not expose native Hermes execution');
 assert.ok(!html.includes('id="loginForm"'),'Old second login must not be reintroduced');
 assert.ok(!js.includes('state.loggedIn'),'Global VANTA Owner login must remain authoritative');
 console.log('PASS: VANTA Agent mobile-first structure, 4 accessible tabs, task sheet, responsive 320px styles and all original API IDs.');

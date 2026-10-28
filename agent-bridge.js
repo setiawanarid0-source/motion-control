@@ -23,6 +23,7 @@ export function createAgentBridge({ isOwner = () => false } = {}) {
   };
   const allowedPaths = [
     /^\/v1\/(status|browser\/status|audit|tasks|memories|skills|incidents|discussions)$/,
+    /^\/v1\/hermes\/status$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}\/monitor$/,
     /^\/v1\/tasks\/[0-9a-f-]{36}\/(approve|reject|pause|resume|cancel|checkpoint|inspect|run)$/,
@@ -40,6 +41,12 @@ export function createAgentBridge({ isOwner = () => false } = {}) {
     if (req.method === 'POST' && (req.get('x-vanta-agent') !== '1' || !sameOrigin(req)))
       return res.status(403).json({ error: 'Permintaan ditolak.' });
     const remote = req.path;
+    // Native Hermes tools are never exposed to the browser. Only a no-query, read-only
+    // readiness route on the existing authenticated Agent backend may pass through.
+    if (remote === '/v1/hermes/status') {
+      if (req.method !== 'GET') return res.status(405).json({ error: 'Metode Hermes tidak tersedia.' });
+      if (req.url.includes('?')) return res.status(400).json({ error: 'Parameter Hermes tidak tersedia.' });
+    }
     if (!allowedPaths.some(x => x.test(remote))) return res.status(404).json({ error: 'Endpoint tidak tersedia.' });
     const endpoint = new URL(remote + (req.method === 'GET' && req.url.includes('?') ? '?' + req.url.split('?')[1] : ''), target);
     try {
