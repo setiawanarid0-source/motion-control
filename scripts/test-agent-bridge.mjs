@@ -27,6 +27,11 @@ test('One VANTA Owner login protects studio, pools and Agent; first login forces
     assert.equal(req.get('authorization'), 'Bearer ' + token);
     res.json({ executionEnabled: false });
   });
+  agent.get('/v1/hermes/status', (req, res) => {
+    assert.equal(req.get('authorization'), 'Bearer ' + token);
+    res.json({ hermes: { installed: true, reachable: false, readiness: 'disabled',
+      requestsEnabled: false, executionEnabled: false, skillsWriteEnabled: false, modelConfigured: false } });
+  });
   const upstream = await listen(agent);
   process.env.AGENT_INTERNAL_TOKEN = token;
   process.env.VANTA_AGENT_PRIVATE_URL = upstream.origin;
@@ -54,6 +59,7 @@ test('One VANTA Owner login protects studio, pools and Agent; first login forces
     assert.equal((await send('/')).status,302);
     assert.equal((await send('/api/session')).status,401);
     assert.equal((await send('/api/agent/bridge/v1/status')).status,401);
+    assert.equal((await send('/api/agent/bridge/v1/hermes/status')).status,401);
     assert.equal((await send('/health')).status,200);
     assert.equal((await send('/login.html')).status,200);
     assert.equal((await post('/api/auth/login',{password:'wrong'})).status,401);
@@ -76,6 +82,18 @@ test('One VANTA Owner login protects studio, pools and Agent; first login forces
     const probe=await send('/api/agent/bridge/v1/status',{headers:{Cookie:cookie}});
     assert.equal(probe.status,200);
     assert.equal((await probe.json()).executionEnabled,false);
+    const hermesResponse=await send('/api/agent/bridge/v1/hermes/status',{headers:{Cookie:cookie}});
+    assert.equal(hermesResponse.status,200);
+    assert.equal(hermesResponse.headers.get('cache-control'),'no-store');
+    const hermes=(await hermesResponse.json()).hermes;
+    assert.equal(hermes.installed,true);
+    assert.equal(hermes.readiness,'disabled');
+    assert.equal(hermes.executionEnabled,false);
+    assert.equal(hermes.modelConfigured,false);
+    assert.equal((await post('/api/agent/bridge/v1/hermes/status',{},cookie)).status,405);
+    assert.equal((await send('/api/agent/bridge/v1/hermes/status?run=1',{headers:{Cookie:cookie}})).status,400);
+    assert.equal((await send('/api/agent/bridge/v1/hermes/run',{headers:{Cookie:cookie}})).status,404);
+    assert.equal((await send('/api/agent/bridge/v1/hermes/skills',{headers:{Cookie:cookie}})).status,404);
     const cross=await post('/api/agent/bridge/v1/tasks',{instruction:'test'},cookie,{Origin:'https://evil.example'});
     assert.equal(cross.status,403);
     const fresh= createOwnerAuth({dataDir:dir,initialPassword:bootstrap,token});
