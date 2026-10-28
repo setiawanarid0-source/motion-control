@@ -147,18 +147,23 @@ async function refresh() {
   if (state.busy) return;
   state.busy = true;
   try {
-    const [status, tasks, audit, incidents, discussions, memories, skills] = await Promise.all([
+    const [status, tasks, audit, incidents, discussions, memories, skills, hermesProbe] = await Promise.all([
       request('/bridge/v1/status'), request('/bridge/v1/tasks'),
       request('/bridge/v1/audit'), request('/bridge/v1/incidents'),
       request('/bridge/v1/discussions'), request('/bridge/v1/memories'),
-      request('/bridge/v1/skills')
+      request('/bridge/v1/skills'),
+      // Hermes readiness is optional and cannot break the rest of the Owner dashboard.
+      request('/bridge/v1/hermes/status').catch(() => null)
     ]);
     state.workerReady=Boolean(status.workerRuntime?.enabled);
     $('worker').textContent = state.workerReady ? 'Siap digunakan' : 'Belum terpasang';
-    const hermes=status.hermes||{};
-    $('hermesRuntimeStatus').textContent=hermes.installed ?
-      'Hermes Agent: terpasang · eksekusi belum diaktifkan' :
-      'Hermes Agent: belum tersedia';
+    const hermes=hermesProbe?.hermes||status.hermes||{};
+    $('hermesRuntimeStatus').textContent = !hermesProbe ?
+      (hermes.installed ? 'Hermes terpasang · status koneksi belum dapat diperiksa' : 'Hermes: belum tersedia') :
+      !hermes.installed ? 'Hermes: belum terpasang' :
+      !hermes.requestsEnabled ? 'Hermes terpasang · API belum diaktifkan' :
+      hermes.reachable ? 'Hermes terhubung · hanya pemeriksaan status' :
+      'Hermes terpasang · API belum terhubung';
     $('supervisor').textContent = status.supervisor === 'not_installed' ? 'Belum terpasang' : status.supervisor;
     $('browser').textContent = status.browser === 'ready_readonly' ? 'Siap · baca saja' :
       status.browser === 'not_installed' ? 'Belum tersedia' : status.browser;
