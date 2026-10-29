@@ -583,6 +583,7 @@ async function refreshPool(req){
   // The task registry keeps a separate encrypted credential until History expires.
   // Accounts with RunningHub tasks that are not yet registered are retained as a safeguard.
   const {removed}=partitionAccountRefresh(checked,MIN_POOL_CREDITS);
+  let autoRemovedCount=0;
   if(removed.length){
     const safeToRemove=[];
     for(const entry of removed){
@@ -596,12 +597,13 @@ async function refreshPool(req){
     for(const account of toRetire)taskRegistry.retireAccount(account);
     const next=latest.filter(a=>!retiredIds.has(a.id));
     if(next.length!==latest.length)saveVaultAccounts(deviceId,next);
+    autoRemovedCount=latest.length-next.length;
   }
   const remaining=loadGlobalAccounts();
   return {accounts:remaining.map(a=>{
     const status=checked.find(x=>x.account.id===a.id)?.status||null;
     return publicAccount(a,status);
-  }),autoRemovedCount:removed.length,minimumCredits:MIN_POOL_CREDITS};
+  }),autoRemovedCount,minimumCredits:MIN_POOL_CREDITS};
 }
 app.post('/api/accounts/refresh',async(req,res)=>{
   try{res.json(await refreshPool(req));}
