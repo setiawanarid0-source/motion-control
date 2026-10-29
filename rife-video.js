@@ -8,7 +8,7 @@ const execFileAsync=promisify(execFile);
 export const RIFE_WORKFLOW_ID='2032484067282784257'; // Historical reference only; not a billable API workflow ID.
 export const RIFE_TARGET_FPS=60;
 const FALLBACK_RATE=30;
-const EPS=0.001;
+
 
 function parseRate(value){
   const parts=String(value??'').trim().split('/');
@@ -19,7 +19,7 @@ function parseRate(value){
     ? numerator/denominator:NaN;
 }
 const positive=n=>Number.isFinite(n)&&n>0;
-const validFps=fps=>Number.isFinite(fps)&&fps>=1&&fps<RIFE_TARGET_FPS-EPS;
+const validFps=fps=>Number.isFinite(fps)&&fps>=1&&fps<RIFE_TARGET_FPS;
 function roundedRate(rate){return Math.round(rate*1000)/1000;}
 
 // Trust actual frames and duration when container metadata contradicts nominal FPS.
@@ -44,7 +44,7 @@ export function validateRifeVideoProbe(probe){
     Math.abs(guessed-fps)>Math.max(1,0.12*fps);
   // For invalid/60+ metadata, use a verified CFR stream at 30 FPS rather than
   // rejecting the video or misrepresenting its timebase to RIFE.
-  const sourceFps=canUseOriginal?roundedRate(fps):FALLBACK_RATE;
+  const sourceFps=canUseOriginal?Math.min(59.999,roundedRate(fps)):FALLBACK_RATE;
   return {
     width:stream.width,height:stream.height,
     detectedFps:positive(fps)?roundedRate(fps):null,
