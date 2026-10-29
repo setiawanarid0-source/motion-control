@@ -30,11 +30,11 @@ for(const node of Object.values(graph))
 assert.equal(RIFE_TARGET_FPS,60);
 
 const rates=['1/1','12/1','24000/1001','24/1','25/1','30000/1001',
-  '30/1','40/1','48/1','50/1','60000/1001','59/1','59999/1000'];
+  '30/1','40/1','48/1','50/1','60000/1001','59/1','59999/1000','60/1'];
 for(const value of rates){
   const x=validateRifeVideoProbe({streams:[{width:1080,height:1920,avg_frame_rate:value,r_frame_rate:value}]});
   assert.equal(x.width,1080);assert.equal(x.height,1920);assert.equal(x.targetFps,60);
-  assert.ok(x.sourceFps>0&&x.sourceFps<60,value);
+  assert.ok(x.sourceFps>0&&x.sourceFps<=60,value);
   const custom=rifeGraphForSourceFps(graph,x.sourceFps);
   assert.equal(custom['1'].inputs.force_rate,0);
   assert.equal(custom['2'].inputs.source_fps,x.sourceFps);
@@ -44,10 +44,13 @@ for(const value of rates){
 assert.equal(graph['2'].inputs.source_fps,30,'Shared template unchanged for concurrent tasks');
 assert.equal(rifeGraphForSourceFps(graph,24)['2'].inputs.source_fps,24);
 assert.equal(rifeGraphForSourceFps(graph,50)['2'].inputs.source_fps,50);
+assert.equal(rifeGraphForSourceFps(graph,60)['2'].inputs.source_fps,60,
+  '60fps input must be sent to RIFE as 60fps without rate conversion');
+assert.equal(rifeGraphForSourceFps(graph,60)['2'].inputs.target_fps,60);
 assert.throws(()=>validateRifeVideoProbe({streams:[]}),/dimensi/);
-for(const v of ['60/1','120/1'])
+for(const v of ['120/1'])
   assert.throws(()=>validateRifeVideoProbe({streams:[{width:720,height:1280,avg_frame_rate:v,r_frame_rate:v}]}),
-    /di bawah 60/,'60+ source must be explicitly rejected, never converted to 30');
+    /hingga 60/,'Above-60 source should be rejected, never converted to 30');
 for(const v of ['0/0','N/A']){
   assert.throws(()=>validateRifeVideoProbe({streams:[{width:720,height:1280,avg_frame_rate:v,r_frame_rate:v}]}),
     /tidak dapat dibaca/,'Unreadable FPS must be rejected rather than fabricated');
@@ -85,13 +88,13 @@ try{
       '-f','lavfi','-i','color=c=black:s=64x64:r='+fps,'-t','1',
       '-c:v','libx264','-pix_fmt','yuv420p',input],{timeout:30000,maxBuffer:65536});
     const originalBytes=fs.readFileSync(input);
-    if(fps<60){
+    if(fps<=60){
       const result=await verifyRifeInput({path:input});
       assert.equal(result.sourceFps,fps);
       assert.equal(result.width,64);assert.equal(result.height,64);
       assert.equal(result.targetFps,60);
     }else{
-      await assert.rejects(verifyRifeInput({path:input}),/di bawah 60/);
+      await assert.rejects(verifyRifeInput({path:input}),/hingga 60/);
     }
     assert.deepEqual(fs.readFileSync(input),originalBytes,'Source must never be modified');
   }
@@ -112,4 +115,4 @@ assert.ok(!sourceCode.includes('execFileAsync(\'ffmpeg\''),'RIFE preflight must 
 assert.ok(!sourceCode.includes('FALLBACK_RATE'),'RIFE preflight must not invent a 30 FPS fallback');
 assert.ok(app.includes("state.workflow==='rife60'||state.image"));
 assert.ok(html.includes('data-workflow="rife60"'));
-console.log('PASS: RIFE reads native FPS from original video, no 30fps fallback/transcode, rejects 60+ explicitly, preserves MotionFly and queue.');
+console.log('PASS: RIFE accepts native 60fps as target-60 no-op; originals unchanged for 24/25/30/40/50/60; only >60 rejected, no 30fps fallback.');
