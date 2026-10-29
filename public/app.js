@@ -975,6 +975,8 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   b.classList.add('selected'); state.workflow=b.dataset.workflow;
   const videoOnly=state.workflow==='rife60';
   $('#imageDrop').classList.toggle('hidden',videoOnly);
+  // One-video mode fills the media panel rather than leaving a blank image column.
+  $('#videoDrop').style.gridColumn=videoOnly?'1 / -1':'';
   $('#mediaRequirements').textContent=videoOnly?'Cukup satu video 30 FPS · gambar tidak diperlukan':'Kedua file wajib diisi';
   $('#videoDrop').querySelector('strong').textContent=videoOnly?'Source Video (30 FPS)':'Video Reference';
   $('#rifeNotice').classList.toggle('hidden',!videoOnly);
