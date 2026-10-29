@@ -428,7 +428,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     ],
     workflow: JSON.stringify(workflowGraphs[workflowKey]),
     addMetadata: true,
-    retainSeconds: 259200,
+    // RIFE does not reserve a paid retained instance after completion.
+    ...(workflowKey==='rife60'?{}:{retainSeconds:259200}),
   };
   // Match the RunningHub instance selected by the user; keep queued legacy Lite unchanged.
   const instanceType=runningHubInstanceType(mode);
