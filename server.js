@@ -21,6 +21,7 @@ import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
 import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
+import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,8 +52,8 @@ const workflowGraphs = {
 const workflowMeta = {
   rife60: {
     id: 'rife60', name: 'RIFE · ≤60 → 60 FPS',
-    subtitle: 'RIFE target 60 FPS · input hingga 60 FPS · resolusi asli',
-    detail: 'Video di bawah 60 FPS diinterpolasi menjadi 60 FPS. Video 60 FPS diteruskan tanpa menambah frame. Tidak ada upscale, konversi ke 30 FPS, atau perubahan durasi yang disengaja. Uji provider berbayar belum dilakukan.',
+    subtitle: 'RIFE Adaptive · deteksi 60 FPS semu · resolusi asli',
+    detail: 'Video di bawah 60 FPS diinterpolasi ke 60. Video berlabel 60 FPS dianalisis untuk mendeteksi frame duplikat; bila terbukti, RIFE membuat gerakan baru dari frame unik pada FPS efektif terukur (bukan selalu 30). Bila tidak bisa diperbaiki, task tidak dikirim dan kredit RH tidak terpakai. Tanpa upscale; RunningHub belum diuji berbayar.',
     outputKind: 'video'
   },
   r15: {
@@ -586,6 +587,7 @@ async function handleGeneration(req,res){
   const cleanup = () => {
     if(stagedReferences)discardReferences(stagedReferences).catch(e=>console.warn('Reference staging cleanup',e.message));
     if(preparedMotion)preparedMotion.release().catch(e=>console.warn('R15 temporary file cleanup',e.message));
+    if(rifeSource?.release)rifeSource.release().catch(e=>console.warn('RIFE temporary anchors cleanup',e.message));
     for (const f of [imageFile, videoFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
   };
 
@@ -603,9 +605,11 @@ async function handleGeneration(req,res){
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
     if(videoOnly){
       req.progress?.('analyzing');
-      rifeSource=await verifyRifeInput(videoFile);
-      console.info('RIFE source inspected; original video unchanged',
-        {fps:rifeSource.sourceFps,source:rifeSource.detectionMethod});
+      const metadata=await verifyRifeInput(videoFile);
+      rifeSource=await prepareAdaptiveRifeVideo(videoFile,metadata,{maxUploadBytes:VIDEO_MAX});
+      console.info('RIFE adaptive preflight',
+        {fps:metadata.sourceFps,measuredMotionFps:rifeSource.sourceFps,
+         repair:rifeSource.adaptive,duplicateRatio:rifeSource.cadence?.duplicateRatio??0});
     }
     const diagnosticTaskId=String(req.body?.diagnosticTaskId||'');
     const diagnosticAccountId=String(req.body?.diagnosticAccountId||'');
@@ -662,7 +666,7 @@ async function handleGeneration(req,res){
           workflowKey,
           mode,
           imageFile,
-          videoFile:preparedMotion?.file||videoFile,
+          videoFile:preparedMotion?.file||rifeSource?.file||videoFile,
           sourceFps:rifeSource?.sourceFps,
           diagnosticAccount,
           diagnosticTaskId,
