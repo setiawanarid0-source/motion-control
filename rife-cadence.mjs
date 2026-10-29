@@ -32,15 +32,30 @@ export async function prepareAdaptiveRifeVideo(file,probe,{maxUploadBytes=100*10
     const fps=Number(report.metrics?.effectiveFps);
     const frames=Number(report.metrics?.anchorFrames);
     const original=Number(report.metrics?.duration);
-    if(report.status!=='prepared'||!Number.isFinite(fps)||fps<8||fps>=59.5||
-       !Number.isInteger(frames)||frames<12||!Number.isFinite(original)||original<=0)
+    if(report.status!=='prepared'||!Number.isFinite(fps)||fps<4||fps>=59.5||
+       !Number.isInteger(frames)||frames<2||!Number.isFinite(original)||original<=0)
       throw new Error('Pola frame tidak cukup konsisten untuk interpolasi yang aman.');
     const stat=await fs.promises.stat(output);
+    // Check the actual encoded output, not just inferred FPS. This is local
+    // inspection before RunningHub can charge any credits.
+    const {stdout:probeText}=await run('ffprobe',['-v','error','-select_streams','v:0',
+      '-show_entries','stream=width,height,duration:format=duration',
+      '-of','json',output],{timeout:15000,maxBuffer:65536});
+    const verified=JSON.parse(probeText);
+    const stream=verified?.streams?.[0];
+    const actualDuration=Number(stream?.duration)||Number(verified?.format?.duration);
+    if(stream?.width!==Number(report.metrics?.width)||
+       stream?.height!==Number(report.metrics?.height)||
+       !Number.isFinite(actualDuration)||
+       Math.abs(actualDuration-original)>Math.max(.12,original*.05))
+      throw new Error('Durasi atau orientasi/resolusi video anchor tidak sesuai sumber. Task belum dikirim.');
     if(stat.size>maxUploadBytes)
       throw new Error('Video anchor melebihi 100 MB. Perkecil durasi input sebelum memproses.');
     return {...probe,sourceFps:fps,adaptive:true,
       cadence:{duplicateRatio:report.metrics.duplicateRatio,anchorFrames:frames,
-        sourceFrames:report.metrics.sourceFrames,effectiveFps:fps},
+        sourceFrames:report.metrics.sourceFrames,effectiveFps:fps,
+        cadence:report.metrics.cadence||'regular',
+        maxHold:report.metrics.maximumDuplicateRun},
       file:{path:output,originalname:'vanta-motion-anchors.mp4',size:stat.size,mimetype:'video/mp4'},
       async release(){await fs.promises.rm(dir,{recursive:true,force:true});}};
   }catch(error){

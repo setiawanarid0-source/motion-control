@@ -125,8 +125,10 @@ def analyze(path, advertised_fps, rotation):
         if n > 18000:
             raise ValueError("Video terlalu panjang untuk analisis adaptif yang aman.")
     video.release()
-    if n < 30 or not kept:
-        raise ValueError("Durasi/frame video tidak cukup untuk analisis adaptif.")
+    # Even a short clip can be repaired when it contains at least two distinct
+    # motion anchors. Do not require an arbitrary 30 input frames (0.5 seconds).
+    if n < 4 or len(kept) < 2:
+        raise ValueError("Video tidak memiliki cukup frame gerakan untuk interpolasi.")
     duration = n / advertised_fps
     unique_fps = len(kept) / duration
     ratio = duplicates / n
@@ -137,19 +139,23 @@ def analyze(path, advertised_fps, rotation):
                 "anchorFrames": len(kept), "duration": round(duration, 6),
                 "activeTransitions": active, "maximumDuplicateRun": max_hold,
                 "irregularGaps": irregular, "width": width, "height": height}
-    if ratio < 0.20 or active < max(8, len(kept) * 0.10):
-        return "healthy", kept, analysis
-    if unique_fps < 8 or unique_fps >= advertised_fps * .92:
-        return "unreliable", kept, analysis
-    if max_hold > 12 or irregular > max(2, len(gaps)*0.025):
-        return "irregular", kept, analysis
-    if len(gaps) > 15 and np.count_nonzero(gaps <= 4) / len(gaps) < .95:
-        return "irregular", kept, analysis
-    return "repair", kept, analysis
+    # Variable gaps are typical for real camera footage and short videos.
+    # A single unusually long hold or >5-frame interval is NOT grounds to
+    # reject a clip. The effective FPS is measured from unique motion anchors;
+    # the output's total duration remains tied to the original input timebase.
+    # Extremely low-motion clips still avoid a pointless paid RIFE call.
+    analysis['cadence'] = ('variable' if irregular or
+                           (len(gaps) and np.count_nonzero(gaps > 4) / len(gaps) > .05)
+                           else 'regular')
+    if ratio < .12 or active < max(1, len(kept) * .065):
+        return 'healthy', kept, analysis
+    if unique_fps < 4 or unique_fps >= advertised_fps * .92:
+        return 'unreliable', kept, analysis
+    return 'repair', kept, analysis
 
 
-def write_anchors(source, output, indices, fps, width, height, rotation):
-    if not (8 <= fps <= 60):
+def write_anchors(source, output, indices, fps, width, height, rotation, duration):
+    if not (4 <= fps <= 60):
         raise ValueError("FPS gerakan efektif tidak valid.")
     cap = cv2.VideoCapture(source)
     command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
@@ -158,7 +164,7 @@ def write_anchors(source, output, indices, fps, width, height, rotation):
                "-map", "0:v:0", "-map", "1:a?", "-map_metadata", "-1",
                "-map_chapters", "-1", "-c:v", "libx264", "-preset", "veryfast",
                "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
-               "-movflags", "+faststart", "-shortest", output]
+               "-movflags", "+faststart", "-t", f"{duration:.6f}", output]
     proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE)
     next_idx = iter(indices)
@@ -203,11 +209,10 @@ def main():
     metrics['rotationCorrection'] = rotation
     if status != "repair":
         reason = ({"healthy": "Tidak ditemukan pola duplikasi frame yang dapat diperbaiki RIFE.",
-                  "irregular": "Pola frame tertahan terlalu tidak teratur; rekonstruksi dengan FPS tunggal berisiko mengubah timing gerakan.",
                   "unreliable": "FPS gerakan efektif tidak dapat ditentukan dengan cukup yakin."})[status]
         return fail(reason, metrics=metrics)
     write_anchors(opts.source, opts.output, indices, metrics["effectiveFps"],
-                  metrics["width"], metrics["height"], rotation)
+                  metrics["width"], metrics["height"], rotation, metrics["duration"])
     print(json.dumps({"status": "prepared", "metrics": metrics, "output": opts.output}), flush=True)
     return 0
 

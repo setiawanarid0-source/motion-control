@@ -206,6 +206,71 @@ try{
       'Original camera source must remain unchanged');
   }
 
+
+  // Regression: 60fps pseudo-motion with irregular repeated-frame gaps
+  // (first half effective 30fps, second half effective 10fps).
+  // Previously rejected with "Pola frame tertahan terlalu tidak teratur".
+  const variableParts=[];
+  for(const rate of [30,10]){
+    const part=path.join(cadenceDir,'irregular-part-'+rate+'.mp4');
+    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
+      '-f','lavfi','-i','testsrc2=size=320x180:rate='+rate,'-t','1',
+      '-vf','fps=60','-c:v','libx264','-pix_fmt','yuv420p',part],
+      {timeout:30000});
+    variableParts.push(part);
+  }
+  const concat=path.join(cadenceDir,'irregular-concat.txt');
+  fs.writeFileSync(concat,variableParts.map(p=>"file '"+p.replaceAll("'","'\\''")+"'").join('\n'));
+  const variableSource=path.join(cadenceDir,'irregular-60.mp4');
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
+    '-f','concat','-safe','0','-i',concat,'-c','copy',variableSource],
+    {timeout:30000});
+  const variableOriginal=fs.readFileSync(variableSource);
+  const variableProbe=await verifyRifeInput({path:variableSource});
+  assert.ok(Math.abs(variableProbe.sourceFps-60)<.01);
+  const adaptive=await prepareAdaptiveRifeVideo(
+    {path:variableSource,size:variableOriginal.length,mimetype:'video/mp4'},variableProbe);
+  try{
+    assert.equal(adaptive.adaptive,true,
+      'Variable frame-hold pattern must be repaired rather than rejected');
+    assert.equal(adaptive.cadence.cadence,'variable');
+    assert.ok(adaptive.sourceFps>=16&&adaptive.sourceFps<=25,
+      'Effective FPS must be measured, not forced to 30');
+    const result=JSON.parse(String(execFileSync('ffprobe',['-v','error',
+      '-select_streams','v:0','-show_entries','stream=width,height,duration',
+      '-of','json',adaptive.file.path])));
+    assert.equal(result.streams[0].width,320);
+    assert.equal(result.streams[0].height,180);
+    assert.ok(Math.abs(Number(result.streams[0].duration)-2)<.12,
+      'Variable cadence duration must remain original');
+  }finally{await adaptive.release();}
+  assert.deepEqual(fs.readFileSync(variableSource),variableOriginal);
+
+  // Regression: 0.27-second video at 60fps, motion effectively 30fps.
+  // An arbitrary 30-frame minimum or 12-anchor minimum used to reject this.
+  const shortSource=path.join(cadenceDir,'short-60.mp4');
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
+    '-f','lavfi','-i','testsrc2=size=320x180:rate=30','-t','0.267',
+    '-vf','fps=60','-c:v','libx264','-pix_fmt','yuv420p',shortSource],
+    {timeout:30000});
+  const shortOriginal=fs.readFileSync(shortSource);
+  const shortProbe=await verifyRifeInput({path:shortSource});
+  const shortPrepared=await prepareAdaptiveRifeVideo(
+    {path:shortSource,size:shortOriginal.length,mimetype:'video/mp4'},shortProbe);
+  try{
+    assert.equal(shortPrepared.adaptive,true,'Short video with real motion must be repairable');
+    assert.ok(shortPrepared.cadence.anchorFrames<12,'Fixture must cover <12 anchors');
+    assert.ok(Math.abs(shortPrepared.sourceFps-30)<3);
+    const encoded=JSON.parse(String(execFileSync('ffprobe',['-v','error',
+      '-select_streams','v:0','-show_entries','stream=width,height,duration',
+      '-of','json',shortPrepared.file.path])));
+    assert.equal(encoded.streams[0].width,320);
+    assert.equal(encoded.streams[0].height,180);
+    assert.ok(Math.abs(Number(encoded.streams[0].duration)-
+      shortPrepared.cadence.sourceFrames/60)<.12);
+  }finally{await shortPrepared.release();}
+  assert.deepEqual(fs.readFileSync(shortSource),shortOriginal);
+
   const healthy=path.join(cadenceDir,'native-60.mp4');
   execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
     '-f','lavfi','-i','testsrc2=size=320x180:rate=60','-t','2',

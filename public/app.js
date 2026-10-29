@@ -246,7 +246,8 @@ async function restoreRecentRifeFailure(){
       Date.now()-Date.parse(latestRife.updatedAt)<12*60*60*1000;
     // Pre-deploy FPS errors are obsolete after the repaired FPS preflight.
     const oldFpsRejection=/FPS video harus mulai dari 1 dan lebih rendah dari 60 FPS|Video terdeteksi [\\d.]+ FPS\\. RIFE ini hanya menerima FPS sumber di bawah 60/i.test(String(latestRife?.error||''));
-    if(state.workflow==='rife60'&&!state.task&&!state.submission&&recentFailure&&!oldFpsRejection)
+    const obsoleteCadenceRejection=/Pola frame tertahan terlalu tidak teratur/i.test(String(latestRife?.error||''));
+    if(state.workflow==='rife60'&&!state.task&&!state.submission&&recentFailure&&!oldFpsRejection&&!obsoleteCadenceRejection)
       displaySubmissionFailure(latestRife,{restored:true});
   }catch(error){console.warn('RIFE failure recovery unavailable',error.message);}
 }
