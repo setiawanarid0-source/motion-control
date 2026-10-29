@@ -208,7 +208,48 @@ function startVisibleTimer(){
   // Internal task timestamps are retained for History; no unsolicited duration UI.
   state.startedAt=Date.now();
 }
+// Keep provider preflight errors visible rather than relying on a disappearing toast.
+function clearFailureDetail(){
+  const el=$('#taskFailureDetail');
+  if(el){el.textContent='';el.classList.add('hidden');}
+}
+function displaySubmissionFailure(data,{restored=false}={}){
+  const msg=String(data?.error||'Alasan kegagalan tidak dikembalikan provider.').trim().slice(0,950);
+  const providerStage=data?.failureStage==='submitting';
+  const ambiguous=data?.stage==='uncertain';
+  const rejectedGraph=/prompt_outputs_failed_validation|RUNNINGHUB_WORKFLOW_VALIDATION/i.test(msg);
+  const capacityFull=/TASK_QUEUE_MAXED/i.test(String(data.error||''));
+  $('#taskSection').classList.remove('hidden');
+  $('#taskStatus').textContent=ambiguous?'Status penerimaan belum pasti':
+    capacityFull?'Antrean akun penuh':
+    rejectedGraph?'Workflow ditolak RunningHub':
+    providerStage?'Pengiriman gagal':'Persiapan belum berhasil';
+  $('#taskEstimate').textContent=ambiguous?
+    'Jangan kirim ulang sebelum memeriksa History':
+    providerStage||rejectedGraph?'Belum ada task ID dari RunningHub':
+    'Gagal sebelum pengiriman task';
+  $('#taskId').textContent='Belum ada task ID';
+  if(restored)$('#taskWorkflow').textContent='RIFE · <60 → 60 FPS';
+  const el=$('#taskFailureDetail');
+  if(el){
+    el.textContent='Penyebab: '+msg+(restored?'\nKegagalan terakhir disimpan dari percobaan sebelumnya.':'');
+    el.classList.remove('hidden');
+  }
+}
+async function restoreRecentRifeFailure(){
+  if(state.workflow!=='rife60'||state.task||state.submission)return;
+  try{
+    const data=await api('/api/generate/jobs');
+    const latestRife=(data.jobs||[]).find(item=>item.workflow==='rife60');
+    const recentFailure=latestRife&&['error','uncertain'].includes(latestRife.stage)&&
+      Number.isFinite(Date.parse(latestRife.updatedAt))&&
+      Date.now()-Date.parse(latestRife.updatedAt)<12*60*60*1000;
+    if(state.workflow==='rife60'&&!state.task&&!state.submission&&recentFailure)
+      displaySubmissionFailure(latestRife,{restored:true});
+  }catch(error){console.warn('RIFE failure recovery unavailable',error.message);}
+}
 function showStartingTask(){
+  clearFailureDetail();
   state.startedAt=null;
   clearInterval(state.elapsedTimer);
   $('#taskSection').classList.remove('hidden');
@@ -297,20 +338,12 @@ async function checkSubmission(){
     if(data.stage==='accepted'){
       completedSubmission(data);
     }else if(data.stage==='error'){
-      const capacityFull=/TASK_QUEUE_MAXED/i.test(String(data.error||''));
-      const rejectedGraph=/prompt_outputs_failed_validation/i.test(String(data.error||''));
-      const missingH3=/Character Swap H3 belum siap di RunningHub/i.test(String(data.error||''));
-      $('#taskStatus').textContent=capacityFull?'Antrean akun RunningHub penuh':
-        rejectedGraph?'Workflow ditolak RunningHub':missingH3?'Workflow H3 belum tersedia':'Persiapan belum berhasil';
-      $('#taskEstimate').textContent=capacityFull||rejectedGraph||missingH3?
-        'Task tidak diterima · tidak ada konfirmasi biaya generasi':
-        'Task belum dikirim ke RunningHub';
-      toast(data.error||'Persiapan gagal sebelum task dikirim.',true);
+      displaySubmissionFailure(data);
+      toast('Proses gagal. Detail penyebab ditampilkan di Live Task.',true);
       clearSubmission();
     }else if(data.stage==='uncertain'){
-      $('#taskStatus').textContent='Status pengiriman belum pasti';
-      $('#taskEstimate').textContent='Periksa History sebelum mencoba lagi';
-      toast(data.error||'Status pengiriman perlu diperiksa sebelum mencoba ulang.',true);
+      displaySubmissionFailure(data);
+      toast('Status RunningHub belum pasti. Jangan kirim ulang sebelum memeriksa History.',true);
       clearSubmission();
     }else{
       showSubmissionStage(data);
@@ -983,6 +1016,7 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');
   $('#fullLabNotice').classList.toggle('hidden',state.workflow!=='r4Lab');
   updateEstimates();updateGenerate();
+  if(state.workflow==='rife60')restoreRecentRifeFailure();
 });
 $$('.mode-card').forEach(b=>b.onclick=()=>{
   $$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode;

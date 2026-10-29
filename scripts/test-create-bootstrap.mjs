@@ -69,6 +69,7 @@ const context={
   },
   switchView:view=>requested.push(view),
   generate:generated,refreshAccounts:refreshed,
+  restoreRecentRifeFailure:()=>{},
   setMedia:(kind,file)=>uploads.push({kind,file}),
   updateEstimates:()=>{},updateGenerate:()=>{},
   toast:message=>errors.push(message),

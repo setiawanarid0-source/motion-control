@@ -49,6 +49,7 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
   function view(x){
     return {jobId:x.jobId,stage:x.stage,message:x.message||LABELS[x.stage]||'Menyiapkan',
       createdAt:x.createdAt,updatedAt:x.updatedAt,
+      workflow:x.body?.workflow||null,failureStage:x.failureStage||null,
       task:x.stage==='accepted'?x.task||null:null,error:x.error||null};
   }
   function owned(id,deviceId){
