@@ -67,14 +67,14 @@
 
       <section id="view-create" class="view active">
         <div class="hero-copy">
-          <div class="hero-kicker"><span class="pulse"></span>4 WORKFLOWS + 1 TEST</div>
+          <div class="hero-kicker"><span class="pulse"></span>MOTION CONTROL + FRAME INTERPOLATION</div>
           <h2>Direct motion.<br><span>Choose the pipeline.</span></h2>
-          <p>Unggah satu gambar karakter dan satu driving video, kemudian pilih workflow. Setiap workflow berjalan terpisah tanpa mengubah pipeline lain.</p>
+          <p>Motion transfer menggunakan gambar karakter + driving video. RIFE 60 FPS cukup satu video, tanpa upscale dan tanpa mengubah karakter.</p>
         </div>
 
         <div class="workspace-grid">
           <div class="panel media-panel">
-            <div class="panel-head"><span>01</span><div><h3>Source media</h3><p>Kedua file wajib diisi</p></div></div>
+            <div class="panel-head"><span>01</span><div><h3>Source media</h3><p id="mediaRequirements">Kedua file wajib diisi</p></div></div>
             <div class="upload-grid">
               <label class="dropzone" id="imageDrop">
                 <input id="referenceImage" type="file" accept="image/jpeg,image/png,image/webp" hidden />
@@ -98,6 +98,11 @@
 
             <label class="field-label">WORKFLOW</label>
             <div class="workflow-list" id="workflowList">
+              <button class="workflow-card" data-workflow="rife60" type="button">
+                <div class="workflow-row"><strong>RIFE · 30 → 60 FPS</strong><span class="badge badge-accent">NEW</span></div>
+                <p>AI Frame Interpolation 2× · original resolution · video-only</p>
+                <small>30 FPS ke 60 FPS. Tidak melakukan upscale, motion transfer, atau perubahan durasi yang disengaja. Memakai kredit RunningHub.</small>
+              </button>
               <button class="workflow-card selected" data-workflow="r15">
                 <div class="workflow-row"><strong>MotionFly R4 · Camera Engine</strong><span class="badge badge-accent">01</span></div>
                 <p>35 FPS · 1080 × 1920 · 6 steps · CFG 1 · Tes</p>
@@ -120,6 +125,7 @@
               </button>
             </div>
 
+            <div id="rifeNotice" class="diagnostic-notice hidden" role="note"><strong>Frame Interpolation tanpa Upscale</strong><p>Unggah video 30 FPS (29,97 diterima). Resolusi dan audio sumber dipertahankan; RIFE menambah frame perantara. Biaya RunningHub tergantung durasi dan mesin, belum diverifikasi. Hindari video terlalu panjang jika VRAM terbatas.</p></div>
             <div id="diagnosticNotice" class="diagnostic-notice hidden" role="note"><strong>Mode diagnosis SAM3</strong><p>Wajib upload driving video yang sudah dikompensasi ke 35 FPS, bukan video mentah. Tes ini menghasilkan mask saja dan tetap dapat menggunakan kredit RunningHub. Belum ada estimasi biaya yang tervalidasi.</p></div>
             <div id="fullLabNotice" class="diagnostic-notice hidden" role="note"><strong>R4 Full Controlled · Tes berbayar</strong><p id="r4LabMaskSource"></p><p>Upload kembali gambar referensi dan driving video hasil kompensasi 35 FPS yang sama dengan tes SAM3. Dua mask akan dipakai ulang otomatis dari task tersebut. Mask belum menjalani refinement offline. Proses 337 frame dengan RunningHub dan membutuhkan kredit. Kamera statis belum terbukti.</p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
@@ -328,7 +334,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/auth.js?v=20261026-global-login" defer></script>
-  <script src="/app.js?v=20261023-grok2-no-h3-v1" defer></script>
+  <script src="/app.js?v=20261029-rife60-v1" defer></script>
   <script src="/kie-ui.js?v=20261023-grok2-v1" defer></script>
   <script src="/history-gallery.js?v=20261024-image-fullscreen-v1" defer></script>
 </body>
