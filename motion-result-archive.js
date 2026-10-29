@@ -7,7 +7,10 @@ import {Transform} from 'node:stream';
 import axios from 'axios';
 
 export const RESULT_RETENTION_MS=3*24*60*60*1000;
-export const MAX_RESULT_BYTES=250*1024*1024;
+// VANTA's existing shared /data Railway volume is 256 MB.
+// Leave at least 48 MB free for account vaults, task registry, and other jobs.
+export const MAX_RESULT_BYTES=128*1024*1024;
+export const RESERVED_FREE_BYTES=48*1024*1024;
 const TASK_ID=/^\d{10,25}$/;
 function validUrl(raw){
   try{
@@ -42,10 +45,14 @@ export function createMotionResultArchive({dir,request=axios.get,clock=()=>Date.
     const promise=(async()=>{
       await fs.promises.mkdir(dir,{recursive:true,mode:0o700});
       // Avoid filling Hobby disk and disrupting other persistent VANTA state.
+      let safeLimit=maxFileBytes;
       if(typeof fs.statfsSync==='function'){
         const st=fs.statfsSync(dir),available=Number(st.bavail)*Number(st.bsize);
-        if(Number.isFinite(available)&&available<maxFileBytes+128*1024*1024)
-          throw Error('Insufficient persistent disk space to cache output video');
+        if(Number.isFinite(available)){
+          safeLimit=Math.min(maxFileBytes,Math.max(0,available-RESERVED_FREE_BYTES));
+          if(safeLimit<1024*1024)
+            throw Error('Volume VANTA penuh; tidak dapat menyimpan hasil secara aman');
+        }
       }
       const tmp=dest+'.tmp-'+process.pid+'-'+clock();
       let upstream;
@@ -53,15 +60,19 @@ export function createMotionResultArchive({dir,request=axios.get,clock=()=>Date.
         upstream=await request(url,{responseType:'stream',timeout:120000,
           maxRedirects:2,validateStatus:status=>status===200});
         const announced=Number(upstream.headers?.['content-length']||0);
-        if(announced>maxFileBytes)throw Error('Result video exceeds cache size limit');
+        if(announced>safeLimit)throw Error('Video melebihi ruang arsip VANTA yang tersedia');
         let total=0;
         const limiter=new Transform({transform(chunk,enc,callback){
           total+=chunk.length;
-          if(total>maxFileBytes)return callback(Error('Result video exceeds cache size limit'));
+          if(total>safeLimit)return callback(Error('Arsip video melebihi ruang disk VANTA yang aman'));
           callback(null,chunk);
         }});
         await pipeline(upstream.data,limiter,fs.createWriteStream(tmp,{flags:'wx',mode:0o600}));
         if(total<1024)throw Error('Result video was empty');
+        // Reject upstream HTML/errors masquerading as MP4, before committing.
+        const contentType=String(upstream.headers?.['content-type']||'').toLowerCase();
+        if(contentType.includes('text/html')||contentType.includes('application/json'))
+          throw Error('Provider returned a non-video response');
         await fs.promises.rename(tmp,dest);
         return dest;
       }finally{
