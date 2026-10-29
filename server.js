@@ -423,7 +423,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
         ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName }]
         : [{ nodeId: '30', fieldName: 'image', fieldValue: imageName },
            { nodeId: '33', fieldName: 'video', fieldValue: videoName }]),
-      ...(workflowKey === 'koh1AntiObject' ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
+      ...(['koh1AntiObject','rife60'].includes(workflowKey) ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
       ...(masks ? [{ nodeId: '500', fieldName: 'image', fieldValue: masks.imageName }, { nodeId: '501', fieldName: 'video', fieldValue: masks.videoName }] : []),
     ],
     workflow: JSON.stringify(workflowGraphs[workflowKey]),
