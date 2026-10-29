@@ -20,7 +20,7 @@ import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,may
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
-import {verifyRifeInput,RIFE_WORKFLOW_ID} from './rife-video.js';
+import {verifyRifeInput,rifeGraphForSourceFps,RIFE_WORKFLOW_ID,RIFE_TARGET_FPS} from './rife-video.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -50,9 +50,9 @@ const workflowGraphs = {
 
 const workflowMeta = {
   rife60: {
-    id: 'rife60', name: 'RIFE · 30 → 60 FPS',
-    subtitle: 'AI frame interpolation 2× · resolusi asli · satu video',
-    detail: 'Tambahkan frame di antara frame asli. Tidak melakukan upscale atau motion transfer. Memerlukan kredit RunningHub; uji hasil asli belum dilakukan.',
+    id: 'rife60', name: 'RIFE · <60 → 60 FPS',
+    subtitle: 'RIFE target 60 FPS · sumber di bawah 60 FPS · resolusi asli',
+    detail: 'RIFE interpolasi langsung dari FPS video sumber ke 60 FPS, tanpa memaksa video menjadi 30 FPS. Resolusi dan durasi dipertahankan. Uji provider berbayar belum dilakukan.',
     outputKind: 'video'
   },
   r15: {
@@ -411,7 +411,8 @@ async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
     return {videoName,imageName};
   }finally{await fs.promises.rm(dir,{recursive:true,force:true});}
 }
-async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
+  const selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey, imageFile);
   const videoName = await uploadToRunningHub(apiKey, videoFile);
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
@@ -420,13 +421,15 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     workflowId,
     nodeInfoList: [
       ...(workflowKey==='rife60'
-        ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName }]
+        ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName },
+           { nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps },
+           { nodeId: '2', fieldName: 'target_fps', fieldValue: RIFE_TARGET_FPS }]
         : [{ nodeId: '30', fieldName: 'image', fieldValue: imageName },
            { nodeId: '33', fieldName: 'video', fieldValue: videoName }]),
       ...(['koh1AntiObject','rife60'].includes(workflowKey) ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
       ...(masks ? [{ nodeId: '500', fieldName: 'image', fieldValue: masks.imageName }, { nodeId: '501', fieldName: 'video', fieldValue: masks.videoName }] : []),
     ],
-    workflow: JSON.stringify(workflowGraphs[workflowKey]),
+    workflow: JSON.stringify(selectedGraph),
     addMetadata: true,
     // RIFE does not reserve a paid retained instance after completion.
     ...(workflowKey==='rife60'?{}:{retainSeconds:259200}),
@@ -575,6 +578,7 @@ async function handleGeneration(req,res){
   const imageFile = req.files?.referenceImage?.[0];
   const videoFile = req.files?.videoReference?.[0];
   let preparedMotion=null;
+  let rifeSource=null;
   let stagedReferences=null;
   const cleanup = () => {
     if(stagedReferences)discardReferences(stagedReferences).catch(e=>console.warn('Reference staging cleanup',e.message));
@@ -594,7 +598,7 @@ async function handleGeneration(req,res){
     const mode = String(req.body?.mode || 'standard');
     const requestedAccountId = String(req.body?.accountId || 'auto');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
-    if(videoOnly)await verifyRifeInput(videoFile);
+    if(videoOnly)rifeSource=await verifyRifeInput(videoFile);
     const diagnosticTaskId=String(req.body?.diagnosticTaskId||'');
     const diagnosticAccountId=String(req.body?.diagnosticAccountId||'');
     if(workflowKey==='r4Lab' && (!/^\d{10,25}$/.test(diagnosticTaskId)||!diagnosticAccountId))
@@ -649,6 +653,7 @@ async function handleGeneration(req,res){
           mode,
           imageFile,
           videoFile:preparedMotion?.file||videoFile,
+          sourceFps:rifeSource?.sourceFps,
           diagnosticAccount,
           diagnosticTaskId,
           onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting');},
