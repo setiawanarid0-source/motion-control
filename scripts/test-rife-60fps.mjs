@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {validateRifeVideoProbe,rifeGraphForSourceFps,verifyRifeInput,RIFE_TARGET_FPS} from '../rife-video.js';
 import {createGenerationQueue} from '../generation-queue.js';
+import {prepareAdaptiveRifeVideo} from '../rife-cadence.mjs';
 
 const graph=JSON.parse(fs.readFileSync(new URL('../workflows/rife60-api.json',import.meta.url),'utf8'));
 assert.deepEqual(Object.keys(graph),['1','2','3']);
@@ -106,13 +107,65 @@ const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8
 assert.ok(server.includes('workflowId: LOCKED_WORKFLOW_ID,'));
 assert.ok(server.includes("nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps"));
 assert.ok(server.includes("nodeId: '2', fieldName: 'target_fps', fieldValue: RIFE_TARGET_FPS"));
-assert.ok(server.includes('rifeSource=await verifyRifeInput(videoFile);'));
-assert.ok(server.includes('videoFile:preparedMotion?.file||videoFile,'));
-assert.ok(!server.includes('rifeSource?.file'),'RIFE must upload original source');
+assert.ok(server.includes('const metadata=await verifyRifeInput(videoFile);'));
+assert.ok(server.includes('rifeSource=await prepareAdaptiveRifeVideo(videoFile,metadata,{maxUploadBytes:VIDEO_MAX});'));
+assert.ok(server.includes('videoFile:preparedMotion?.file||rifeSource?.file||videoFile,'));
+assert.ok(server.includes('rifeSource.release().catch'),'Prepared RIFE anchors must always be cleaned');
 assert.ok(!server.includes('prepareRifeSource'),'RIFE must not create local FPS converted video');
 const sourceCode=fs.readFileSync(new URL('../rife-video.js',import.meta.url),'utf8');
 assert.ok(!sourceCode.includes('execFileAsync(\'ffmpeg\''),'RIFE preflight must not transcode source');
 assert.ok(!sourceCode.includes('FALLBACK_RATE'),'RIFE preflight must not invent a 30 FPS fallback');
 assert.ok(app.includes("state.workflow==='rife60'||state.image"));
 assert.ok(html.includes('data-workflow="rife60"'));
-console.log('PASS: RIFE accepts native 60fps as target-60 no-op; originals unchanged for 24/25/30/40/50/60; only >60 rejected, no 30fps fallback.');
+
+
+// Real videos masquerading as 60fps: actual 30fps/24fps motion repeated to 60.
+// Analyze and create non-upscaled motion anchors BEFORE any RunningHub charge.
+const cadenceDir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-rife-adaptive-'));
+try{
+  for(const nativeRate of [24,30]){
+    const source=path.join(cadenceDir,'fake-'+nativeRate+'.mp4');
+    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
+      '-f','lavfi','-i','testsrc2=size=320x180:rate='+nativeRate,'-t','2',
+      '-vf','fps=60','-c:v','libx264','-pix_fmt','yuv420p',source],{timeout:30000});
+    const original=fs.readFileSync(source);
+    const info=await verifyRifeInput({path:source});
+    assert.equal(info.sourceFps,60,'Metadata must still report 60fps');
+    const prepared=await prepareAdaptiveRifeVideo({path:source,size:original.length,mimetype:'video/mp4'},info);
+    try{
+      assert.equal(prepared.adaptive,true);
+      assert.equal(prepared.sourceFps,nativeRate,'Motion rate must be measured, never fixed');
+      assert.equal(prepared.cadence.effectiveFps,nativeRate);
+      const graphForTask=rifeGraphForSourceFps(graph,prepared.sourceFps);
+      assert.equal(graphForTask['2'].inputs.target_fps,60);
+      const json=JSON.parse(String(execFileSync('ffprobe',['-v','error',
+        '-select_streams','v:0','-show_entries','stream=width,height,avg_frame_rate,duration',
+        '-of','json',prepared.file.path])));
+      assert.equal(json.streams[0].width,320);
+      assert.equal(json.streams[0].height,180);
+      assert.ok(Math.abs(Number(json.streams[0].duration)-2)<.08,'Original speed and duration preserved');
+      assert.ok(Math.abs(Number(json.streams[0].avg_frame_rate.split('/')[0])/Number(json.streams[0].avg_frame_rate.split('/')[1])-nativeRate)<1);
+    }finally{await prepared.release();}
+    assert.deepEqual(fs.readFileSync(source),original,'Never overwrite uploaded file');
+  }
+  const healthy=path.join(cadenceDir,'native-60.mp4');
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
+    '-f','lavfi','-i','testsrc2=size=320x180:rate=60','-t','2',
+    '-c:v','libx264','-pix_fmt','yuv420p',healthy],{timeout:30000});
+  const healthyOriginal=fs.readFileSync(healthy);
+  await assert.rejects(prepareAdaptiveRifeVideo(
+    {path:healthy,size:healthyOriginal.length},
+    await verifyRifeInput({path:healthy})
+  ),/Tidak ditemukan pola duplikasi/,'Healthy source should not trigger billable no-op RIFE');
+  assert.deepEqual(fs.readFileSync(healthy),healthyOriginal);
+  const native25=path.join(cadenceDir,'native-25.mp4');
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
+    '-f','lavfi','-i','testsrc2=size=320x180:rate=25','-t','1',
+    '-c:v','libx264','-pix_fmt','yuv420p',native25],{timeout:30000});
+  const nativeInfo=await prepareAdaptiveRifeVideo({path:native25},await verifyRifeInput({path:native25}));
+  assert.equal(nativeInfo.adaptive,false);
+  assert.equal(nativeInfo.sourceFps,25);
+  assert.equal(nativeInfo.file.path,native25,'Do not preprocess genuine sub-60fps inputs');
+}finally{fs.rmSync(cadenceDir,{recursive:true,force:true});}
+
+console.log('PASS: RIFE preserves native FPS; adaptive 60fps duplicates are repaired using measured 24/30fps anchors, native 60fps is not charged.');
