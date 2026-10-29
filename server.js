@@ -712,8 +712,7 @@ async function handleGeneration(req,res){
         lastError = error;
         if(videoOnly)console.warn('RIFE task attempt failed',
           {stage:req.submissionAttempted?'provider_submission':'pre_submit',
-           reason:String(error.message||error).replace(/Bearer\\s+\\S+/ig,'Bearer [redacted]')
-             .replace(/apiKey[\\s:=\\\"]+[^,\\s}]+/ig,'apiKey=[redacted]').slice(0,240)});
+           class:String(error.code||error.name||'unknown').slice(0,50)});
         if(isDefinitelyRejectedGraph(error)){
           // RunningHub explicitly declined this graph before it entered the queue.
           // Do not resend the same invalid graph to other accounts.
