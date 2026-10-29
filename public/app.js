@@ -1018,7 +1018,7 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   updateEstimates();updateGenerate();
   if(state.workflow==='rife60')restoreRecentRifeFailure();
 });
-$('.mode-card').forEach(b=>b.onclick=()=>{
+$$('.mode-card').forEach(b=>b.onclick=()=>{
   $$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode;
 });
 initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');
