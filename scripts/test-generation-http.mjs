@@ -103,7 +103,27 @@ try{
   });
   assert.equal(liteResponse.status,400,'Legacy Lite must not be available for new uploads');
   assert.match((await liteResponse.json()).error,/Standard atau Plus/);
-  console.log('PASS: HTTP 202 before processing, Standard/Plus validation, session isolation, and idempotency');
+  // RIFE accepts one source video without referenceImage and never creates
+  // a paid task with malformed media; other motion workflows still require both.
+  const rifeId=crypto.randomUUID();
+  const rifeForm=new FormData();
+  rifeForm.append('videoReference',new Blob([Buffer.alloc(4096,3)],{type:'video/mp4'}),'source.mp4');
+  rifeForm.append('workflow','rife60');rifeForm.append('mode','standard');rifeForm.append('accountId','auto');
+  const rifeStart=await fetch(url+'/api/generate',{
+    method:'POST',headers:{...headers,'X-Vanta-Request-Id':rifeId},body:rifeForm
+  });
+  assert.equal(rifeStart.status,202,'RIFE only requires video input');
+  assert.equal((await rifeStart.json()).jobId,rifeId);
+  let rifeJob;
+  for(let i=0;i<50;i++){
+    const reply=await fetch(url+'/api/generate/jobs/'+rifeId,{headers});
+    rifeJob=await reply.json();
+    if(rifeJob.stage==='error')break;
+    await new Promise(r=>setTimeout(r,100));
+  }
+  assert.equal(rifeJob.stage,'error','Invalid 30fps source must be rejected without paid task');
+  assert.equal(rifeJob.task,null);
+  console.log('PASS: HTTP 202 before processing, Standard/Plus validation, RIFE video-only preflight, session isolation, and idempotency');
 }finally{
   server.kill('SIGTERM');
   await new Promise(resolve=>{if(server.exitCode!==null||server.killed){setTimeout(resolve,300);}else{server.once('exit',resolve);setTimeout(resolve,2000);}});
