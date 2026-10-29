@@ -71,6 +71,8 @@ assert.ok(server.includes("dir:path.join(DATA_DIR,'motion-results')"),'Archive m
 const client=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 assert.ok(client.includes('await claimBrowserHistory();')&&client.includes('Akun belum dihapus: ada hasil lama'),
   'Browser-only History must be registered before removing original account credentials');
+assert.ok(server.includes('req.body?.allowRetirement!==false'),
+  'Account refresh must preserve browser-only history if claim is incomplete');
 assert.ok(server.includes('autoRemovedCount=latest.length-next.length;'),
   'Refresh must report only accounts truly removed after archiving');
 console.log('PASS: result media survives account deletion/restart, cache before remote, disk quota, safe cleanup and history TTL.');
