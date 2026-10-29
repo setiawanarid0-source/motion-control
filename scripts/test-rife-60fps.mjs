@@ -250,7 +250,7 @@ try{
   // An arbitrary 30-frame minimum or 12-anchor minimum used to reject this.
   const shortSource=path.join(cadenceDir,'short-60.mp4');
   execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
-    '-f','lavfi','-i','testsrc2=size=320x180:rate=30','-t','.267',
+    '-f','lavfi','-i','testsrc2=size=320x180:rate=30','-t','0.267',
     '-vf','fps=60','-c:v','libx264','-pix_fmt','yuv420p',shortSource],
     {timeout:30000});
   const shortOriginal=fs.readFileSync(shortSource);
