@@ -144,7 +144,7 @@ try{
       assert.equal(json.streams[0].width,320);
       assert.equal(json.streams[0].height,180);
       assert.ok(Math.abs(Number(json.streams[0].duration)-2)<.08,'Original speed and duration preserved');
-      assert.ok(Math.abs(Number(json.streams[0].avg_frame_rate)-nativeRate)<1);
+      assert.ok(Math.abs(Number(json.streams[0].avg_frame_rate.split('/')[0])/Number(json.streams[0].avg_frame_rate.split('/')[1])-nativeRate)<1);
     }finally{await prepared.release();}
     assert.deepEqual(fs.readFileSync(source),original,'Never overwrite uploaded file');
   }
