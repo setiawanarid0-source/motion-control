@@ -117,8 +117,9 @@ async function loadSession(){
   // History has been safely claimed in the server vault.
   await syncServerHistory();
   claimBrowserHistory().then(async claimed=>{
-    if(claimed)await refreshAccounts();
-    else console.warn('Account refresh delayed until History is preserved');
+    state.historyClaimed=Boolean(claimed);
+    await refreshAccounts();
+    if(!claimed)console.warn('Automatic account retirement deferred until History is preserved');
     await syncServerHistory();
   }).catch(error=>console.warn('Background History recovery',error.message));
 }
@@ -151,7 +152,8 @@ async function refreshAccounts(){
     return;
   }
   try{
-    const data=await api('/api/accounts/refresh',{method:'POST',body:'{}'});
+    const data=await api('/api/accounts/refresh',{method:'POST',
+      body:JSON.stringify({allowRetirement:state.historyClaimed===true})});
     state.accounts=data.accounts||[];
     renderAccounts();
     updatePoolSummary();
