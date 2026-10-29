@@ -68,4 +68,9 @@ assert.ok(download.includes('motionResults.read(req.params.taskId)'));
 assert.ok(download.indexOf('motionResults.read(req.params.taskId)')<
   download.indexOf('resolveTaskVideoUrl('));
 assert.ok(server.includes("dir:path.join(DATA_DIR,'motion-results')"),'Archive must share existing persistent volume');
+const client=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+assert.ok(client.includes('await claimBrowserHistory();')&&client.includes('Akun belum dihapus: ada hasil lama'),
+  'Browser-only History must be registered before removing original account credentials');
+assert.ok(server.includes('autoRemovedCount=latest.length-next.length;'),
+  'Refresh must report only accounts truly removed after archiving');
 console.log('PASS: result media survives account deletion/restart, cache before remote, disk quota, safe cleanup and history TTL.');
