@@ -19,7 +19,7 @@ export async function prepareAdaptiveRifeVideo(file,probe,{maxUploadBytes=100*10
   try{
     let stdout;
     try{
-      ({stdout}=await run('/usr/bin/python3',[analyzer,file.path,output,'--fps',String(probe.sourceFps)],
+      ({stdout}=await run(process.env.RIFE_PYTHON||'/usr/bin/python3',[analyzer,file.path,output,'--fps',String(probe.sourceFps)],
         {timeout:10*60*1000,maxBuffer:65536}));
     }catch(error){
       stdout=error.stdout||'';
