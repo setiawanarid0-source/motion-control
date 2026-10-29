@@ -20,7 +20,7 @@ import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,may
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
-import {verifyRifeInput,rifeGraphForSourceFps,RIFE_WORKFLOW_ID,RIFE_TARGET_FPS} from './rife-video.js';
+import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -648,7 +648,9 @@ async function handleGeneration(req,res){
         req.progress?.('uploading_inputs');
         const task = await createTask({
           apiKey: account.key,
-          workflowId: videoOnly ? RIFE_WORKFLOW_ID : LOCKED_WORKFLOW_ID,
+          // RH custom workflow JSON overrides workflowId; use the already-owner-accessible
+          // workflow ID, not a public post owned by another RunningHub user.
+          workflowId: LOCKED_WORKFLOW_ID,
           workflowKey,
           mode,
           imageFile,
@@ -708,6 +710,10 @@ async function handleGeneration(req,res){
         });
       } catch (error) {
         lastError = error;
+        if(videoOnly)console.warn('RIFE task attempt failed',
+          {stage:req.submissionAttempted?'provider_submission':'pre_submit',
+           reason:String(error.message||error).replace(/Bearer\\s+\\S+/ig,'Bearer [redacted]')
+             .replace(/apiKey[\\s:=\\\"]+[^,\\s}]+/ig,'apiKey=[redacted]').slice(0,240)});
         if(isDefinitelyRejectedGraph(error)){
           // RunningHub explicitly declined this graph before it entered the queue.
           // Do not resend the same invalid graph to other accounts.
@@ -760,16 +766,17 @@ async function runQueuedGeneration(job,report){
     });
     return;
   }
+  const failureStage=generationQueue.read(job.jobId)?.stage||'queued';
   if(req.submissionAttempted){
     console.warn('RunningHub acceptance unconfirmed',job.jobId,
       String(result?.error||'No acknowledgement').slice(0,160));
     generationQueue.update(job.jobId,{
-      stage:'uncertain',
+      stage:'uncertain',failureStage,
       error:'Belum dapat memastikan apakah RunningHub menerima task. Periksa History sebelum mencoba lagi.'
     });
   }else{
     generationQueue.update(job.jobId,{
-      stage:'error',error:result?.error||
+      stage:'error',failureStage,error:result?.error||
         (httpStatus===400?'Persiapan media belum berhasil.':'Tidak dapat memulai pemrosesan video.')
     });
   }
