@@ -39,7 +39,7 @@ try{
   assert.ok(!fs.readdirSync(dir).some(x=>x.includes('0778')),'Failed copies must not leave corrupt files');
   const tooLarge=createMotionResultArchive({dir,maxFileBytes:1024,
     request:async()=>({headers:{'content-length':'90000'},data:Readable.from([bytes])})});
-  await assert.rejects(tooLarge.mirror('2110000000000000779',url),/melebihi ruang/);
+  await assert.rejects(tooLarge.mirror('2110000000000000779',url),/melebihi ruang|Volume VANTA penuh/);
   assert.equal(fs.readdirSync(dir).length,1);
   assert.equal(MAX_RESULT_BYTES,128*1024*1024);
   assert.equal(RESERVED_FREE_BYTES,48*1024*1024);
