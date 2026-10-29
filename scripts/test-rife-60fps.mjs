@@ -148,6 +148,44 @@ try{
     }finally{await prepared.release();}
     assert.deepEqual(fs.readFileSync(source),original,'Never overwrite uploaded file');
   }
+  // 60fps camera video with a real MP4 180° / 90° display rotation.
+  // A mismatched OpenCV/FFmpeg decoder must not leave RIFE anchors upside down.
+  for(const degrees of [180,90]){
+    const base=path.join(cadenceDir,'orientation-base-'+degrees+'.mp4');
+    const rotated=path.join(cadenceDir,'orientation-tag-'+degrees+'.mp4');
+    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
+      '-f','lavfi','-i','testsrc2=size=320x180:rate=30',
+      '-vf','drawbox=x=8:y=7:w=60:h=42:color=white:t=fill,fps=60',
+      '-t','2','-c:v','libx264','-pix_fmt','yuv420p',base],{timeout:30000});
+    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
+      '-display_rotation',String(degrees),'-i',base,'-c','copy',rotated],
+      {timeout:30000});
+    const matrix=JSON.parse(String(execFileSync('ffprobe',['-v','error',
+      '-select_streams','v:0','-show_entries','stream_side_data=rotation',
+      '-of','json',rotated])));
+    assert.ok(matrix.streams?.[0]?.side_data_list?.some(x=>
+      Math.abs(Number(x.rotation))===degrees),'Fixture must have rotation matrix');
+    const originalBytes=fs.readFileSync(rotated);
+    const info=await verifyRifeInput({path:rotated});
+    assert.equal(info.sourceFps,60);
+    const prepared=await prepareAdaptiveRifeVideo(
+      {path:rotated,size:originalBytes.length,mimetype:'video/mp4'},info);
+    try{
+      assert.equal(prepared.adaptive,true);
+      assert.equal(prepared.sourceFps,30);
+      execFileSync('/usr/bin/python3',[new URL('./check-rife-orientation.py',import.meta.url).pathname,
+        rotated,prepared.file.path],{timeout:30000});
+      const encoded=JSON.parse(String(execFileSync('ffprobe',['-v','error',
+        '-select_streams','v:0','-show_entries','stream_side_data=rotation',
+        '-of','json',prepared.file.path])));
+      assert.ok(!(encoded.streams?.[0]?.side_data_list||[]).some(x=>
+        Math.abs(Number(x.rotation||0))>1),
+        'Anchor contains unwanted rotation metadata');
+    }finally{await prepared.release();}
+    assert.deepEqual(fs.readFileSync(rotated),originalBytes,
+      'Original camera source must remain unchanged');
+  }
+
   const healthy=path.join(cadenceDir,'native-60.mp4');
   execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
     '-f','lavfi','-i','testsrc2=size=320x180:rate=60','-t','2',
