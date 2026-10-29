@@ -53,13 +53,13 @@ async function encodePreview(destination,kind,input){
 
 // Preflight both reference previews BEFORE the paid RunningHub task is submitted.
 // A storage/encoding failure must stop generation without spending credits.
-export async function stageReferences(image,video){
-  if(!image?.path||!video?.path)throw Error('Both generation references are required');
+export async function stageReferences(image,video,{videoOnly=false}={}){
+  if(!video?.path||(!videoOnly&&!image?.path))throw Error('Required generation references are missing');
   await fs.promises.mkdir(ROOT,{recursive:true,mode:0o700});
   const staging=path.join(ROOT,'.pending-'+crypto.randomUUID());
   await fs.promises.mkdir(staging,{mode:0o700});
   try{
-    await encodePreview(path.join(staging,'reference.jpg'),'image',image);
+    if(!videoOnly)await encodePreview(path.join(staging,'reference.jpg'),'image',image);
     await encodePreview(path.join(staging,'driving.mp4'),'video',video);
     return staging;
   }catch(error){
@@ -71,15 +71,15 @@ function isStagingDir(dir){
   return typeof dir==='string'&&path.dirname(dir)===ROOT&&
     /^\.pending-[0-9a-f-]{36}$/.test(path.basename(dir));
 }
-export async function commitReferences(staging,taskId){
+export async function commitReferences(staging,taskId,{videoOnly=false}={}){
   if(!isStagingDir(staging)||!idOk(taskId))throw Error('Invalid staged reference task');
-  if(!present(path.join(staging,'reference.jpg'))||!present(path.join(staging,'driving.mp4')))
+  if(!present(path.join(staging,'driving.mp4'))||(!videoOnly&&!present(path.join(staging,'reference.jpg'))))
     throw Error('Incomplete staged references');
   const dest=path.join(ROOT,String(taskId));
   // Same-volume atomic rename: never publish just one of the reference inputs.
   await fs.promises.rename(staging,dest);
   const current=referenceAvailability(taskId);
-  if(!current.image||!current.video)throw Error('Reference commit incomplete');
+  if(!current.video||(!videoOnly&&!current.image))throw Error('Reference commit incomplete');
   return current;
 }
 export async function discardReferences(staging){
