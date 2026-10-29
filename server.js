@@ -447,7 +447,10 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     // A timeout, missing response, or arbitrary error is never safe to retry.
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
-    if(validation)throw validation;
+    if(validation){
+      if(workflowKey==='rife60')validation.message=validation.message.replace('workflow H3','workflow RIFE');
+      throw validation;
+    }
     const tips = data?.data?.promptTips;
     throw new Error(data?.msg || tips || 'RunningHub gagal membuat task.');
   }
