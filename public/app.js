@@ -187,16 +187,17 @@ function updateEstimates(){
 function updateGenerate(){
   // RunningHub accepts independent paid tasks; only the current reference
   // upload/submission is exclusive. Accepted tasks continue in History.
-  const ready=Boolean(state.image&&state.video&&state.accounts.some(a=>a.canGenerate===true)&&
+  const ready=Boolean((state.workflow==='rife60'||state.image)&&state.video&&state.accounts.some(a=>a.canGenerate===true)&&
     !state.submission&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()));
   $('#generateBtn').disabled=!ready;
   if(!state.submission)$('#generateBtn').querySelector('span:first-child').textContent=
     state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':
     state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':
-'Generate motion';
+    state.workflow==='rife60'?'Interpolasi 60 FPS':'Generate motion';
   refreshLabNotice();
 }
 function workflowName(){
+  if(state.workflow==='rife60')return 'RIFE · 30 → 60 FPS';
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
   if(state.workflow==='r4Lab')return 'MotionFly R4 · Full Controlled Test';
@@ -353,13 +354,13 @@ async function resumeSubmission(){
   if(id)trackSubmission(id);
 }
 async function generate(){
-  if(!state.image||!state.video||state.submission)return;
+  if((state.workflow!=='rife60'&&!state.image)||!state.video||state.submission)return;
   if(!state.accounts.some(a=>a.canGenerate===true)){
     toast('Tidak ada akun RunningHub siap dengan saldo minimal 100 RH. Perbarui Account Pool.',true);
     return;
   }
   const fd=new FormData();
-  fd.append('referenceImage',state.image);
+  if(state.workflow!=='rife60')fd.append('referenceImage',state.image);
   fd.append('videoReference',state.video);
   fd.append('workflow',state.workflow);
   fd.append('mode',state.mode);
@@ -972,6 +973,13 @@ $$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn
 $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $$('.workflow-card').forEach(x=>x.classList.remove('selected'));
   b.classList.add('selected'); state.workflow=b.dataset.workflow;
+  const videoOnly=state.workflow==='rife60';
+  $('#imageDrop').classList.toggle('hidden',videoOnly);
+  // One-video mode fills the media panel rather than leaving a blank image column.
+  $('#videoDrop').style.gridColumn=videoOnly?'1 / -1':'';
+  $('#mediaRequirements').textContent=videoOnly?'Cukup satu video 30 FPS · gambar tidak diperlukan':'Kedua file wajib diisi';
+  $('#videoDrop').querySelector('strong').textContent=videoOnly?'Source Video (30 FPS)':'Video Reference';
+  $('#rifeNotice').classList.toggle('hidden',!videoOnly);
   $('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');
   $('#fullLabNotice').classList.toggle('hidden',state.workflow!=='r4Lab');
   updateEstimates();updateGenerate();

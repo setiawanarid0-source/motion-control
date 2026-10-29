@@ -67,7 +67,8 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
   }
   async function stage({jobId,deviceId,body,image,video}){
     folder(jobId);
-    if(!deviceId||!image?.path||!video?.path)throw Error('Kedua referensi wajib diunggah');
+    const videoOnly=String(body?.workflow||'r15')==='rife60';
+    if(!deviceId||!video?.path||(!videoOnly&&!image?.path))throw Error('Media yang diperlukan belum lengkap');
     const old=read(jobId);
     if(old){
       if(old.deviceId!==deviceId)throw Error('Pengiriman tidak ditemukan');
@@ -78,7 +79,7 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
     try{
       await fs.promises.mkdir(dest,{recursive:true,mode:0o700});
       const imageDest=path.join(dest,'reference.bin'),videoDest=path.join(dest,'driving.bin');
-      await fs.promises.copyFile(image.path,imageDest);
+      if(image?.path)await fs.promises.copyFile(image.path,imageDest);
       await fs.promises.copyFile(video.path,videoDest);
       const createdAt=new Date(now()).toISOString();
       const data={jobId,deviceId,createdAt,updatedAt:createdAt,stage:'queued',
@@ -88,8 +89,8 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
           accountId:String(body.accountId||'auto'),
           diagnosticTaskId:String(body.diagnosticTaskId||''),
           diagnosticAccountId:String(body.diagnosticAccountId||'')
-        },image:{path:imageDest,originalname:String(image.originalname||'reference.jpg'),
-          mimetype:image.mimetype,size:image.size},
+        },image:image?.path?{path:imageDest,originalname:String(image.originalname||'reference.jpg'),
+          mimetype:image.mimetype,size:image.size}:null,
         video:{path:videoDest,originalname:String(video.originalname||'driving.mp4'),
           mimetype:video.mimetype,size:video.size}};
       save(data);

@@ -20,6 +20,7 @@ import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,may
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
+import {verifyRifeInput,RIFE_WORKFLOW_ID} from './rife-video.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,9 +45,16 @@ const workflowGraphs = {
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
   koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-sam3-diagnostic-api.json'), 'utf8')),
   r4Lab: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-full-controlled-api.json'), 'utf8')),
+  rife60: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/rife60-api.json'), 'utf8')),
 };
 
 const workflowMeta = {
+  rife60: {
+    id: 'rife60', name: 'RIFE · 30 → 60 FPS',
+    subtitle: 'AI frame interpolation 2× · resolusi asli · satu video',
+    detail: 'Tambahkan frame di antara frame asli. Tidak melakukan upscale atau motion transfer. Memerlukan kredit RunningHub; uji hasil asli belum dilakukan.',
+    outputKind: 'video'
+  },
   r15: {
     id: 'r15',
     name: 'MotionFly R4 · Camera Engine (R15)',
@@ -404,21 +412,24 @@ async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
   }finally{await fs.promises.rm(dir,{recursive:true,force:true});}
 }
 async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
-  const imageName = await uploadToRunningHub(apiKey, imageFile);
+  const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey, imageFile);
   const videoName = await uploadToRunningHub(apiKey, videoFile);
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
   const payload = {
     apiKey,
     workflowId,
     nodeInfoList: [
-      { nodeId: '30', fieldName: 'image', fieldValue: imageName },
-      { nodeId: '33', fieldName: 'video', fieldValue: videoName },
-      ...(workflowKey === 'koh1AntiObject' ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
+      ...(workflowKey==='rife60'
+        ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName }]
+        : [{ nodeId: '30', fieldName: 'image', fieldValue: imageName },
+           { nodeId: '33', fieldName: 'video', fieldValue: videoName }]),
+      ...(['koh1AntiObject','rife60'].includes(workflowKey) ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
       ...(masks ? [{ nodeId: '500', fieldName: 'image', fieldValue: masks.imageName }, { nodeId: '501', fieldName: 'video', fieldValue: masks.videoName }] : []),
     ],
     workflow: JSON.stringify(workflowGraphs[workflowKey]),
     addMetadata: true,
-    retainSeconds: 259200,
+    // RIFE does not reserve a paid retained instance after completion.
+    ...(workflowKey==='rife60'?{}:{retainSeconds:259200}),
   };
   // Match the RunningHub instance selected by the user; keep queued legacy Lite unchanged.
   const instanceType=runningHubInstanceType(mode);
@@ -572,16 +583,18 @@ async function handleGeneration(req,res){
   };
 
   try {
-    if (!imageFile || !videoFile) throw new Error('Reference Image dan Video Reference wajib diisi.');
-    if (imageFile.size > IMAGE_MAX) throw new Error('Reference Image maksimal 20 MB.');
+    const workflowKey = String(req.body?.workflow || 'r15');
+    const videoOnly=workflowKey==='rife60';
+    if ((!videoOnly&&!imageFile) || !videoFile) throw new Error('Media input wajib diisi.');
+    if (imageFile?.size > IMAGE_MAX) throw new Error('Reference Image maksimal 20 MB.');
     if (videoFile.size > VIDEO_MAX) throw new Error('Video Reference maksimal 100 MB.');
-    if (!/^image\/(jpeg|png|webp)$/i.test(imageFile.mimetype)) throw new Error('Format gambar harus JPG, PNG, atau WEBP.');
+    if (!videoOnly&&!/^image\/(jpeg|png|webp)$/i.test(imageFile.mimetype)) throw new Error('Format gambar harus JPG, PNG, atau WEBP.');
     if (!/^video\/(mp4|quicktime|webm|x-matroska)$/i.test(videoFile.mimetype)) throw new Error('Format video harus MP4, MOV, atau WEBM.');
 
-    const workflowKey = String(req.body?.workflow || 'r15');
     const mode = String(req.body?.mode || 'standard');
     const requestedAccountId = String(req.body?.accountId || 'auto');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
+    if(videoOnly)await verifyRifeInput(videoFile);
     const diagnosticTaskId=String(req.body?.diagnosticTaskId||'');
     const diagnosticAccountId=String(req.body?.diagnosticAccountId||'');
     if(workflowKey==='r4Lab' && (!/^\d{10,25}$/.test(diagnosticTaskId)||!diagnosticAccountId))
@@ -622,7 +635,7 @@ async function handleGeneration(req,res){
     }
     // Verify both input previews and encrypted task registry before a paid submission.
     req.progress?.('saving_references');
-    stagedReferences=await stageReferences(imageFile,videoFile);
+    stagedReferences=await stageReferences(imageFile,videoFile,{videoOnly});
     taskRegistry.ensureWritable();
     let lastError = null;
     let rejectedAtCapacity=0;
@@ -631,7 +644,7 @@ async function handleGeneration(req,res){
         req.progress?.('uploading_inputs');
         const task = await createTask({
           apiKey: account.key,
-          workflowId: LOCKED_WORKFLOW_ID,
+          workflowId: videoOnly ? RIFE_WORKFLOW_ID : LOCKED_WORKFLOW_ID,
           workflowKey,
           mode,
           imageFile,
@@ -655,8 +668,8 @@ async function handleGeneration(req,res){
         }
         let referencesStored=false;
         try{
-          const stored=await commitReferences(stagedReferences,String(task.taskId));
-          referencesStored=stored.image&&stored.video;
+          const stored=await commitReferences(stagedReferences,String(task.taskId),{videoOnly});
+          referencesStored=stored.video&&(videoOnly||stored.image);
           stagedReferences=null;
         }catch(mediaError){
           console.error('Reference preview commit failed',String(task.taskId),mediaError.message);
@@ -726,7 +739,7 @@ async function runQueuedGeneration(job,report){
   const req={
     headers:{'x-vanta-device':job.deviceId},
     cookies:{},query:{},body:job.body,
-    files:{referenceImage:[job.image],videoReference:[job.video]},
+    files:{...(job.image?{referenceImage:[job.image]}:{}),videoReference:[job.video]},
     progress:report,submissionAttempted:false
   };
   let result=null,httpStatus=200;
@@ -767,11 +780,12 @@ app.post('/api/generate', upload.fields([
   try{
     const deviceId=getDeviceId(req);
     if(!deviceId)return res.status(400).json({error:'Sesi perangkat tidak tersedia. Muat ulang halaman.'});
-    if(!image||!video)return res.status(400).json({error:'Gambar dan video referensi wajib diunggah.'});
+    const videoOnly=String(req.body?.workflow||'r15')==='rife60';
+    if(!video||(!videoOnly&&!image))return res.status(400).json({error:'Media wajib diunggah.'});
     if(!canSubmitMachineMode(String(req.body?.mode||'standard')))
       return res.status(400).json({error:'Pilih mesin RunningHub Standard atau Plus.'});
-    if(image.size>IMAGE_MAX||video.size>VIDEO_MAX)return res.status(413).json({error:'Gambar maksimal 20 MB dan video maksimal 100 MB.'});
-    if(!/^image\/(jpeg|png|webp)$/i.test(image.mimetype)||!/^video\/(mp4|quicktime|webm|x-matroska)$/i.test(video.mimetype))
+    if((image?.size||0)>IMAGE_MAX||video.size>VIDEO_MAX)return res.status(413).json({error:'Gambar maksimal 20 MB dan video maksimal 100 MB.'});
+    if((!videoOnly&&!/^image\/(jpeg|png|webp)$/i.test(image.mimetype))||!/^video\/(mp4|quicktime|webm|x-matroska)$/i.test(video.mimetype))
       return res.status(415).json({error:'Format gambar atau video tidak didukung.'});
     const id=String(req.headers['x-vanta-request-id']||crypto.randomUUID());
     if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id))
