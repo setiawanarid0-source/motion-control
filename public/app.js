@@ -240,12 +240,12 @@ async function restoreRecentRifeFailure(){
   if(state.workflow!=='rife60'||state.task||state.submission)return;
   try{
     const data=await api('/api/generate/jobs');
-    const last=(data.jobs||[]).find(item=>item.workflow==='rife60'&&
-      ['error','uncertain'].includes(item.stage)&&
-      Number.isFinite(Date.parse(item.updatedAt))&&
-      Date.now()-Date.parse(item.updatedAt)<12*60*60*1000);
-    if(state.workflow==='rife60'&&!state.task&&!state.submission&&last)
-      displaySubmissionFailure(last,{restored:true});
+    const latestRife=(data.jobs||[]).find(item=>item.workflow==='rife60');
+    const recentFailure=latestRife&&['error','uncertain'].includes(latestRife.stage)&&
+      Number.isFinite(Date.parse(latestRife.updatedAt))&&
+      Date.now()-Date.parse(latestRife.updatedAt)<12*60*60*1000;
+    if(state.workflow==='rife60'&&!state.task&&!state.submission&&recentFailure)
+      displaySubmissionFailure(latestRife,{restored:true});
   }catch(error){console.warn('RIFE failure recovery unavailable',error.message);}
 }
 function showStartingTask(){
