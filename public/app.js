@@ -197,7 +197,7 @@ function updateGenerate(){
   refreshLabNotice();
 }
 function workflowName(){
-  if(state.workflow==='rife60')return 'RIFE · ≤60 → 60 FPS';
+  if(state.workflow==='rife60')return 'RIFE Adaptive · hingga 60 FPS';
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
   if(state.workflow==='r4Lab')return 'MotionFly R4 · Full Controlled Test';
