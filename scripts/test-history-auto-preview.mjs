@@ -13,8 +13,8 @@ for(const text of ['Tambahkan gambar referensi','Tambahkan video referensi','his
 }
 assert.ok(!server.includes("app.post('/api/task-references/:taskId/:kind'"),
   'Manual reference upload endpoint unexpectedly available');
-assert.ok(server.indexOf('stagedReferences=await stageReferences(imageFile,videoFile)')<
+assert.ok(server.indexOf('stagedReferences=await stageReferences(imageFile,videoFile,{videoOnly})')<
   server.indexOf('const task = await createTask('),'References must be staged before paid RunningHub creation');
-assert.ok(server.includes('await commitReferences(stagedReferences,String(task.taskId))'));
+assert.ok(server.includes('await commitReferences(stagedReferences,String(task.taskId),{videoOnly})'));
 assert.ok(app.includes('referenceLink(taskId,entry.kind,accountId)'));
 console.log('PASS: History preview uses automatic saved references and has no manual upload flow');
