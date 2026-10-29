@@ -218,7 +218,7 @@ function displaySubmissionFailure(data,{restored=false}={}){
   const providerStage=data?.failureStage==='submitting';
   const ambiguous=data?.stage==='uncertain';
   const rejectedGraph=/prompt_outputs_failed_validation|RUNNINGHUB_WORKFLOW_VALIDATION/i.test(msg);
-  const capacityFull=/TASK_QUEUE_MAXED/i.test(msg);
+  const capacityFull=/TASK_QUEUE_MAXED/i.test(String(data.error||''));
   $('#taskSection').classList.remove('hidden');
   $('#taskStatus').textContent=ambiguous?'Status penerimaan belum pasti':
     capacityFull?'Antrean akun penuh':
