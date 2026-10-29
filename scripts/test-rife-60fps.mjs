@@ -83,7 +83,10 @@ try{
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
-assert.ok(server.includes('workflowId: videoOnly ? RIFE_WORKFLOW_ID : LOCKED_WORKFLOW_ID'));
+assert.ok(server.includes('workflowId: LOCKED_WORKFLOW_ID,'),
+  'Custom graph must use Owner-accessible RunningHub workflow ID');
+assert.ok(!server.includes('workflowId: videoOnly ? RIFE_WORKFLOW_ID'),
+  'Public post ID is not an Owner-owned workflow');
 assert.ok(server.includes("nodeId: '1', fieldName: 'video'"));
 assert.ok(server.includes("nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps"));
 assert.ok(server.includes("nodeId: '2', fieldName: 'target_fps', fieldValue: RIFE_TARGET_FPS"));
@@ -95,4 +98,8 @@ assert.ok(ui.includes("state.workflow==='rife60'||state.image"));
 assert.ok(ui.includes("if(state.workflow!=='rife60')fd.append('referenceImage',state.image)"));
 assert.ok(html.includes('data-workflow="rife60"'));
 assert.ok(html.includes('id="rifeNotice"'));
+assert.ok(html.includes('id="taskFailureDetail"'));
+assert.ok(ui.includes('displaySubmissionFailure(data)'));
+assert.ok(ui.includes('restoreRecentRifeFailure()'));
+assert.ok(server.includes('stage:\'error\',failureStage,error:result?.error||'));
 console.log('PASS: RIFE any source FPS <60→60, original frames/resolution/audio, real ffprobe 24/50, UI, queue and MotionFly fallback.');
