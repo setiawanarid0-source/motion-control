@@ -13,7 +13,8 @@ contains(server,"app.post('/api/tasks/claim'",'Existing History must be migrated
 contains(server,'setInterval(()=>monitorRegisteredTasks()', 'Task monitoring must continue without a browser');
 contains(server,'if(!accountId)return null;', 'Media lookup must require an account identifier');
 contains(app,'await refreshAccounts();', 'Account refresh cannot be blocked by slow legacy API queries');
-contains(app,'claimBrowserHistory().then(syncServerHistory)', 'Legacy task recovery must run without blocking the UI');
+contains(app,'claimBrowserHistory().then(async claimed=>', 'Legacy task recovery must run without blocking the UI');
+contains(app,'if(claimed)await refreshAccounts();', 'Automatic Account Pool retirement must wait for browser History claim');
 contains(app,"if(data.state==='check_error')", 'Client retries uncertain statuses');
 contains(app,"state.registeredTaskIds.has(String(x.taskId))", 'Retired account video preview remains available');
 contains(registry,'if(!DONE.has(t.status))return true', 'Unfinished task never pruned');
