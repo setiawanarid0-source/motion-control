@@ -197,7 +197,7 @@ function updateGenerate(){
   refreshLabNotice();
 }
 function workflowName(){
-  if(state.workflow==='rife60')return 'RIFE · <60 → 60 FPS';
+  if(state.workflow==='rife60')return 'RIFE · ≤60 → 60 FPS';
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
   if(state.workflow==='r4Lab')return 'MotionFly R4 · Full Controlled Test';
@@ -229,7 +229,7 @@ function displaySubmissionFailure(data,{restored=false}={}){
     providerStage||rejectedGraph?'Belum ada task ID dari RunningHub':
     'Gagal sebelum pengiriman task';
   $('#taskId').textContent='Belum ada task ID';
-  if(restored)$('#taskWorkflow').textContent='RIFE · <60 → 60 FPS';
+  if(restored)$('#taskWorkflow').textContent='RIFE · ≤60 → 60 FPS';
   const el=$('#taskFailureDetail');
   if(el){
     el.textContent='Penyebab: '+msg+(restored?'\nKegagalan terakhir disimpan dari percobaan sebelumnya.':'');
@@ -1012,8 +1012,8 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $('#imageDrop').classList.toggle('hidden',videoOnly);
   // One-video mode fills the media panel rather than leaving a blank image column.
   $('#videoDrop').style.gridColumn=videoOnly?'1 / -1':'';
-  $('#mediaRequirements').textContent=videoOnly?'Cukup satu video dengan FPS <60 · gambar tidak diperlukan':'Kedua file wajib diisi';
-  $('#videoDrop').querySelector('strong').textContent=videoOnly?'Source Video (<60 FPS)':'Video Reference';
+  $('#mediaRequirements').textContent=videoOnly?'Cukup satu video dengan FPS ≤60 · gambar tidak diperlukan':'Kedua file wajib diisi';
+  $('#videoDrop').querySelector('strong').textContent=videoOnly?'Source Video (≤60 FPS)':'Video Reference';
   $('#rifeNotice').classList.toggle('hidden',!videoOnly);
   $('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');
   $('#fullLabNotice').classList.toggle('hidden',state.workflow!=='r4Lab');
