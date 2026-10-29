@@ -18,7 +18,7 @@ function makeElement(dataset={}){
   const active=new Set();
   const callbacks=new Map();
   return {
-    dataset,disabled:false,value:'',files:[],classList:{
+    dataset,disabled:false,value:'',files:[],style:{},classList:{
       contains:key=>active.has(key),
       add:key=>active.add(key),
       remove:key=>active.delete(key),
