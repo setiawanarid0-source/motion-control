@@ -50,9 +50,9 @@ const workflowGraphs = {
 
 const workflowMeta = {
   rife60: {
-    id: 'rife60', name: 'RIFE · <60 → 60 FPS',
-    subtitle: 'RIFE target 60 FPS · sumber di bawah 60 FPS · resolusi asli',
-    detail: 'RIFE interpolasi langsung dari FPS video sumber ke 60 FPS, tanpa memaksa video menjadi 30 FPS. Resolusi dan durasi dipertahankan. Uji provider berbayar belum dilakukan.',
+    id: 'rife60', name: 'RIFE · ≤60 → 60 FPS',
+    subtitle: 'RIFE target 60 FPS · input hingga 60 FPS · resolusi asli',
+    detail: 'Video di bawah 60 FPS diinterpolasi menjadi 60 FPS. Video 60 FPS diteruskan tanpa menambah frame. Tidak ada upscale, konversi ke 30 FPS, atau perubahan durasi yang disengaja. Uji provider berbayar belum dilakukan.',
     outputKind: 'video'
   },
   r15: {
