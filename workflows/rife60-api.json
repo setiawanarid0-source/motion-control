@@ -2,7 +2,7 @@
   "1": {
     "inputs": {
       "video": "input.mp4",
-      "force_rate": 30,
+      "force_rate": 0,
       "force_size": "Disabled",
       "custom_width": 0,
       "custom_height": 0,
@@ -13,25 +13,25 @@
     },
     "class_type": "VHS_LoadVideo",
     "_meta": {
-      "title": "SOURCE VIDEO · ORIGINAL RESOLUTION · 30 FPS"
+      "title": "SOURCE VIDEO · NATIVE FPS · ORIGINAL RESOLUTION"
     }
   },
   "2": {
     "inputs": {
-      "ckpt_name": "rife49.pth",
-      "clear_cache_after_n_frames": 10,
-      "multiplier": 2,
-      "fast_mode": true,
-      "ensemble": true,
-      "scale_factor": 1,
-      "frames": [
+      "images": [
         "1",
         0
-      ]
+      ],
+      "source_fps": 30,
+      "target_fps": 60,
+      "scale": 1,
+      "model_name": "flownet.pkl",
+      "batch_size": 2,
+      "use_fp16": true
     },
-    "class_type": "RIFE VFI",
+    "class_type": "RIFEInterpolation",
     "_meta": {
-      "title": "RIFE FRAME INTERPOLATION · 2×"
+      "title": "RIFE · SOURCE FPS → 60 FPS · NO UPSCALE"
     }
   },
   "3": {
@@ -58,7 +58,7 @@
     },
     "class_type": "VHS_VideoCombine",
     "_meta": {
-      "title": "60 FPS MP4 · SAME RESOLUTION · AUDIO PRESERVED"
+      "title": "60 FPS MP4 · NATIVE RESOLUTION · ORIGINAL AUDIO"
     }
   }
 }
