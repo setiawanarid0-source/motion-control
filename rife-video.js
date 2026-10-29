@@ -13,7 +13,8 @@ function rate(value){
   return Number.isFinite(n)&&Number.isFinite(d)&&d>0?n/d:NaN;
 }
 const positive=x=>Number.isFinite(x)&&x>0;
-const validSourceFps=fps=>positive(fps)&&fps<RIFE_TARGET_FPS;
+// Accept 60 FPS as a no-op frame interpolation (RIFE returns original frames).
+const validSourceFps=fps=>positive(fps)&&fps<=RIFE_TARGET_FPS;
 
 // This pure validator can also interpret counted frames when a container
 // advertises an inaccurate nominal rate (e.g. header 60, real 30 FPS).
@@ -37,7 +38,7 @@ export function validateRifeVideoProbe(probe){
   if(!positive(fps))
     throw new Error('FPS sumber tidak dapat dibaca. Video asli tidak diubah atau dikonversi.');
   if(!validSourceFps(fps))
-    throw new Error('Video terdeteksi '+Number(fps.toFixed(4))+' FPS. RIFE ini hanya menerima FPS sumber di bawah 60. Video asli tidak diubah.');
+    throw new Error('Video terdeteksi '+Number(fps.toFixed(4))+' FPS. Mode RIFE ini menerima FPS sumber hingga 60. Video asli tidak diubah.');
   return {width:stream.width,height:stream.height,sourceFps:fps,
     detectedFps:fps,targetFps:RIFE_TARGET_FPS,detectionMethod,
     variableFrameRate:positive(nominal)&&Math.abs(nominal-fps)>Math.max(1,fps*.12)};
@@ -45,7 +46,7 @@ export function validateRifeVideoProbe(probe){
 
 export function rifeGraphForSourceFps(base,sourceFps){
   if(!validSourceFps(sourceFps))
-    throw new Error('FPS asli untuk RIFE harus lebih besar dari 0 dan di bawah 60.');
+    throw new Error('FPS asli untuk RIFE harus lebih besar dari 0 dan tidak melebihi 60.');
   if(base?.['1']?.class_type!=='VHS_LoadVideo'||
      base?.['1']?.inputs?.force_rate!==0||
      base?.['2']?.class_type!=='RIFEInterpolation'||
