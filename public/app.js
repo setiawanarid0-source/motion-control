@@ -75,8 +75,8 @@ async function claimBrowserHistory(){
     // When a legacy task is still active, never retire its account until the
     // server has safely captured its credential for independent monitoring.
     const accepted=new Set((claimed.restoredIds||[]).map(String));
-    const activePending=selected.filter(x=>isActiveHistoryStatus(x.status));
-    if(activePending.some(x=>!accepted.has(String(x.taskId))))return false;
+    const mustPreserve=selected.filter(x=>isActiveHistoryStatus(x.status)||x.status==='success');
+    if(mustPreserve.some(x=>!accepted.has(String(x.taskId))))return false;
     return true;
   }catch(error){
     console.warn('History claim will retry',error.message);
@@ -113,12 +113,15 @@ async function loadSession(){
   state.session=await api('/api/session');
   state.accounts=state.session.accounts||[];
   renderAccountSelect();renderAccounts();updatePoolSummary();
-  // Account retirement first stores credentials in the encrypted task escrow.
-  // Claiming legacy tasks may take several seconds; never block the studio UI on it.
-  await refreshAccounts();
+  // The UI loads promptly, but account retirement runs only once browser-only
+  // History has been safely claimed in the server vault.
   await syncServerHistory();
-  claimBrowserHistory().then(syncServerHistory)
-    .catch(error=>console.warn('Background History recovery',error.message));
+  claimBrowserHistory().then(async claimed=>{
+    state.historyClaimed=Boolean(claimed);
+    await refreshAccounts();
+    if(!claimed)console.warn('Automatic account retirement deferred until History is preserved');
+    await syncServerHistory();
+  }).catch(error=>console.warn('Background History recovery',error.message));
 }
 function sortedRunningHubAccounts(){
   const coins=a=>a.status&&!a.status.error&&a.status.remainCoins!=null&&Number.isFinite(Number(a.status.remainCoins))
@@ -149,7 +152,8 @@ async function refreshAccounts(){
     return;
   }
   try{
-    const data=await api('/api/accounts/refresh',{method:'POST',body:'{}'});
+    const data=await api('/api/accounts/refresh',{method:'POST',
+      body:JSON.stringify({allowRetirement:state.historyClaimed===true})});
     state.accounts=data.accounts||[];
     renderAccounts();
     updatePoolSummary();
@@ -165,7 +169,20 @@ function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.canGenera
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada API key di pool.<br>Tambahkan akun pertama dari panel di sebelah kiri.</div>';return;}
   root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ready?'Siap digunakan':ok&&Number(s.currentTaskCounts||0)>0?'Menunggu task berjalan selesai':ok?'Saldo tidak memenuhi syarat':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
-  $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{await api(`/api/accounts/${btn.dataset.delete}`,{method:'DELETE'});toast('Akun dihapus.');await loadSession();}catch(e){toast(e.message,true)}});
+  $('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{
+    // Claim browser-only completed History BEFORE changing the provider key vault.
+    await claimBrowserHistory();
+    const existing=history().filter(x=>x.accountId===btn.dataset.delete&&x.status==='success');
+    if(existing.length){
+      const remote=await api('/api/tasks/history');
+      const captured=new Set((remote.tasks||[]).map(x=>String(x.taskId)));
+      if(existing.some(x=>!captured.has(String(x.taskId))))
+        throw Error('Akun belum dihapus: ada hasil lama yang belum aman didaftarkan di History VANTA.');
+    }
+    await api(`/api/accounts/${btn.dataset.delete}`,{method:'DELETE'});
+    toast('Akun dikeluarkan dari pool; hasil History tetap disimpan di VANTA.');
+    await loadSession();
+  }catch(e){toast(e.message,true)}});
 }
 
 function setMedia(kind,file){

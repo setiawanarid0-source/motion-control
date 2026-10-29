@@ -14,6 +14,7 @@ import {canGenerateWithAccount,rankGenerationAccounts} from './runninghub-accoun
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences } from './history-references.js';
 import {createTaskRegistry} from './task-registry.js';
+import {createMotionResultArchive} from './motion-result-archive.js';
 import {createGenerationQueue} from './generation-queue.js';
 import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance.js';
 import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,mayTryNextAccountAfterCreate} from './runninghub-capacity.js';
@@ -116,6 +117,26 @@ function decrypt(token) {
 }
 
 const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
+const motionResults=createMotionResultArchive({dir:path.join(DATA_DIR,'motion-results')});
+const resultMirrorAttempts=new Map();
+function scheduleResultMirror(task){
+  if(!task||task.status!=='success'||!task.resultUrl||motionResults.read(task.taskId))return;
+  const last=resultMirrorAttempts.get(task.taskId)||0;
+  if(Date.now()-last<15*60*1000)return;
+  resultMirrorAttempts.set(task.taskId,Date.now());
+  void motionResults.mirror(task.taskId,task.resultUrl).catch(err=>
+    console.warn('VANTA result archive deferred',String(task.taskId),String(err.message||err).slice(0,130)));
+}
+async function ensureAccountResultsArchived(accountId){
+  // Never throw away a pool credential before completing copies of its
+  // successful, still-retained outputs. The original result URL is provider-owned.
+  const items=taskRegistry.publicList().filter(t=>t.accountId===accountId&&
+    t.status==='success'&&t.resultUrl&&!motionResults.read(t.taskId));
+  for(const task of items){
+    try{await motionResults.mirror(task.taskId,task.resultUrl);}
+    catch(error){throw Error('Hasil video belum aman tersimpan di VANTA. Akun tidak dihapus. Coba lagi setelah penyimpanan tersedia.');}
+  }
+}
 const generationQueue=createGenerationQueue({dir:DATA_DIR,maxConcurrent:1});
 function registeredAccount(taskId,accountId=''){
   const item=taskRegistry.get(String(taskId));
@@ -152,7 +173,9 @@ function writeTaskState(taskId,result){
   }else{
     patch.error=result.state==='check_error'?'Status terbaru belum tersedia. Pemantauan akan dicoba kembali.':null;
   }
-  return taskRegistry.update(taskId,patch);
+  const stored=taskRegistry.update(taskId,patch);
+  if(stored?.status==='success')scheduleResultMirror(stored);
+  return stored;
 }
 async function runningHubTaskState(taskId,account,accountId){
   const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
@@ -535,18 +558,20 @@ app.post('/api/accounts', async (req, res) => {
   }
 });
 
-app.delete('/api/accounts/:id', (req, res) => {
+app.delete('/api/accounts/:id', async (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);
   if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
   const removing=accounts.find(a=>a.id===req.params.id);
   if(!removing)return res.status(404).json({error:'Akun tidak ditemukan.'});
   try{
+    // Archive successful videos BEFORE removing the original provider key.
+    await ensureAccountResultsArchived(removing.id);
     // Even manual removal must never orphan accepted RunningHub tasks.
     taskRegistry.retireAccount(removing);
     const next=loadGlobalAccounts().filter(a=>a.id!==req.params.id);
     saveVaultAccounts(deviceId,next);
     res.json({ok:true});
-  }catch(error){res.status(503).json({error:'Penghapusan ditunda: penyimpanan task belum siap.'});}
+  }catch(error){res.status(503).json({error:String(error.message||'Penghapusan ditunda: penyimpanan task belum siap.').slice(0,220)});}
 });
 
 async function refreshPool(req){
@@ -558,20 +583,27 @@ async function refreshPool(req){
   // The task registry keeps a separate encrypted credential until History expires.
   // Accounts with RunningHub tasks that are not yet registered are retained as a safeguard.
   const {removed}=partitionAccountRefresh(checked,MIN_POOL_CREDITS);
-  if(removed.length){
-    const retiredIds=new Set(removed.map(x=>x.account.id));
+  let autoRemovedCount=0;
+  if(removed.length&&req.body?.allowRetirement!==false){
+    const safeToRemove=[];
+    for(const entry of removed){
+      try{await ensureAccountResultsArchived(entry.account.id);safeToRemove.push(entry);}
+      catch(error){console.warn('Account removal postponed to preserve generated video',entry.account.id);}
+    }
+    const retiredIds=new Set(safeToRemove.map(x=>x.account.id));
     const latest=loadGlobalAccounts();
     const toRetire=latest.filter(a=>retiredIds.has(a.id));
     // Store every retired API key in the encrypted task vault before modifying Account Pool.
     for(const account of toRetire)taskRegistry.retireAccount(account);
     const next=latest.filter(a=>!retiredIds.has(a.id));
     if(next.length!==latest.length)saveVaultAccounts(deviceId,next);
+    autoRemovedCount=latest.length-next.length;
   }
   const remaining=loadGlobalAccounts();
   return {accounts:remaining.map(a=>{
     const status=checked.find(x=>x.account.id===a.id)?.status||null;
     return publicAccount(a,status);
-  }),autoRemovedCount:removed.length,minimumCredits:MIN_POOL_CREDITS};
+  }),autoRemovedCount,minimumCredits:MIN_POOL_CREDITS};
 }
 app.post('/api/accounts/refresh',async(req,res)=>{
   try{res.json(await refreshPool(req));}
@@ -867,6 +899,7 @@ app.delete('/api/tasks/:taskId/history',(req,res)=>{
   try{
     const removed=taskRegistry.removeCompleted(id,accountId);
     if(!removed)return res.status(404).json({error:'Task tidak ditemukan di History.'});
+    void motionResults.remove(id).catch(err=>console.warn('Archive removal',err.message));
     return res.json({ok:true});
   }catch(error){
     return res.status(/masih diproses/.test(error.message)?409:400)
@@ -982,6 +1015,8 @@ app.get('/api/tasks/:taskId/preview', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
+  const archived=motionResults.read(req.params.taskId);
+  if(archived){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(archived);}
   const final40=readLegacyFinal40(req.params.taskId);
   if(final40){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(final40);}
   const corrected=readCorrected(req.params.taskId);
@@ -1023,6 +1058,8 @@ app.get('/api/tasks/:taskId/download', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
+  const archived=motionResults.read(req.params.taskId);
+  if(archived)return res.download(archived,'motion-'+req.params.taskId+'.mp4');
   const final40=readLegacyFinal40(req.params.taskId);
   if(final40)return res.download(final40,'motion-'+req.params.taskId+'-40fps.mp4');
   const corrected=readCorrected(req.params.taskId);
@@ -1080,6 +1117,15 @@ pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
 generationQueue.resume();
 setInterval(()=>generationQueue.purge(),60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
+void motionResults.prune().catch(e=>console.warn('Result archive cleanup',e.message));
+setInterval(()=>motionResults.prune().catch(e=>console.warn('Result archive cleanup',e.message)),60*60*1000).unref();
+// Opportunistic, low-volume restoration for completed jobs from before this fix.
+setInterval(()=>{
+  const candidates=taskRegistry.publicList().filter(t=>t.status==='success'&&t.resultUrl&&
+    !motionResults.read(t.taskId)).slice(0,2);
+  for(const task of candidates)scheduleResultMirror(task);
+  for(const [id,at]of resultMirrorAttempts)if(Date.now()-at>60*60*1000)resultMirrorAttempts.delete(id);
+},45000).unref();
 setInterval(()=>monitorRegisteredTasks(),25000).unref();
 setTimeout(()=>monitorRegisteredTasks(),1200).unref();
 // Account Pool retirement runs after browser History recovery or an explicit refresh.
