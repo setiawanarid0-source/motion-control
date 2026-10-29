@@ -75,8 +75,8 @@ async function claimBrowserHistory(){
     // When a legacy task is still active, never retire its account until the
     // server has safely captured its credential for independent monitoring.
     const accepted=new Set((claimed.restoredIds||[]).map(String));
-    const activePending=selected.filter(x=>isActiveHistoryStatus(x.status));
-    if(activePending.some(x=>!accepted.has(String(x.taskId))))return false;
+    const mustPreserve=selected.filter(x=>isActiveHistoryStatus(x.status)||x.status==='success');
+    if(mustPreserve.some(x=>!accepted.has(String(x.taskId))))return false;
     return true;
   }catch(error){
     console.warn('History claim will retry',error.message);
@@ -113,11 +113,14 @@ async function loadSession(){
   state.session=await api('/api/session');
   state.accounts=state.session.accounts||[];
   renderAccountSelect();renderAccounts();updatePoolSummary();
-  // Recover browser-only jobs before automatic account retirement, so the
-  // server can preserve their access and start archiving accepted results.
-  await claimBrowserHistory();
-  await refreshAccounts();
+  // The UI loads promptly, but account retirement runs only once browser-only
+  // History has been safely claimed in the server vault.
   await syncServerHistory();
+  claimBrowserHistory().then(async claimed=>{
+    if(claimed)await refreshAccounts();
+    else console.warn('Account refresh delayed until History is preserved');
+    await syncServerHistory();
+  }).catch(error=>console.warn('Background History recovery',error.message));
 }
 function sortedRunningHubAccounts(){
   const coins=a=>a.status&&!a.status.error&&a.status.remainCoins!=null&&Number.isFinite(Number(a.status.remainCoins))
