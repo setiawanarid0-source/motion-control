@@ -60,6 +60,8 @@ const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8
 assert.ok(server.includes('workflowId: videoOnly ? RIFE_WORKFLOW_ID : LOCKED_WORKFLOW_ID'));
 assert.ok(server.includes("nodeId: '1', fieldName: 'video'"));
 assert.ok(server.includes('if(videoOnly)await verifyRifeInput(videoFile);'));
+assert.ok(server.includes("...(workflowKey==='rife60'?{}:{retainSeconds:259200})"),
+  'RIFE must not retain a potentially billable RunningHub machine');
 assert.ok(ui.includes("state.workflow==='rife60'||state.image"));
 assert.ok(ui.includes("if(state.workflow!=='rife60')fd.append('referenceImage',state.image)"));
 assert.ok(html.includes('data-workflow="rife60"'));
