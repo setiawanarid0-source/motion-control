@@ -584,7 +584,7 @@ async function refreshPool(req){
   // Accounts with RunningHub tasks that are not yet registered are retained as a safeguard.
   const {removed}=partitionAccountRefresh(checked,MIN_POOL_CREDITS);
   let autoRemovedCount=0;
-  if(removed.length){
+  if(removed.length&&req.body?.allowRetirement!==false){
     const safeToRemove=[];
     for(const entry of removed){
       try{await ensureAccountResultsArchived(entry.account.id);safeToRemove.push(entry);}
