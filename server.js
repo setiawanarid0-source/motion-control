@@ -20,7 +20,7 @@ import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,may
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
-import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
+import {prepareRifeSource,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -586,6 +586,7 @@ async function handleGeneration(req,res){
   const cleanup = () => {
     if(stagedReferences)discardReferences(stagedReferences).catch(e=>console.warn('Reference staging cleanup',e.message));
     if(preparedMotion)preparedMotion.release().catch(e=>console.warn('R15 temporary file cleanup',e.message));
+    if(rifeSource)rifeSource.release().catch(e=>console.warn('RIFE temporary file cleanup',e.message));
     for (const f of [imageFile, videoFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
   };
 
@@ -601,7 +602,12 @@ async function handleGeneration(req,res){
     const mode = String(req.body?.mode || 'standard');
     const requestedAccountId = String(req.body?.accountId || 'auto');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
-    if(videoOnly)rifeSource=await verifyRifeInput(videoFile);
+    if(videoOnly){
+      req.progress?.('analyzing');
+      rifeSource=await prepareRifeSource(videoFile);
+      if(rifeSource.needsNormalization)console.info('RIFE source normalized',
+        {inputFps:rifeSource.detectedFps,processingFps:rifeSource.sourceFps,reason:rifeSource.reason});
+    }
     const diagnosticTaskId=String(req.body?.diagnosticTaskId||'');
     const diagnosticAccountId=String(req.body?.diagnosticAccountId||'');
     if(workflowKey==='r4Lab' && (!/^\d{10,25}$/.test(diagnosticTaskId)||!diagnosticAccountId))
@@ -657,7 +663,7 @@ async function handleGeneration(req,res){
           workflowKey,
           mode,
           imageFile,
-          videoFile:preparedMotion?.file||videoFile,
+          videoFile:preparedMotion?.file||rifeSource?.file||videoFile,
           sourceFps:rifeSource?.sourceFps,
           diagnosticAccount,
           diagnosticTaskId,

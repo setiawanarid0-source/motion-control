@@ -244,7 +244,9 @@ async function restoreRecentRifeFailure(){
     const recentFailure=latestRife&&['error','uncertain'].includes(latestRife.stage)&&
       Number.isFinite(Date.parse(latestRife.updatedAt))&&
       Date.now()-Date.parse(latestRife.updatedAt)<12*60*60*1000;
-    if(state.workflow==='rife60'&&!state.task&&!state.submission&&recentFailure)
+    // Pre-deploy FPS errors are obsolete after the repaired FPS preflight.
+    const oldFpsRejection=/FPS video harus mulai dari 1 dan lebih rendah dari 60 FPS/i.test(String(latestRife?.error||''));
+    if(state.workflow==='rife60'&&!state.task&&!state.submission&&recentFailure&&!oldFpsRejection)
       displaySubmissionFailure(latestRife,{restored:true});
   }catch(error){console.warn('RIFE failure recovery unavailable',error.message);}
 }
