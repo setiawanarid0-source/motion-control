@@ -15,6 +15,7 @@ import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorre
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences } from './history-references.js';
 import {createTaskRegistry} from './task-registry.js';
 import {createMotionResultArchive} from './motion-result-archive.js';
+import {createMotionResultBucket, MOTION_VIDEO_RETENTION_MS} from './motion-result-bucket.js';
 import {createGenerationQueue} from './generation-queue.js';
 import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance.js';
 import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,mayTryNextAccountAfterCreate} from './runninghub-capacity.js';
@@ -118,23 +119,37 @@ function decrypt(token) {
 
 const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
 const motionResults=createMotionResultArchive({dir:path.join(DATA_DIR,'motion-results')});
+const bucketResults=createMotionResultBucket();
 const resultMirrorAttempts=new Map();
 function scheduleResultMirror(task){
-  if(!task||task.status!=='success'||!task.resultUrl||motionResults.read(task.taskId))return;
+  if(!task||task.status!=='success'||!task.resultUrl||
+     !Number.isFinite(Date.parse(task.finishedAt||''))||
+     Date.now()-Date.parse(task.finishedAt)>=MOTION_VIDEO_RETENTION_MS)return;
   const last=resultMirrorAttempts.get(task.taskId)||0;
   if(Date.now()-last<15*60*1000)return;
   resultMirrorAttempts.set(task.taskId,Date.now());
-  void motionResults.mirror(task.taskId,task.resultUrl).catch(err=>
-    console.warn('VANTA result archive deferred',String(task.taskId),String(err.message||err).slice(0,130)));
+  // Railway bucket is independent of the 256MB account vault and of
+  // individual RunningHub accounts; no 128MB video restriction.
+  void (bucketResults.ready?bucketResults.mirror(task):
+    motionResults.mirror(task.taskId,task.resultUrl)).catch(err=>
+    console.warn('VANTA result archive deferred',String(task.taskId),
+      String(err.message||err).slice(0,130)));
 }
 async function ensureAccountResultsArchived(accountId){
-  // Never throw away a pool credential before completing copies of its
-  // successful, still-retained outputs. The original result URL is provider-owned.
   const items=taskRegistry.publicList().filter(t=>t.accountId===accountId&&
-    t.status==='success'&&t.resultUrl&&!motionResults.read(t.taskId));
+    t.status==='success'&&t.resultUrl&&
+    Date.now()-Date.parse(t.finishedAt||'')<MOTION_VIDEO_RETENTION_MS);
   for(const task of items){
-    try{await motionResults.mirror(task.taskId,task.resultUrl);}
-    catch(error){throw Error('Hasil video belum aman tersimpan di VANTA. Akun tidak dihapus. Coba lagi setelah penyimpanan tersedia.');}
+    try{
+      if(bucketResults.ready){
+        if(!await bucketResults.exists(task))await bucketResults.mirror(task);
+      }else if(!motionResults.read(task.taskId)){
+        throw Error('Arsip video belum tersambung ke Railway Bucket.');
+      }
+    }catch(error){
+      console.warn('VANTA archive blocked account deletion',String(task.taskId),String(error.message||error).slice(0,160));
+      throw Error('Akun belum dihapus: video belum aman tersimpan selama 3 hari. Periksa koneksi bucket VANTA.');
+    }
   }
 }
 const generationQueue=createGenerationQueue({dir:DATA_DIR,maxConcurrent:1});
@@ -897,8 +912,10 @@ app.delete('/api/tasks/:taskId/history',(req,res)=>{
   const id=String(req.params.taskId||''),accountId=String(req.body?.accountId||'');
   if(!/^\d{10,25}$/.test(id)||!accountId)return res.status(400).json({error:'Task atau akun tidak valid.'});
   try{
+    const archivedTask=taskRegistry.get(id);
     const removed=taskRegistry.removeCompleted(id,accountId);
     if(!removed)return res.status(404).json({error:'Task tidak ditemukan di History.'});
+    if(archivedTask)void bucketResults.remove(archivedTask).catch(err=>console.warn('Bucket result removal deferred',err.message));
     void motionResults.remove(id).catch(err=>console.warn('Archive removal',err.message));
     return res.json({ok:true});
   }catch(error){
@@ -1010,11 +1027,30 @@ app.get('/api/camera-video/:taskId',(req,res)=>{
   res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');res.sendFile(video);
 });
 
+async function streamBucketVideo(req,res,{download=false}={}){
+  const item=taskRegistry.get(req.params.taskId);
+  if(!item||item.status!=='success'||!bucketResults.ready)return false;
+  let media;
+  try{media=await bucketResults.open(item,req.headers.range);}
+  catch(error){console.warn('Motion bucket read unavailable',String(error.message||error).slice(0,160));return false;}
+  if(!media)return false;
+  res.status(media.status);
+  res.setHeader('Cache-Control','private, no-store');
+  res.setHeader('Content-Type',media.contentType);
+  res.setHeader('Accept-Ranges','bytes');
+  if(media.contentLength!=null)res.setHeader('Content-Length',String(media.contentLength));
+  if(media.contentRange)res.setHeader('Content-Range',media.contentRange);
+  res.setHeader('Content-Disposition',(download?'attachment':'inline')+`; filename="motion-${req.params.taskId}.mp4"`);
+  media.body.on('error',error=>{console.error('Motion bucket stream error',error.message);res.destroy(error);});
+  media.body.pipe(res);
+  return true;
+}
 app.get('/api/tasks/:taskId/preview', async (req, res) => {
   const { accounts } = getPersistentAccounts(req);
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
+  if(await streamBucketVideo(req,res))return;
   const archived=motionResults.read(req.params.taskId);
   if(archived){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(archived);}
   const final40=readLegacyFinal40(req.params.taskId);
@@ -1058,6 +1094,7 @@ app.get('/api/tasks/:taskId/download', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
+  if(await streamBucketVideo(req,res,{download:true}))return;
   const archived=motionResults.read(req.params.taskId);
   if(archived)return res.download(archived,'motion-'+req.params.taskId+'.mp4');
   const final40=readLegacyFinal40(req.params.taskId);
@@ -1118,6 +1155,8 @@ generationQueue.resume();
 setInterval(()=>generationQueue.purge(),60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
 void motionResults.prune().catch(e=>console.warn('Result archive cleanup',e.message));
+void bucketResults.prune().catch(e=>console.warn('Bucket result cleanup',String(e.message||e).slice(0,120)));
+setInterval(()=>bucketResults.prune().catch(e=>console.warn('Bucket result cleanup',String(e.message||e).slice(0,120))),5*60*1000).unref();
 setInterval(()=>motionResults.prune().catch(e=>console.warn('Result archive cleanup',e.message)),60*60*1000).unref();
 // Opportunistic, low-volume restoration for completed jobs from before this fix.
 setInterval(()=>{
