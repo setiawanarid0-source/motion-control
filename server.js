@@ -120,6 +120,7 @@ function decrypt(token) {
 const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
 const motionResults=createMotionResultArchive({dir:path.join(DATA_DIR,'motion-results')});
 const bucketResults=createMotionResultBucket();
+console.log('Motion result storage:',bucketResults.ready?'Railway bucket (72h)':'legacy local only; bucket credentials not configured');
 const resultMirrorAttempts=new Map();
 function scheduleResultMirror(task){
   if(!task||task.status!=='success'||!task.resultUrl||
