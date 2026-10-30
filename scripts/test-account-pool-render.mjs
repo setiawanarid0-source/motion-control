@@ -11,7 +11,7 @@ assert.ok(start>0&&end>start,'Account Pool render function must be present');
 const code=source.slice(start,end);
 assert.ok(code.includes("$$('[data-delete]').forEach"),
   'All Account Pool Remove buttons must use querySelectorAll');
-assert.ok(!code.includes("$('[data-delete]').forEach"),
+assert.ok(!code.split('\n').some(line=>line.trimStart().startsWith("$('[data-delete]').forEach")),
   'A single element has no forEach method');
 
 const accountList={innerHTML:''};
