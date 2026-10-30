@@ -141,9 +141,14 @@ function scheduleResultMirror(task){
  // escrow keeps legacy task access for the 72-hour History recovery window.
  // Archived outputs continue to be retried after the account leaves the Pool.
 function scheduleAccountResultArchiving(accountId){
-  for(const task of taskRegistry.publicList()){
-    if(task.accountId===accountId&&task.status==='success'&&task.resultUrl)
-      scheduleResultMirror(task);
+  try{
+    for(const task of taskRegistry.publicList()){
+      if(task.accountId===accountId&&task.status==='success'&&task.resultUrl)
+        scheduleResultMirror(task);
+    }
+  }catch(error){
+    console.warn('Motion archive retry pending after Account Pool change',
+      String(error.message||error).slice(0,130));
   }
 }
 const generationQueue=createGenerationQueue({dir:DATA_DIR,maxConcurrent:1});
