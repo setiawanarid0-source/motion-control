@@ -136,21 +136,14 @@ function scheduleResultMirror(task){
     console.warn('VANTA result archive deferred',String(task.taskId),
       String(err.message||err).slice(0,130)));
 }
-async function ensureAccountResultsArchived(accountId){
-  const items=taskRegistry.publicList().filter(t=>t.accountId===accountId&&
-    t.status==='success'&&t.resultUrl&&
-    Date.now()-Date.parse(t.finishedAt||'')<MOTION_VIDEO_RETENTION_MS);
-  for(const task of items){
-    try{
-      if(bucketResults.ready){
-        if(!await bucketResults.exists(task))await bucketResults.mirror(task);
-      }else if(!motionResults.read(task.taskId)){
-        throw Error('Arsip video belum tersambung ke Railway Bucket.');
-      }
-    }catch(error){
-      console.warn('VANTA archive blocked account deletion',String(task.taskId),String(error.message||error).slice(0,160));
-      throw Error('Akun belum dihapus: video belum aman tersimpan selama 3 hari. Periksa koneksi bucket VANTA.');
-    }
+// Removing an Account Pool entry is independent from task/media retention.
+ // The encrypted task registry keeps accepted task keys and the retired-account
+ // escrow keeps legacy task access for the 72-hour History recovery window.
+ // Archived outputs continue to be retried after the account leaves the Pool.
+function scheduleAccountResultArchiving(accountId){
+  for(const task of taskRegistry.publicList()){
+    if(task.accountId===accountId&&task.status==='success'&&task.resultUrl)
+      scheduleResultMirror(task);
   }
 }
 const generationQueue=createGenerationQueue({dir:DATA_DIR,maxConcurrent:1});
@@ -580,12 +573,13 @@ app.delete('/api/accounts/:id', async (req, res) => {
   const removing=accounts.find(a=>a.id===req.params.id);
   if(!removing)return res.status(404).json({error:'Akun tidak ditemukan.'});
   try{
-    // Archive successful videos BEFORE removing the original provider key.
-    await ensureAccountResultsArchived(removing.id);
-    // Even manual removal must never orphan accepted RunningHub tasks.
+    // Removing a key must never depend on the availability of object storage.
+    // Retire its encrypted credentials first; registered tasks retain their own
+    // credentials and all completed outputs retain their 72-hour lifetime.
     taskRegistry.retireAccount(removing);
     const next=loadGlobalAccounts().filter(a=>a.id!==req.params.id);
     saveVaultAccounts(deviceId,next);
+    scheduleAccountResultArchiving(removing.id);
     res.json({ok:true});
   }catch(error){res.status(503).json({error:String(error.message||'Penghapusan ditunda: penyimpanan task belum siap.').slice(0,220)});}
 });
@@ -596,24 +590,24 @@ async function refreshPool(req){
     try{return {account,status:await accountStatus(account.key)};}
     catch(error){return {account,status:{error:error.message}};}
   }));
-  // The task registry keeps a separate encrypted credential until History expires.
-  // Accounts with RunningHub tasks that are not yet registered are retained as a safeguard.
+  // Strict policy: verified RH balance <100 means immediate removal from
+  // Account Pool, regardless of History claim / bucket upload completion.
+  // Unknown/network-error balances are preserved rather than guessed.
   const {removed}=partitionAccountRefresh(checked,MIN_POOL_CREDITS);
   let autoRemovedCount=0;
-  if(removed.length&&req.body?.allowRetirement!==false){
-    const safeToRemove=[];
-    for(const entry of removed){
-      try{await ensureAccountResultsArchived(entry.account.id);safeToRemove.push(entry);}
-      catch(error){console.warn('Account removal postponed to preserve generated video',entry.account.id);}
-    }
-    const retiredIds=new Set(safeToRemove.map(x=>x.account.id));
+  if(removed.length){
+    const removedIds=new Set(removed.map(x=>x.account.id));
+    // Reload after provider checks to avoid restoring accounts manually deleted
+    // while the balance API was running.
     const latest=loadGlobalAccounts();
-    const toRetire=latest.filter(a=>retiredIds.has(a.id));
-    // Store every retired API key in the encrypted task vault before modifying Account Pool.
+    const toRetire=latest.filter(a=>removedIds.has(a.id));
+    // Critical: encrypted task escrow must commit BEFORE deleting Pool entries.
     for(const account of toRetire)taskRegistry.retireAccount(account);
-    const next=latest.filter(a=>!retiredIds.has(a.id));
+    const next=latest.filter(a=>!removedIds.has(a.id));
     if(next.length!==latest.length)saveVaultAccounts(deviceId,next);
     autoRemovedCount=latest.length-next.length;
+    for(const account of toRetire)scheduleAccountResultArchiving(account.id);
+    if(autoRemovedCount)console.info('RunningHub Pool: auto-retired accounts below 100 RH',autoRemovedCount);
   }
   const remaining=loadGlobalAccounts();
   return {accounts:remaining.map(a=>{
@@ -1168,7 +1162,19 @@ setInterval(()=>{
 },45000).unref();
 setInterval(()=>monitorRegisteredTasks(),25000).unref();
 setTimeout(()=>monitorRegisteredTasks(),1200).unref();
-// Account Pool retirement runs after browser History recovery or an explicit refresh.
+// Enforce the <100 RH rule even when no browser is open. A UI refresh checks
+// immediately; this periodic check covers accounts whose balance drops later.
+// Do not start overlapping provider status checks or auto-delete on API errors.
+let scheduledPoolCheck=null;
+function checkPoolBalancesInBackground(){
+  if(scheduledPoolCheck)return scheduledPoolCheck;
+  scheduledPoolCheck=refreshPool({headers:{},body:{}}).catch(error=>
+    console.warn('Background account balance refresh deferred',String(error.message||error).slice(0,130))
+  ).finally(()=>{scheduledPoolCheck=null;});
+  return scheduledPoolCheck;
+}
+setTimeout(()=>{void checkPoolBalancesInBackground();},15000).unref();
+setInterval(()=>{void checkPoolBalancesInBackground();},2*60*1000).unref();
 if(/^\d{10,25}$/.test(process.env.VANTA_REFERENCE_AUDIT_TASK||'')){
   console.log('Reference availability audit',process.env.VANTA_REFERENCE_AUDIT_TASK,
     JSON.stringify(referenceAvailability(process.env.VANTA_REFERENCE_AUDIT_TASK)));
