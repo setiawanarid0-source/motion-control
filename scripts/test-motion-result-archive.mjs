@@ -52,13 +52,18 @@ try{
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const scope=(start,end)=>server.slice(server.indexOf(start),server.indexOf(end,server.indexOf(start)));
 const manual=scope("app.delete('/api/accounts/:id'","async function refreshPool(req)");
-assert.ok(manual.includes('await ensureAccountResultsArchived(removing.id);'),
-  'Manual account removal MUST archive completed results first');
-assert.ok(manual.indexOf('await ensureAccountResultsArchived(removing.id);')<
-  manual.indexOf('taskRegistry.retireAccount(removing);'));
+assert.ok(manual.includes('taskRegistry.retireAccount(removing);'),
+  'Manual account removal MUST preserve encrypted task credentials');
+assert.ok(manual.includes('scheduleAccountResultArchiving(removing.id);'),
+  'Manual removal schedules archiving separately');
+assert.ok(!manual.includes('await ensureAccountResultsArchived'),
+  'Manual removal cannot block on object-store archival');
 assert.ok(!manual.includes('motionResults.remove('),'Account removal must never delete output');
 const auto=scope('async function refreshPool(req)',"app.post('/api/accounts/refresh'");
-assert.ok(auto.includes('await ensureAccountResultsArchived(entry.account.id)'));
+assert.ok(auto.includes('taskRegistry.retireAccount(account)'));
+assert.ok(auto.includes('scheduleAccountResultArchiving(account.id)'));
+assert.ok(!auto.includes('await ensureAccountResultsArchived'),
+  'Low-balance removal cannot wait for video archiving');
 const preview=scope("app.get('/api/tasks/:taskId/preview'","app.get('/api/tasks/:taskId/download'");
 assert.ok(preview.includes('motionResults.read(req.params.taskId)'));
 assert.ok(preview.indexOf('motionResults.read(req.params.taskId)')<
@@ -71,8 +76,8 @@ assert.ok(server.includes("dir:path.join(DATA_DIR,'motion-results')"),'Archive m
 const client=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 assert.ok(client.includes('await claimBrowserHistory();')&&client.includes('Akun belum dihapus: ada hasil lama'),
   'Browser-only History must be registered before removing original account credentials');
-assert.ok(server.includes('req.body?.allowRetirement!==false'),
-  'Account refresh must preserve browser-only history if claim is incomplete');
+assert.ok(!server.includes('req.body?.allowRetirement!==false'),
+  'Server must ignore browser History claim gate for pool removal');
 assert.ok(server.includes('autoRemovedCount=latest.length-next.length;'),
-  'Refresh must report only accounts truly removed after archiving');
+  'Refresh must report only accounts truly removed after encrypted retirement');
 console.log('PASS: result media survives account deletion/restart, cache before remote, disk quota, safe cleanup and history TTL.');

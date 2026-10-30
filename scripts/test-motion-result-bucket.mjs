@@ -96,10 +96,14 @@ assert.ok(calls.includes('ListObjectsV2Command'));
 const src=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 assert.ok(src.includes("const bucketResults=createMotionResultBucket();"));
 assert.ok(src.includes('bucketResults.mirror(task)'));
-assert.ok(src.includes('await bucketResults.exists(task)'));
+assert.ok(src.includes('scheduleAccountResultArchiving(account.id)'),
+  'Retired account media must keep archiving in background');
 assert.ok(src.includes('if(await streamBucketVideo(req,res))return;'));
 assert.ok(src.includes('if(await streamBucketVideo(req,res,{download:true}))return;'));
 assert.ok(src.includes('5*60*1000).unref();'),'Automatic expiry sweeper must run every five minutes');
-assert.ok(src.includes('await ensureAccountResultsArchived(removing.id);'));
+assert.ok(src.includes('taskRegistry.retireAccount(removing);'));
+assert.ok(src.includes('scheduleAccountResultArchiving(removing.id);'));
+assert.ok(!src.includes('await ensureAccountResultsArchived'),
+  'Result archiving must run independently from account pool removal');
 assert.ok(src.includes('void bucketResults.remove(archivedTask)'));
 console.log('PASS: S3 multipart archive supports 512MB output with no 128MB cap, independent provider keys, 72h expiry and auto-deletion.');
