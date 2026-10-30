@@ -113,13 +113,14 @@ async function loadSession(){
   state.session=await api('/api/session');
   state.accounts=state.session.accounts||[];
   renderAccountSelect();renderAccounts();updatePoolSummary();
-  // The UI loads promptly, but account retirement runs only once browser-only
-  // History has been safely claimed in the server vault.
+  // Balance-based removal is independent from browser History recovery.
+  // Retired account credentials remain encrypted on the server so legacy tasks
+  // can be recovered even after their account leaves Account Pool.
   await syncServerHistory();
+  await refreshAccounts();
   claimBrowserHistory().then(async claimed=>{
     state.historyClaimed=Boolean(claimed);
-    await refreshAccounts();
-    if(!claimed)console.warn('Automatic account retirement deferred until History is preserved');
+    if(!claimed)console.warn('History recovery can retry using retired account escrow');
     await syncServerHistory();
   }).catch(error=>console.warn('Background History recovery',error.message));
 }
@@ -153,7 +154,7 @@ async function refreshAccounts(){
   }
   try{
     const data=await api('/api/accounts/refresh',{method:'POST',
-      body:JSON.stringify({allowRetirement:state.historyClaimed===true})});
+      body:'{}'});
     state.accounts=data.accounts||[];
     renderAccounts();
     updatePoolSummary();
