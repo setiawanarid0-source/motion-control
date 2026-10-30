@@ -8,7 +8,10 @@ const browser=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8'
 const begin=server.indexOf('async function refreshPool(req){');
 const end=server.indexOf("\napp.post('/api/accounts/refresh'",begin);
 assert.ok(begin>0&&end>begin,'Use actual production refreshPool code');
-const code=server.slice(begin,end);
+const archiveStart=server.indexOf('function scheduleAccountResultArchiving(accountId){');
+const archiveEnd=server.indexOf('\nconst generationQueue=',archiveStart);
+assert.ok(archiveStart>0&&archiveEnd>archiveStart);
+const code=server.slice(archiveStart,archiveEnd)+'\n'+server.slice(begin,end);
 
 const initial=[
   {id:'acc-0',name:'Empty',key:'a'.repeat(16)},
@@ -34,14 +37,17 @@ const ctx={
   partitionAccountRefresh,MIN_POOL_CREDITS:100,
   loadGlobalAccounts:()=>structuredClone(live),
   saveVaultAccounts:(_deviceId,next)=>{events.push('save:'+next.map(x=>x.id).join(','));live=structuredClone(next);},
-  taskRegistry:{retireAccount:account=>events.push('escrow:'+account.id)},
-  // A failed asynchronous archiving attempt must not stop pool retirement.
-  scheduleAccountResultArchiving:accountId=>{
-    events.push('archive:'+accountId);
-    if(accountId==='acc-active')throw Error('Storage unavailable');
+  taskRegistry:{
+    retireAccount:account=>events.push('escrow:'+account.id),
+    publicList:()=>[{accountId:'acc-active',status:'success',resultUrl:'https://files.runninghub.ai/video.mp4'}]
+  },
+  // Real archive scheduler must swallow a failed media scheduling attempt.
+  scheduleResultMirror:task=>{
+    events.push('archive:'+task.accountId);
+    throw Error('Storage unavailable');
   },
   publicAccount:(account,status)=>({id:account.id,status}),
-  console:{info:()=>{}}
+  console:{info:()=>{},warn:message=>events.push('warn:'+message)}
 };
 vm.runInNewContext(code+'\nthis.runRefresh=refreshPool;',ctx);
 const result=await ctx.runRefresh({headers:{},body:{allowRetirement:false}});
@@ -54,8 +60,11 @@ assert.deepEqual(events.filter(x=>x.startsWith('escrow:')),
   'Save encrypted credential escrow for each retired account');
 const saveIndex=events.findIndex(x=>x.startsWith('save:'));
 assert.equal(saveIndex,3,'Escrow must be committed before deleting pool entries');
-assert.equal(events.filter(x=>x.startsWith('archive:')).length,3,
-  'Archived outputs continue to be scheduled after account removal');
+assert.deepEqual(events.filter(x=>x.startsWith('archive:')),
+  ['archive:acc-active'],
+  'Existing successful outputs continue to be scheduled after account removal');
+assert.ok(events.some(x=>x.startsWith('warn:')),
+  'Archive failures are logged for retry, without resurrecting low-credit account');
 assert.ok(!code.includes('ensureAccountResultsArchived'),
   'Object-storage availability must not block 100-RH rule');
 assert.ok(!code.includes('req.body?.allowRetirement'),
