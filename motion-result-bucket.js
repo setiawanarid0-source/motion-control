@@ -37,7 +37,7 @@ export function createMotionResultBucket({env=process.env,client,request=axios.g
   const ready=!!(config||client);
   const bucket=config?.name||env.VANTA_RESULTS_BUCKET_NAME||'vanta-test';
   const s3=client|| (config?new S3Client({
-    region:config.region,endpoint:config.endpoint,forcePathStyle:true,
+    region:config.region,endpoint:config.endpoint,forcePathStyle:false,
     credentials:{accessKeyId:config.accessKeyId,secretAccessKey:config.secretAccessKey}
   }):null);
   const pending=new Map();
