@@ -96,7 +96,8 @@ assert.ok(calls.includes('ListObjectsV2Command'));
 const src=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 assert.ok(src.includes("const bucketResults=createMotionResultBucket();"));
 assert.ok(src.includes('bucketResults.mirror(task)'));
-assert.ok(src.includes('await bucketResults.exists(task)'));
+assert.ok(src.includes('scheduleAccountResultArchiving(account.id)'),
+  'Retired account media must keep archiving in background');
 assert.ok(src.includes('if(await streamBucketVideo(req,res))return;'));
 assert.ok(src.includes('if(await streamBucketVideo(req,res,{download:true}))return;'));
 assert.ok(src.includes('5*60*1000).unref();'),'Automatic expiry sweeper must run every five minutes');
