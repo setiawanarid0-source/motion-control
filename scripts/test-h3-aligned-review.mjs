@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
-import {reviewPlan,prepareAlignedReview,alignedReviewGraph,REVIEW_MODELS} from '../experiments/h3-aligned-review/review.js';
+import {reviewPlan,prepareAlignedReview,alignedReviewGraph,headSwapPrompt,REVIEW_MODELS} from '../experiments/h3-aligned-review/review.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from '../runninghub-graph-validation.js';
 import {explicitQueueMaxed,queueCapacityError} from '../runninghub-capacity.js';
@@ -43,6 +43,23 @@ assert.deepEqual(graph['490'].inputs.audio,['33',2]);
 assert.ok(!Object.values(graph).some(n=>/Resize|ImageScale|Composite|Uncrop/.test(n.class_type)),
   'Do not advertise a resized or pasted low-res render as native output-size inference');
 assert.ok(graph['40'].inputs.prompt.includes(details),'Use actual reference details, not creator cache');
+// The author's Head Swap contract uses all seven structured sections. A generic
+// short edit instruction drops the explicit source/identity retention roles.
+const prompt=headSwapPrompt(details);
+const sections=['head_swap','subject_definitions','summary','retention_analysis',
+  'detailed_description','overall_soundscape','non_diegetic_music'];
+let sectionPosition=-1;
+for(const section of sections){
+  const next=prompt.indexOf(section+':\n');
+  assert.ok(next>sectionPosition,'Head Swap sections must be complete and ordered: '+section);
+  sectionPosition=next;
+}
+assert.equal(prompt.split(details).length,2,'Current reference details must appear exactly once');
+const secondDetails='Adult character with short curly silver hair and a broad square jaw';
+assert.ok(headSwapPrompt(secondDetails).includes(secondDetails));
+assert.ok(!headSwapPrompt(secondDetails).includes(details),'Do not retain a previous reference identity');
+for(const invalid of ['', 'short', 'x'.repeat(1201), 'valid description\u0000'])
+  assert.throws(()=>headSwapPrompt(invalid),/deskripsi/);
 for(const n of Object.values(graph))for(const v of Object.values(n.inputs))if(Array.isArray(v))assert.ok(graph[v[0]],'No dangling links');
 for(const sourceOverride of [{canvasWidth:480},{modelFrames:124},{padLeft:0},{frames:undefined}])
   assert.throws(()=>alignedReviewGraph({...args,source:{...source,...sourceOverride}}),/Metadata/);

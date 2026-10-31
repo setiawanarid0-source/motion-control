@@ -62,6 +62,57 @@ function name(value){
     throw Error('Nama aset uji H3 tidak valid.');
   return value;
 }
+export function headSwapPrompt(referenceDetails){
+  const details=String(referenceDetails||'').trim();
+  if(details.length<10||details.length>1200||/[\u0000-\u0008]/.test(details))
+    throw Error('Uji ini membutuhkan deskripsi wajah/rambut dari gambar referensi yang sebenarnya.');
+  // Keep the author's complete section structure. Only this description comes
+  // from the current reference; no cached example identity or scene is reused.
+  return `head_swap:
+
+subject_definitions:
+<Subject 1> is the replacement head shown in <Picture 1>. This image defines the face,
+head shape, facial proportions, hairline, hairstyle, hair color and hair length.
+Facial details of <Subject 1>:
+${details}
+
+<Subject 2> is the original main person in the aligned source guide <Video 1>.
+<Video 1> defines the whole performance, source body, camera, setting and timeline.
+
+summary:
+[video editing + reference generation]
+Replace the complete head and hair of <Subject 2> using <Subject 1> from <Picture 1>.
+The reference contributes head identity only. Keep the original video performance.
+
+retention_analysis:
+<Subject 1>: attribute_transfer. Carry the same face, head proportions and complete
+hairstyle across the whole source timeline. Do not transfer the reference body,
+clothing, pose, background, lighting setup or accessories outside the head.
+<Subject 2>: partially_preserved. Retain the body, neck position, clothing, hands,
+body proportions, gestures, expression timing and interactions from the source.
+<Video 1>: partially_preserved. Keep its camera path, framing, lens perspective,
+objects, other people, exposure, shadows, environment, scene order and timing.
+
+detailed_description:
+Keep the head identity from <Picture 1> stable as the original head turns, tilts,
+changes scale or moves through the frame. Follow the source gaze, expression and
+rotation while retaining the reference facial geometry, eyes, nose, mouth,
+jawline, ears, hairline, hair color and hair length. Fit the head naturally to the
+original neck and shoulders, with consistent scale and perspective.
+Relight the replacement to match the source illumination, shadow direction,
+highlights, color temperature and motion blur. Preserve foreground occlusions,
+including hands or objects passing in front of the head; do not paint over them.
+Avoid frame-to-frame face morphing, head-size changes, changing hair, texture
+flicker or a visible cutout boundary. Preserve the source action and all scene
+details outside the head edit. Do not add objects, remove objects or invent a
+new camera move. Keep source text and logos.
+
+overall_soundscape:
+Keep the original source audio and audiovisual timing.
+
+non_diegetic_music:
+Do not add music or replace the source soundtrack.`;
+}
 export function alignedReviewGraph({imageName,videoName,source,referenceDetails,models=REVIEW_MODELS}){
   name(imageName);name(videoName);for(const key of Object.keys(REVIEW_MODELS))name(models[key]);
   if(!source||source.fps!==24||
@@ -76,20 +127,7 @@ export function alignedReviewGraph({imageName,videoName,source,referenceDetails,
      source.padLeft!==Math.floor((source.canvasWidth-source.outputWidth)/2)||
      source.padTop!==Math.floor((source.canvasHeight-source.outputHeight)/2))
     throw Error('Metadata uji H3 belum tervalidasi.');
-  const details=String(referenceDetails||'').trim();
-  if(details.length<10||details.length>1200||/[\u0000-\u0008]/.test(details))
-    throw Error('Uji ini membutuhkan deskripsi wajah/rambut dari gambar referensi yang sebenarnya.');
-  const prompt='head_swap: subject_definitions: <Subject 1> is the head identity in <Picture 1>. '+
-    'Facial details of <Subject 1>: '+details+'. '+
-    '<Subject 2> is the original main person in the aligned guide <Video 1>. '+
-    'summary: Replace only the complete head and hair of <Subject 2> with <Subject 1>. '+
-    'retention_analysis: Preserve the original body, neck, clothing, hands, other people, objects, '+
-    'camera, framing, motion, performance, expressions, lighting, background and timing. '+
-    'detailed_description: Maintain the exact face shape, facial features, hairline, hairstyle, '+
-    'hair color and hair length of <Subject 1> throughout. The head follows the original rotation, '+
-    'scale, perspective and expressions and connects naturally to the source neck. '+
-    'Match source illumination and shadows. Preserve occlusions and original scene details. '+
-    'Do not transfer the reference outfit or body. Prevent identity drift and texture flicker.';
+  const prompt=headSwapPrompt(referenceDetails);
   const g={},n=(id,class_type,inputs,title)=>{g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   n('1','UNETLoader',{unet_name:models.unet,weight_dtype:'default'});
   n('2','CLIPLoader',{clip_name:models.clip,type:'minimax',device:'default'});

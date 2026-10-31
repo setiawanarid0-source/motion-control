@@ -4,7 +4,7 @@ This is a separate diagnostic workflow, not a certified production fix. The main
 H3 option and all existing workflow graphs are unchanged. The owner-only page
 `/h3-review.html` runs one short review through the existing Account Pool,
 durable submission queue, task registry, History and 72-hour output storage.
-There is no navigation entry and no automatic paid render.
+The H3 notice in Motion Control links to this page. There is no automatic paid render.
 
 ## Why this comparison exists
 
@@ -66,6 +66,10 @@ They must be assessed on the separate clothed benchmark with actual model output
   generation length would let Add Guide truncate a non-grid guide. Generated
   padding is trimmed before export; no tail or extra scene is kept.
 - Details must describe the actual reference, not an author's cached person.
+- The head prompt retains the author's seven-section structure: subject
+  definitions, summary, transfer/retention roles, detailed edit, source soundscape
+  and music policy, after the `head_swap:` trigger. Each request inserts only the
+  current reference description; no identity carries over from previous requests.
 
 This comparison regenerates full frames under the head-only conditioning. It
 **does not prove pixel preservation outside the head**. Body/background drift
@@ -105,9 +109,10 @@ one-minute or multi-scene reliability.
 Local tests cover native graph links/model routing, guide and export alignment,
 real media normalization, source audio, temporary cleanup, provider payload and
 reference details surviving the durable async queue. They do not run H3 inference.
-At preparation time, this executor has no GPU or RunningHub test key, and the
-Cloud Browser is at Vanta's owner login form. A successful authenticated render
-and visual review remain outstanding.
+Technical checks run without a Vanta browser session or a paid generation. The
+owner runs the non-explicit render and assesses its visual result. Do not block
+code work on browser login or claim that local checks prove model availability,
+memory fit, visual fidelity or acceptance on RunningHub.
 
 ## Primary references
 
