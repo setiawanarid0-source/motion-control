@@ -1,51 +1,473 @@
 {
   "1": {
     "class_type": "UNETLoader",
-    "inputs": {"unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors", "weight_dtype": "default"},
-    "_meta": {"title": "MiniMax H3 Ref2VA · INT8"}
+    "inputs": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "MiniMax H3 Ref2VA · INT8"
+    }
   },
   "2": {
     "class_type": "CLIPLoader",
-    "inputs": {"clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "type": "minimax", "device": "default"}
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    }
   },
   "3": {
     "class_type": "VAELoader",
-    "inputs": {"vae_name": "minimax_h3_video_vae_fp16.safetensors"}
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    }
   },
   "4": {
     "class_type": "VAELoader",
-    "inputs": {"vae_name": "minimax_h3_audio_vae_fp32.safetensors"}
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    }
   },
   "5": {
     "class_type": "LoraLoaderModelOnly",
-    "inputs": {"model": ["1", 0], "lora_name": "h3_character_swap_v1.5.safetensors", "strength_model": 1},
-    "_meta": {"title": "Akatz Character Swap V1.5 · strength 1.0"}
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "lora_name": "h3_character_swap_v1.5.safetensors",
+      "strength_model": 1
+    },
+    "_meta": {
+      "title": "Akatz Character Swap V1.5 · strength 1.0"
+    }
+  },
+  "33": {
+    "class_type": "VHS_LoadVideo",
+    "inputs": {
+      "video": "source-1080.mp4",
+      "force_rate": 24,
+      "force_size": "Disabled",
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 120,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "None"
+    },
+    "_meta": {
+      "title": "Original 1080p frames + original audio · same 24 FPS timeline"
+    }
+  },
+  "86": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "sam3.1_multiplex_fp16.safetensors"
+    },
+    "_meta": {
+      "title": "SAM 3.1 · source/generated head tracking"
+    }
+  },
+  "87": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "head",
+      "clip": [
+        "86",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Track only the main head, including the full hair silhouette"
+    }
+  },
+  "88": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "hand",
+      "clip": [
+        "86",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Preserve source hands crossing the face"
+    }
+  },
+  "89": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "hair",
+      "clip": [
+        "86",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Track the complete hair, including long hair"
+    }
+  },
+  "90": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "87",
+        0
+      ],
+      "conditioning_2": [
+        "89",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Head + hair segmentation prompts"
+    }
   },
   "331": {
     "class_type": "MiniMaxH3Director",
     "inputs": {
-      "model": ["5", 0], "clip": ["2", 0], "video_vae": ["3", 0], "audio_vae": ["4", 0],
+      "model": [
+        "5",
+        0
+      ],
+      "clip": [
+        "2",
+        0
+      ],
+      "video_vae": [
+        "3",
+        0
+      ],
+      "audio_vae": [
+        "4",
+        0
+      ],
       "task_type": "rv2v — 参考素材改视频(Reference Video Edit)",
-      "global_prompt": "Replace the main person in <Video 1> with the character in <Picture 1>.",
-      "bd_grp_sample": "采样设置", "cfg": 1, "seed": 50,
-      "frame_rate": 24, "width": 480, "height": 864, "ref_max_size": 864,
+      "global_prompt": "Edit only the main person's face and complete hair in <Video 1>, using <Picture 1> as the face and hair identity reference. Keep the same facial structure, recognizable identity, hairline, hairstyle, hair color and hair length from <Picture 1> in every frame and every shot. Do not transfer the reference picture's body, outfit, pose, background or camera angle. Keep the original body, body proportions, neck, skin below the head, clothing, accessories, hands, other people and objects from <Video 1> unchanged. Follow the original performance in <Video 1>: body movement, hands, pose, gaze, facial expression and timing. The replacement head follows the source head rotation, perspective and scale through zooms, movement and camera changes. Match the source lighting and shadows on the replacement face and hair. Preserve foreground occlusions. Preserve the source camera movement, zoom, framing, perspective, background, lighting, scene cuts, text and logos exactly. Do not introduce new objects, camera moves, scene cuts, identity changes or hairstyle changes.",
+      "bd_grp_sample": "采样设置",
+      "cfg": 1,
+      "seed": 50,
+      "frame_rate": 24,
+      "width": 480,
+      "height": 864,
+      "ref_max_size": 864,
       "total_frames": 120,
       "timeline_data": "",
-      "steps": 20, "sampler": "res_multistep", "scheduler": "simple",
-      "shift_video": 12, "shift_audio": 3,
-      "clear_vram_between_segments": true, "export_source_images": false
+      "steps": 20,
+      "sampler": "res_multistep",
+      "scheduler": "simple",
+      "shift_video": 12,
+      "shift_audio": 3,
+      "clear_vram_between_segments": true,
+      "export_source_images": true
     },
-    "_meta": {"title": "VANTA · character + source motion/camera · complete timeline"}
+    "_meta": {
+      "title": "Face + hair identity · scene-aware source performance"
+    }
   },
   "490": {
     "class_type": "VHS_VideoCombine",
     "inputs": {
-      "images": ["331", 0], "audio": ["331", 1], "frame_rate": ["331", 2],
-      "loop_count": 0, "filename_prefix": "VANTA-MiniMax-H3-Character-Swap",
-      "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 18,
-      "save_metadata": true, "trim_to_audio": false, "pingpong": false,
-      "save_output": true, "no_preview": false
+      "images": [
+        "493",
+        0
+      ],
+      "audio": [
+        "33",
+        2
+      ],
+      "frame_rate": [
+        "331",
+        2
+      ],
+      "loop_count": 0,
+      "filename_prefix": "VANTA-MiniMax-H3-Face-Hair-1080p",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 16,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "no_preview": false
     },
-    "_meta": {"title": "24 FPS MP4 · original audio · full source duration"}
+    "_meta": {
+      "title": "1080p final · 24 FPS · original audio · source body and background"
+    }
+  },
+  "492": {
+    "class_type": "ImageToMask",
+    "inputs": {
+      "image": [
+        "1017",
+        0
+      ],
+      "channel": "red"
+    },
+    "_meta": {
+      "title": "Joined head/hair matte · source hands excluded"
+    }
+  },
+  "493": {
+    "class_type": "MVEx_SubjectUncrop",
+    "inputs": {
+      "cropped_images": [
+        "331",
+        0
+      ],
+      "original_images": [
+        "33",
+        0
+      ],
+      "cropped_masks": [
+        "492",
+        0
+      ],
+      "feather": 0,
+      "resize_method": "lanczos"
+    },
+    "_meta": {
+      "title": "Framewise masked paste into original 1080p · source outside mask"
+    }
+  },
+  "1000": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "331",
+        0
+      ],
+      "batch_index": 0,
+      "length": 120
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1004": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "331",
+        4
+      ],
+      "batch_index": 0,
+      "length": 120
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1005": {
+    "class_type": "SAM3_VideoTrack",
+    "inputs": {
+      "images": [
+        "1004",
+        0
+      ],
+      "model": [
+        "86",
+        0
+      ],
+      "conditioning": [
+        "90",
+        0
+      ],
+      "detection_threshold": 0.4,
+      "max_objects": 2,
+      "detect_interval": 1
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1006": {
+    "class_type": "SAM3_TrackToMask",
+    "inputs": {
+      "track_data": [
+        "1005",
+        0
+      ],
+      "object_indices": ""
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1007": {
+    "class_type": "SAM3_VideoTrack",
+    "inputs": {
+      "images": [
+        "1000",
+        0
+      ],
+      "model": [
+        "86",
+        0
+      ],
+      "conditioning": [
+        "90",
+        0
+      ],
+      "detection_threshold": 0.4,
+      "max_objects": 2,
+      "detect_interval": 1
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1008": {
+    "class_type": "SAM3_TrackToMask",
+    "inputs": {
+      "track_data": [
+        "1007",
+        0
+      ],
+      "object_indices": ""
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1009": {
+    "class_type": "SAM3_VideoTrack",
+    "inputs": {
+      "images": [
+        "1004",
+        0
+      ],
+      "model": [
+        "86",
+        0
+      ],
+      "conditioning": [
+        "88",
+        0
+      ],
+      "detection_threshold": 0.4,
+      "max_objects": 2,
+      "detect_interval": 1
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1010": {
+    "class_type": "SAM3_TrackToMask",
+    "inputs": {
+      "track_data": [
+        "1009",
+        0
+      ],
+      "object_indices": ""
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1011": {
+    "class_type": "MaskComposite",
+    "inputs": {
+      "destination": [
+        "1006",
+        0
+      ],
+      "source": [
+        "1008",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "operation": "add"
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1012": {
+    "class_type": "GrowMask",
+    "inputs": {
+      "mask": [
+        "1011",
+        0
+      ],
+      "expand": 2,
+      "tapered_corners": true
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1013": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "1012",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1014": {
+    "class_type": "ImageBlur",
+    "inputs": {
+      "image": [
+        "1013",
+        0
+      ],
+      "blur_radius": 2,
+      "sigma": 1
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1015": {
+    "class_type": "ImageToMask",
+    "inputs": {
+      "image": [
+        "1014",
+        0
+      ],
+      "channel": "red"
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1016": {
+    "class_type": "MaskComposite",
+    "inputs": {
+      "destination": [
+        "1015",
+        0
+      ],
+      "source": [
+        "1010",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "operation": "subtract"
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
+  },
+  "1017": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "1016",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Head/hair matte · segment-local tracking"
+    }
   }
 }

@@ -215,7 +215,7 @@ function updateGenerate(){
   refreshLabNotice();
 }
 function workflowName(){
-  if(state.workflow==='minimaxH3')return 'MiniMax H3 · Character Swap LoRA 1.5';
+  if(state.workflow==='minimaxH3')return 'MiniMax H3 · Face & Hair · 1080p';
   if(state.workflow==='rife60')return 'RIFE Adaptive · hingga 60 FPS';
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';

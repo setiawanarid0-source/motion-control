@@ -24,7 +24,7 @@ import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
 import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
-import {probeH3Input,h3GraphForInputs} from './minimax-h3.js';
+import {prepareH3Input,h3GraphForInputs} from './minimax-h3.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -55,9 +55,9 @@ const workflowGraphs = {
 
 const workflowMeta = {
   minimaxH3: {
-    id:'minimaxH3',name:'MiniMax H3 · Character Swap LoRA 1.5',
-    subtitle:'24 FPS · Ref2VA · LoRA 1.5 · video hingga 60 detik',
-    detail:'Karakter dari gambar, gerakan dan kamera dari video sumber. Semua segmen memakai referensi karakter yang sama dan panduan sambungan gerak. Standard sekitar 0,4 MP; Plus sekitar 0,7 MP. Rasio sumber dan audio asli dipertahankan. Eksperimental; konsistensi identitas dan kamera belum diverifikasi lewat generasi RunningHub.',
+    id:'minimaxH3',name:'MiniMax H3 · Face & Hair · 1080p',
+    subtitle:'1080p · wajah + rambut · 24 FPS · hingga 60 detik',
+    detail:'Wajah dan rambut dari gambar referensi, digabung dengan video sumber menggunakan mask kepala. Tubuh, pakaian dan latar di luar mask memakai frame sumber 1080p. Audio dan rasio video dipertahankan. Referensi identitas tetap sama di setiap scene; tracking dan panduan gerak direset saat pergantian shot. Bagian hasil H3 di-resize ke output 1080p. Konsistensi identitas tetap bergantung pada hasil model dan ketepatan mask.',
     outputKind:'video',experimental:true
   },
   rife60: {
@@ -459,9 +459,14 @@ async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
 }
 async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
   let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
+  if(workflowKey==='minimaxH3'&&(!h3Source?.file||!h3Source?.sourceFile))
+    throw Error('Metadata video sumber H3 belum tervalidasi.');
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey, imageFile);
-  const videoName = await uploadToRunningHub(apiKey, videoFile);
-  if(workflowKey==='minimaxH3')selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
+  const videoName = await uploadToRunningHub(apiKey, workflowKey==='minimaxH3'?h3Source.file:videoFile);
+  if(workflowKey==='minimaxH3'){
+    const sourceVideoName=await uploadToRunningHub(apiKey,h3Source.sourceFile);
+    selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,sourceVideoName,source:h3Source});
+  }
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
   const payload = {
     apiKey,
@@ -645,6 +650,7 @@ async function handleGeneration(req,res){
     if(stagedReferences)discardReferences(stagedReferences).catch(e=>console.warn('Reference staging cleanup',e.message));
     if(preparedMotion)preparedMotion.release().catch(e=>console.warn('R15 temporary file cleanup',e.message));
     if(rifeSource?.release)rifeSource.release().catch(e=>console.warn('RIFE temporary anchors cleanup',e.message));
+    if(h3Source?.release)h3Source.release().catch(e=>console.warn('H3 temporary media cleanup',e.message));
     for (const f of [imageFile, videoFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
   };
 
@@ -662,7 +668,7 @@ async function handleGeneration(req,res){
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
     if(workflowKey==='minimaxH3'){
       req.progress?.('analyzing');
-      h3Source=await probeH3Input(videoFile,mode);
+      h3Source=await prepareH3Input(videoFile,mode);
     }
     if(videoOnly){
       req.progress?.('analyzing');
