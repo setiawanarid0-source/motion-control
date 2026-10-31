@@ -1,0 +1,51 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {"unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors", "weight_dtype": "default"},
+    "_meta": {"title": "MiniMax H3 Ref2VA · INT8"}
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {"clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "type": "minimax", "device": "default"}
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {"vae_name": "minimax_h3_video_vae_fp16.safetensors"}
+  },
+  "4": {
+    "class_type": "VAELoader",
+    "inputs": {"vae_name": "minimax_h3_audio_vae_fp32.safetensors"}
+  },
+  "5": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {"model": ["1", 0], "lora_name": "h3_character_swap_v1.5.safetensors", "strength_model": 1},
+    "_meta": {"title": "Akatz Character Swap V1.5 · strength 1.0"}
+  },
+  "331": {
+    "class_type": "MiniMaxH3Director",
+    "inputs": {
+      "model": ["5", 0], "clip": ["2", 0], "video_vae": ["3", 0], "audio_vae": ["4", 0],
+      "task_type": "rv2v — 参考素材改视频(Reference Video Edit)",
+      "global_prompt": "Replace the main person in <Video 1> with the character in <Picture 1>.",
+      "bd_grp_sample": "采样设置", "cfg": 1, "seed": 50,
+      "frame_rate": 24, "width": 480, "height": 864, "ref_max_size": 864,
+      "total_frames": 120,
+      "timeline_data": "",
+      "steps": 20, "sampler": "res_multistep", "scheduler": "simple",
+      "shift_video": 12, "shift_audio": 3,
+      "clear_vram_between_segments": true, "export_source_images": false
+    },
+    "_meta": {"title": "VANTA · character + source motion/camera · complete timeline"}
+  },
+  "490": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": ["331", 0], "audio": ["331", 1], "frame_rate": ["331", 2],
+      "loop_count": 0, "filename_prefix": "VANTA-MiniMax-H3-Character-Swap",
+      "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 18,
+      "save_metadata": true, "trim_to_audio": false, "pingpong": false,
+      "save_output": true, "no_preview": false
+    },
+    "_meta": {"title": "24 FPS MP4 · original audio · full source duration"}
+  }
+}

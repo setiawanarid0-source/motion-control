@@ -123,11 +123,17 @@
                 <p>35 FPS · 337 frame · 1080 × 1920 · 6 steps / CFG 1</p>
                 <small>Gunakan kembali mask tes SAM3 berhasil. Ini tes generasi penuh, bukan workflow final.</small>
               </button>
+              <button class="workflow-card" data-workflow="minimaxH3" type="button">
+                <div class="workflow-row"><strong>MiniMax H3 · Character Swap</strong><span class="badge badge-accent">NEW</span></div>
+                <p>LoRA 1.5 · 24 FPS · rasio sumber · hingga 60 detik</p>
+                <small>Ganti karakter dari gambar referensi, dengan gerakan dan kamera dari video. Semua segmen memakai karakter yang sama. Eksperimental.</small>
+              </button>
             </div>
 
             <div id="rifeNotice" class="diagnostic-notice hidden" role="note"><strong>Frame Interpolation tanpa Upscale</strong><p>Unggah video hingga 60 FPS. Video yang terbaca 60 FPS tetapi memiliki frame duplikat akan dianalisis: frame gerakan unik dijadikan input RIFE agar AI membuat frame perantara baru hingga 60 FPS. Nilai FPS gerakan ditentukan dari hasil analisis, bukan dipaksa ke 30 FPS. Resolusi dan durasi dipertahankan. Jika tidak ada pola yang dapat diperbaiki secara aman, task tidak dikirim ke RunningHub. Analisis menggunakan CPU VANTA dan dapat memerlukan waktu.</p></div>
             <div id="diagnosticNotice" class="diagnostic-notice hidden" role="note"><strong>Mode diagnosis SAM3</strong><p>Wajib upload driving video yang sudah dikompensasi ke 35 FPS, bukan video mentah. Tes ini menghasilkan mask saja dan tetap dapat menggunakan kredit RunningHub. Belum ada estimasi biaya yang tervalidasi.</p></div>
             <div id="fullLabNotice" class="diagnostic-notice hidden" role="note"><strong>R4 Full Controlled · Tes berbayar</strong><p id="r4LabMaskSource"></p><p>Upload kembali gambar referensi dan driving video hasil kompensasi 35 FPS yang sama dengan tes SAM3. Dua mask akan dipakai ulang otomatis dari task tersebut. Mask belum menjalani refinement offline. Proses 337 frame dengan RunningHub dan membutuhkan kredit. Kamera statis belum terbukti.</p></div>
+            <div id="h3Notice" class="diagnostic-notice hidden" role="note"><strong>MiniMax H3 + Character Swap LoRA 1.5</strong><p>Unggah gambar karakter dan video 0,25–60 detik. Hasil 24 FPS: Standard sekitar 0,4 MP atau Plus sekitar 0,7 MP, mengikuti rasio video dengan audio asli. Video diproses per segmen dengan referensi karakter yang sama. Plus disarankan untuk ruang memori lebih besar. Mulai dengan tes 5 detik; kemiripan wajah, zoom, gerakan, dan sambungan antarsegmen belum dijamin. Gunakan sumber dengan satu subjek utama.</p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
             <div class="mode-grid">
               <button class="mode-card selected" data-mode="standard" type="button">
@@ -335,7 +341,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/auth.js?v=20261026-global-login" defer></script>
-  <script src="/app.js?v=20261030-low-rh-autoremove-v7" defer></script>
+  <script src="/app.js?v=20261031-h3-character-swap-v1" defer></script>
   <script src="/kie-ui.js?v=20261023-grok2-v1" defer></script>
   <script src="/history-gallery.js?v=20261024-image-fullscreen-v1" defer></script>
 </body>

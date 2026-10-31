@@ -24,6 +24,7 @@ import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
 import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
+import {probeH3Input,h3GraphForInputs} from './minimax-h3.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,9 +50,16 @@ const workflowGraphs = {
   koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-sam3-diagnostic-api.json'), 'utf8')),
   r4Lab: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-full-controlled-api.json'), 'utf8')),
   rife60: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/rife60-api.json'), 'utf8')),
+  minimaxH3: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/minimax-h3-character-swap-api.json'), 'utf8')),
 };
 
 const workflowMeta = {
+  minimaxH3: {
+    id:'minimaxH3',name:'MiniMax H3 · Character Swap LoRA 1.5',
+    subtitle:'24 FPS · Ref2VA · LoRA 1.5 · video hingga 60 detik',
+    detail:'Karakter dari gambar, gerakan dan kamera dari video sumber. Semua segmen memakai referensi karakter yang sama dan panduan sambungan gerak. Standard sekitar 0,4 MP; Plus sekitar 0,7 MP. Rasio sumber dan audio asli dipertahankan. Eksperimental; konsistensi identitas dan kamera belum diverifikasi lewat generasi RunningHub.',
+    outputKind:'video',experimental:true
+  },
   rife60: {
     id: 'rife60', name: 'RIFE · ≤60 → 60 FPS',
     subtitle: 'RIFE Adaptive · deteksi 60 FPS semu · resolusi asli',
@@ -449,15 +457,16 @@ async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
     return {videoName,imageName};
   }finally{await fs.promises.rm(dir,{recursive:true,force:true});}
 }
-async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
-  const selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
+  let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey, imageFile);
   const videoName = await uploadToRunningHub(apiKey, videoFile);
+  if(workflowKey==='minimaxH3')selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
   const payload = {
     apiKey,
     workflowId,
-    nodeInfoList: [
+    nodeInfoList: workflowKey==='minimaxH3' ? [] : [
       ...(workflowKey==='rife60'
         ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName },
            { nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps },
@@ -469,8 +478,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     ],
     workflow: JSON.stringify(selectedGraph),
     addMetadata: true,
-    // RIFE does not reserve a paid retained instance after completion.
-    ...(workflowKey==='rife60'?{}:{retainSeconds:259200}),
+    // H3 and RIFE do not reserve a paid retained instance after completion.
+    ...(['rife60','minimaxH3'].includes(workflowKey)?{}:{retainSeconds:259200}),
   };
   // Match the RunningHub instance selected by the user; keep queued legacy Lite unchanged.
   const instanceType=runningHubInstanceType(mode);
@@ -630,6 +639,7 @@ async function handleGeneration(req,res){
   const videoFile = req.files?.videoReference?.[0];
   let preparedMotion=null;
   let rifeSource=null;
+  let h3Source=null;
   let stagedReferences=null;
   const cleanup = () => {
     if(stagedReferences)discardReferences(stagedReferences).catch(e=>console.warn('Reference staging cleanup',e.message));
@@ -650,6 +660,10 @@ async function handleGeneration(req,res){
     const mode = String(req.body?.mode || 'standard');
     const requestedAccountId = String(req.body?.accountId || 'auto');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
+    if(workflowKey==='minimaxH3'){
+      req.progress?.('analyzing');
+      h3Source=await probeH3Input(videoFile,mode);
+    }
     if(videoOnly){
       req.progress?.('analyzing');
       const metadata=await verifyRifeInput(videoFile);
@@ -715,6 +729,7 @@ async function handleGeneration(req,res){
           imageFile,
           videoFile:preparedMotion?.file||rifeSource?.file||videoFile,
           sourceFps:rifeSource?.sourceFps,
+          h3Source,
           diagnosticAccount,
           diagnosticTaskId,
           onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting');},

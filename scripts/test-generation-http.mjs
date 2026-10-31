@@ -50,11 +50,11 @@ try{
   assert.equal(changed.status,200);
   headers.Cookie = changed.headers.get('set-cookie').split(';')[0];
   const jobId=crypto.randomUUID();
-  const form=(mode='standard')=>{
+  const form=(mode='standard',workflow='r15')=>{
     const data=new FormData();
     data.append('referenceImage',new Blob([Buffer.alloc(1024,1)],{type:'image/jpeg'}),'source.jpg');
     data.append('videoReference',new Blob([Buffer.alloc(4096,2)],{type:'video/mp4'}),'source.mp4');
-    data.append('workflow','r15');data.append('mode',mode);
+    data.append('workflow',workflow);data.append('mode',mode);
     data.append('accountId','auto');return data;
   };
   const started=Date.now();
@@ -123,6 +123,25 @@ try{
   }
   assert.equal(rifeJob.stage,'error','Invalid 30fps source must be rejected without paid task');
   assert.equal(rifeJob.task,null);
+  const workflowsReply=await fetch(url+'/api/workflows',{headers});
+  const workflows=await workflowsReply.json();
+  assert.ok(workflows.workflows.some(w=>w.id==='minimaxH3'&&w.outputKind==='video'));
+  const h3Id=crypto.randomUUID();
+  const h3Start=await fetch(url+'/api/generate',{
+    method:'POST',headers:{...headers,'X-Vanta-Request-Id':h3Id},body:form('plus','minimaxH3')
+  });
+  assert.equal(h3Start.status,202,'H3 must reuse the durable async upload endpoint');
+  let h3Job;
+  for(let i=0;i<50;i++){
+    const reply=await fetch(url+'/api/generate/jobs/'+h3Id,{headers});
+    h3Job=await reply.json();
+    if(h3Job.stage==='error')break;
+    await new Promise(r=>setTimeout(r,100));
+  }
+  assert.equal(h3Job.workflow,'minimaxH3','New workflow key survives the persistent queue');
+  assert.equal(h3Job.stage,'error');
+  assert.match(h3Job.error,/video H3 tidak dapat dibaca/,'H3 must validate the actual source before checking provider accounts');
+  assert.equal(h3Job.task,null,'Invalid H3 source must not start a paid task');
   console.log('PASS: HTTP 202 before processing, Standard/Plus validation, RIFE video-only preflight, session isolation, and idempotency');
 }finally{
   server.kill('SIGTERM');
