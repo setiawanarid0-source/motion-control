@@ -25,6 +25,7 @@ import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph
 import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {prepareH3Input,h3GraphForInputs} from './minimax-h3.js';
+import {prepareAlignedReview,alignedReviewGraph} from './experiments/h3-aligned-review/review.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,9 +52,16 @@ const workflowGraphs = {
   r4Lab: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-full-controlled-api.json'), 'utf8')),
   rife60: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/rife60-api.json'), 'utf8')),
   minimaxH3: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/minimax-h3-character-swap-api.json'), 'utf8')),
+  minimaxH3Review: {reviewPrototype:true},
 };
 
 const workflowMeta = {
+  minimaxH3Review: {
+    id:'minimaxH3Review',name:'H3 Aligned Head · Uji Non-eksplisit',
+    subtitle:'Versi uji terpisah · Plus · maksimal 5 detik',
+    detail:'Pembanding Add Guide dan Head Swap LoRA pada canvas inferensi 1080p. Belum lulus uji visual; ketersediaan dua LoRA pada akun RunningHub harus diverifikasi. Halaman uji: /h3-review.html. Tidak menggantikan workflow utama.',
+    outputKind:'video',experimental:true
+  },
   minimaxH3: {
     id:'minimaxH3',name:'MiniMax H3 · Face & Hair · 1080p',
     subtitle:'1080p · wajah + rambut · 24 FPS · hingga 60 detik',
@@ -457,21 +465,25 @@ async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
     return {videoName,imageName};
   }finally{await fs.promises.rm(dir,{recursive:true,force:true});}
 }
-async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, h3ReviewSource, referenceDetails, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
   let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
   if(workflowKey==='minimaxH3'&&(!h3Source?.file||!h3Source?.sourceFile))
     throw Error('Metadata video sumber H3 belum tervalidasi.');
+  if(workflowKey==='minimaxH3Review'&&!h3ReviewSource?.file)
+    throw Error('Metadata uji H3 belum tervalidasi.');
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey, imageFile);
-  const videoName = await uploadToRunningHub(apiKey, workflowKey==='minimaxH3'?h3Source.file:videoFile);
+  const videoName = await uploadToRunningHub(apiKey, workflowKey==='minimaxH3'?h3Source.file:
+    workflowKey==='minimaxH3Review'?h3ReviewSource.file:videoFile);
   if(workflowKey==='minimaxH3'){
     const sourceVideoName=await uploadToRunningHub(apiKey,h3Source.sourceFile);
     selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,sourceVideoName,source:h3Source});
   }
+  if(workflowKey==='minimaxH3Review')selectedGraph=alignedReviewGraph({imageName,videoName,source:h3ReviewSource,referenceDetails});
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
   const payload = {
     apiKey,
     workflowId,
-    nodeInfoList: workflowKey==='minimaxH3' ? [] : [
+    nodeInfoList: ['minimaxH3','minimaxH3Review'].includes(workflowKey) ? [] : [
       ...(workflowKey==='rife60'
         ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName },
            { nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps },
@@ -484,7 +496,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     workflow: JSON.stringify(selectedGraph),
     addMetadata: true,
     // H3 and RIFE do not reserve a paid retained instance after completion.
-    ...(['rife60','minimaxH3'].includes(workflowKey)?{}:{retainSeconds:259200}),
+    ...(['rife60','minimaxH3','minimaxH3Review'].includes(workflowKey)?{}:{retainSeconds:259200}),
   };
   // Match the RunningHub instance selected by the user; keep queued legacy Lite unchanged.
   const instanceType=runningHubInstanceType(mode);
@@ -645,12 +657,14 @@ async function handleGeneration(req,res){
   let preparedMotion=null;
   let rifeSource=null;
   let h3Source=null;
+  let h3ReviewSource=null;
   let stagedReferences=null;
   const cleanup = () => {
     if(stagedReferences)discardReferences(stagedReferences).catch(e=>console.warn('Reference staging cleanup',e.message));
     if(preparedMotion)preparedMotion.release().catch(e=>console.warn('R15 temporary file cleanup',e.message));
     if(rifeSource?.release)rifeSource.release().catch(e=>console.warn('RIFE temporary anchors cleanup',e.message));
     if(h3Source?.release)h3Source.release().catch(e=>console.warn('H3 temporary media cleanup',e.message));
+    if(h3ReviewSource?.release)h3ReviewSource.release().catch(e=>console.warn('H3 review cleanup',e.message));
     for (const f of [imageFile, videoFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
   };
 
@@ -669,6 +683,12 @@ async function handleGeneration(req,res){
     if(workflowKey==='minimaxH3'){
       req.progress?.('analyzing');
       h3Source=await prepareH3Input(videoFile,mode);
+    }
+    if(workflowKey==='minimaxH3Review'){
+      if(String(req.body?.referenceDetails||'').trim().length<10)
+        throw Error('Isi deskripsi wajah/rambut dari gambar referensi untuk uji H3.');
+      req.progress?.('analyzing');
+      h3ReviewSource=await prepareAlignedReview(videoFile,mode);
     }
     if(videoOnly){
       req.progress?.('analyzing');
@@ -736,6 +756,8 @@ async function handleGeneration(req,res){
           videoFile:preparedMotion?.file||rifeSource?.file||videoFile,
           sourceFps:rifeSource?.sourceFps,
           h3Source,
+          h3ReviewSource,
+          referenceDetails:req.body?.referenceDetails,
           diagnosticAccount,
           diagnosticTaskId,
           onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting');},

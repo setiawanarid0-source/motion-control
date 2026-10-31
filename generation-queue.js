@@ -88,6 +88,7 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
           workflow:String(body.workflow||'r15'),
           mode:String(body.mode||'standard'),
           accountId:String(body.accountId||'auto'),
+          ...(String(body.workflow)==='minimaxH3Review'?{referenceDetails:String(body.referenceDetails||'').slice(0,1200)}:{}),
           diagnosticTaskId:String(body.diagnosticTaskId||''),
           diagnosticAccountId:String(body.diagnosticAccountId||'')
         },image:image?.path?{path:imageDest,originalname:String(image.originalname||'reference.jpg'),
