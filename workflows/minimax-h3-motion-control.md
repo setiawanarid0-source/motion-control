@@ -5,7 +5,7 @@ frames. The photo supplies the whole appearance and scene; the video supplies
 performance, expressions, timing and camera movement. The existing two uploads,
 Plus Account Pool, durable queue and History remain the entry points.
 
-## Production graph: motion-transfer-native-1080-v3
+## Production graph: motion-transfer-native-1080-v4
 
 Ref2VA INT8 → DMD Ref2VA 8-step → Motion Transfer v1.0 → native Kitchen attention
 selection → H3 Sigma Shift 12/3 → Sol-Attn → both scheduler and guider. The
@@ -31,6 +31,13 @@ The crop is not resized and never replaces or edits a generated face. No face or
 multiple faces means the whole-photo reference remains without Picture 2.
 Detector working images never replace the original H3 reference. No external
 face-detection service, cached identity or fixture coordinates are used for users.
+
+The extra face reference has a hard budget of 524288 native pixels. For small
+faces it retains the existing 2.5× bounding-box context; larger faces use a
+tighter margin down to 1.25× while keeping the entire visible detected face.
+If that cannot fit, only the whole original photo is used. Neither photo nor
+crop is resized. The Python detector, JS boundary and graph compiler enforce
+the budget, so an oversized optional reference cannot reach paid sampling.
 
 Prompt wording and aligned conditioning express the requested appearance and
 performance; they do not guarantee exact identity, texture, colour or camera.
@@ -116,6 +123,32 @@ archives or terminal states. Result retention and account retirement are unchang
 
 The five requested visual goals, identity across all inputs and 15-second render
 speed are not proven by these tests. Visual review must assess the actual output.
+
+### Production input regression found after the fixture checks
+
+A later five-second native-portrait task on v3 took 1243 provider seconds
+(20m43s); its sampler alone took about 1115 seconds (18m35s). The request used
+the intended profile and one 124-frame model window, not an older deployment.
+Its 1533×2734 original photo also produced a 1024×1408 extra face crop: 1441792
+additional native pixels, about 47 times the fixture crop. Native reference
+tokens participate in every sampling step. Therefore small-fixture runtime is
+not a representative acceptance result for that larger input, and limiting
+only output resolution/frame count was insufficient.
+
+V4 bounds this redundant extra reference without changing the whole photo,
+output size, number of steps or exact reference attention. A 400×560 detected
+face on a 1533×2734 portrait now produces a 512×704 crop (360448 pixels), rather
+than 1024×1408. This is a checked input-cost reduction, not a measured GPU speed
+claim; no new runtime or facial-fidelity guarantee follows from the unit test.
+The primary `ref_image_size=max` reference is intentionally retained at native
+dimensions. It can still dominate cost. Existing accepted tasks are untouched.
+
+The earlier head/hair implementation used a different Character Swap task model,
+lower-resolution generation and source compositing; the current pipeline uses
+Motion Transfer. Its facial behavior cannot be assumed identical. Returning to
+that whole old graph would reintroduce resizing/compositing and would not satisfy
+the present full-photo/native-output contract. Facial regression remains
+unresolved without a controlled comparison; the budget fix does not claim it.
 
 ## Primary sources
 

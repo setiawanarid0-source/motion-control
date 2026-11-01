@@ -11,16 +11,30 @@ import cv2
 import numpy as np
 from PIL import Image, ImageOps
 
+MAX_FOCUS_PIXELS = 512 * 1024
+
 
 def crop_for_face(box, width, height):
     x, y, w, h = box
     if w < 32 or h < 32:
         return None
-    cw = min(width // 32 * 32, max(64, math.ceil(w * 2.5 / 32) * 32))
-    ch = min(height // 32 * 32, max(64, math.ceil(h * 2.5 / 32) * 32))
-    return dict(x=max(0, min(width - cw, round(x + w / 2 - cw / 2))),
-                y=max(0, min(height - ch, round(y + h / 2 - ch / 2))),
-                width=cw, height=ch)
+    # These pixels become additional H3 tokens at EVERY sampling step, not
+    # merely a one-time detector input. Large native portraits previously
+    # created a redundant megapixel reference. Tighten only the extra crop's
+    # margin; never resize pixels or cut into the visible detected face.
+    for margin in (2.5, 2.25, 2.0, 1.75, 1.5, 1.25):
+        cw = min(width // 32 * 32, max(64, math.ceil(w * margin / 32) * 32))
+        ch = min(height // 32 * 32, max(64, math.ceil(h * margin / 32) * 32))
+        if cw * ch > MAX_FOCUS_PIXELS:
+            continue
+        cx = max(0, min(width - cw, round(x + w / 2 - cw / 2)))
+        cy = max(0, min(height - ch, round(y + h / 2 - ch / 2)))
+        if cx > max(0, x) or cy > max(0, y) or cx + cw < min(width, x + w) or cy + ch < min(height, y + h):
+            continue
+        return dict(x=cx, y=cy, width=cw, height=ch)
+    # The native whole-photo reference already contains this large face.
+    # Omit a redundant second reference rather than downscaling either input.
+    return None
 
 
 def detect(filename, model_path):

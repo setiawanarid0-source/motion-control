@@ -99,7 +99,8 @@ assert.equal(focused['1004'].inputs.width,1088);assert.equal(focused['1013'].inp
 const fewerSinks=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:faceFocus,sparseConditioningMode:'off'}});
 const expectedFewer=structuredClone(focused);expectedFewer['10'].inputs.sink_conditioning='off';
 assert.deepEqual(fewerSinks,expectedFewer,'The additional performance comparison changes only the conditioning sink policy');
-for(const invalid of [{...faceFocus,x:-1},{...faceFocus,width:31},{...faceFocus,x:4000}])
+for(const invalid of [{...faceFocus,x:-1},{...faceFocus,width:31},{...faceFocus,x:4000},
+  {x:0,y:0,width:1024,height:1408}])
   assert.throws(()=>h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:invalid}}),/Area referensi/);
 for(const frames of [120,360]){
   const tara=h3GraphForInputs(manifest,{...names,source:{...source,totalFrames:frames,inferenceProfile:'tara-native'}});

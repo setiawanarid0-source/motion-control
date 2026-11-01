@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {detectIdentityFocus,identityModel,validIdentityCrop} from '../h3-identity-focus.js';
+import {detectIdentityFocus,identityModel,validIdentityCrop,H3_IDENTITY_MAX_PIXELS} from '../h3-identity-focus.js';
 const dir=await fs.mkdtemp(path.join(os.tmpdir(),'h3-identity-test-'));
 try{
   const model=await identityModel();assert.ok(model.endsWith('.onnx'));
@@ -10,6 +10,10 @@ try{
   await assert.rejects(identityModel(corrupt),/checksum/);
   const face={x:32,y:64,width:128,height:160,confidence:.95};
   assert.ok(validIdentityCrop(face,544,928));
+  assert.equal(H3_IDENTITY_MAX_PIXELS,524288);
+  assert.ok(!validIdentityCrop({x:13,y:297,width:1024,height:1408},1533,2734),
+    'Reject the redundant megapixel crop observed in the slow production task');
+  assert.ok(validIdentityCrop({x:200,y:600,width:512,height:704},1533,2734));
   for(const invalid of [null,{}, {...face,x:-1},{...face,width:31},{...face,x:600}])
     assert.ok(!validIdentityCrop(invalid,544,928));
   const original=path.join(dir,'original.jpg');await fs.writeFile(original,'untouched-original');

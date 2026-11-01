@@ -8,7 +8,7 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'MiniMaxH3ReferenceToVideo','MiniMaxH3AddGuide','ImageFromBatch','MiniMaxH3AddGuide',
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
-  if(!/^motion-transfer-native-1080-v[123]$/.test(String(plan?.revision)))return null;
+  if(!/^motion-transfer-native-1080-v[1234]$/.test(String(plan?.revision)))return null;
   if(String(node)==='9'&&plan.inferenceProfile==='tara-native')return 'BFSMiniMaxH3NativeTemporal';
   if(String(node)==='9'&&plan.inferenceProfile==='guide-kitchen')return 'ModelAttentionBackend';
   if(plan.inferenceProfile==='guide-sol-focus'){
