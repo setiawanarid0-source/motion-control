@@ -21,6 +21,18 @@ export function allowedProgressUrl(value){
       ['runninghub.ai','runninghub.cn'].some(domain=>url.hostname===domain||url.hostname.endsWith('.'+domain));
   }catch{return false;}
 }
+// Both status requests and accepted-create replies must resolve the task record.
+// Account-only objects lack workflow/plan metadata. Pass no account credentials
+// to the observer, and keep optional diagnostics out of paid-task error handling.
+export function observeRegisteredH3Progress({taskId,url,registry,monitor}){
+  if(!allowedProgressUrl(url))return false;
+  try{
+    const task=registry.get(String(taskId));
+    if(!task||['success','failed'].includes(task.status))return false;
+    return monitor.observe({taskId:task.taskId,workflow:task.workflow,
+      inputDiagnostics:task.inputDiagnostics},url);
+  }catch{return false;}
+}
 export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit}){
   let current=null,startedAt=0,partial=true,lastValue=null,finished=false;
   const send=(event,fields={})=>emit({taskId:String(taskId),event,...fields});

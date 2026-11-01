@@ -26,7 +26,7 @@ import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-vide
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
-import {createH3ExecutionMonitor} from './runninghub-execution-trace.js';
+import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -210,12 +210,14 @@ function writeTaskState(taskId,result){
 }
 const h3ExecutionMonitor=createH3ExecutionMonitor({
   log:report=>console.info('H3 execution trace',JSON.stringify(report))});
+const observeH3Progress=(taskId,url)=>observeRegisteredH3Progress({
+  taskId,url,registry:taskRegistry,monitor:h3ExecutionMonitor});
 async function runningHubTaskState(taskId,account,accountId){
   const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
   // The provider can return a progress URL while an existing task is running.
   // This observer never creates a job and cannot change status or billing.
   if(data?.data&&!Array.isArray(data.data)&&typeof data.data.netWssUrl==='string')
-    h3ExecutionMonitor.observe(account,data.data.netWssUrl);
+    observeH3Progress(taskId,data.data.netWssUrl);
   const code=Number(data?.code);
   if(code===0&&Array.isArray(data?.data)&&data.data.length){
     const outputs=data.data.map(x=>({fileUrl:x.fileUrl,fileType:x.fileType,nodeId:x.nodeId??null})).filter(x=>x.fileUrl);
@@ -781,6 +783,9 @@ async function handleGeneration(req,res){
         }catch(registerError){
           console.error('Paid task accepted but registry write failed',String(task.taskId),registerError.message);
         }
+        // Start with the URL returned by this accepted task, without waiting
+        // for a later outputs response to expose it again. Never submit again.
+        if(trackingRegistered)observeH3Progress(task.taskId,task.netWssUrl);
         let referencesStored=false;
         try{
           const stored=await commitReferences(stagedReferences,String(task.taskId),{videoOnly});

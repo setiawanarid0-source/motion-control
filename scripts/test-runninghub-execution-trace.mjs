@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import {createExecutionTrace,createH3ExecutionMonitor,allowedProgressUrl,h3NodeClass} from '../runninghub-execution-trace.js';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {createExecutionTrace,createH3ExecutionMonitor,allowedProgressUrl,h3NodeClass,observeRegisteredH3Progress} from '../runninghub-execution-trace.js';
 const plan={revision:'motion-transfer-native-1080-v2',samplerCount:1};
 assert.equal(h3NodeClass('1010',plan),'SamplerCustomAdvanced');
 assert.equal(h3NodeClass('1004',plan),'MiniMaxH3ReferenceToVideo');
@@ -47,4 +49,35 @@ assert.ok(!JSON.stringify(logs).includes('do-not-log'));
 monitor.retain([]);assert.equal(Socket.instances[0].closed,true);
 assert.equal(monitor.observe({...task,workflow:'Other workflow'},url),false);
 monitor.closeAll();
+// The browser polls with an account-only credential object. Exercise the actual
+// status function and verify tracing resolves the task's workflow and node plan.
+const source=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
+const statusSource=source.slice(source.indexOf('async function runningHubTaskState('),source.indexOf('let monitorBusy=false;'));
+const received=[];
+const stored={...task,key:'private-task-key',accountId:'private-account-id',status:'running'};
+let lookups=0;
+const registry={get(id){lookups++;assert.equal(id,task.taskId);return stored;}};
+const observer={observe(item,progress){received.push({item,progress});return true;}};
+const observe=(taskId,url)=>observeRegisteredH3Progress({taskId,url,registry,monitor:observer});
+const state=vm.runInNewContext(statusSource+';runningHubTaskState',{
+  rhJson:async()=>({code:804,data:{netWssUrl:url}}),observeH3Progress:observe
+});
+assert.equal((await state(task.taskId,{key:'private-task-key'},'private-account-id')).state,'running');
+assert.equal(received.length,1);
+assert.deepEqual(received[0].item,task);
+assert.ok(!JSON.stringify(received[0].item).includes('private'));
+// Accepted-create observation is within the post-registration, protected path.
+const accepted=source.slice(source.indexOf('let trackingRegistered=false;'),source.indexOf('let referencesStored=false;'));
+assert.ok(accepted.indexOf('trackingRegistered=true;')<accepted.indexOf('observeH3Progress(task.taskId,task.netWssUrl)'));
+assert.ok(accepted.includes('if(trackingRegistered)observeH3Progress(task.taskId,task.netWssUrl);'));
+assert.equal(observe(task.taskId,'wss://attacker.invalid/ws'),false);
+assert.equal(lookups,1,'Untrusted progress URLs must not trigger task lookup');
+stored.status='success';assert.equal(observe(task.taskId,url),false);
+assert.equal(received.length,1,'Completed tasks must not open a progress stream');
+assert.doesNotThrow(()=>observeRegisteredH3Progress({taskId:task.taskId,url,
+  registry:{get(){throw Error('vault unavailable');}},monitor:observer}));
+stored.status='running';
+assert.equal(observeRegisteredH3Progress({taskId:task.taskId,url,registry,
+  monitor:{observe(){throw Error('optional diagnostics unavailable');}}}),false,
+  'Observer failure cannot fail an accepted paid submission');
 console.log('PASS: read-only H3 node timing, partial-stream timestamps, binary/privacy guards, trusted WSS destinations and terminal cleanup; no task submission');
