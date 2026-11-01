@@ -5,8 +5,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {H3_FPS,H3_MODELS,H3_PROMPT,H3_REVISION,validateH3Probe,probeH3Input,
-  prepareH3Input,h3PhotoPlan,h3Segments,h3GraphForInputs} from '../minimax-h3-motion.js';
+import {H3_FPS,H3_MODELS,H3_PROMPT,H3_REVISION,H3_WINDOW_FRAMES,validateH3Probe,probeH3Input,
+  prepareH3Input,prepareH3Reference,h3PhotoPlan,h3Segments,h3GraphForInputs,h3ExecutionPlan} from '../minimax-h3-motion.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
 import {explicitQueueMaxed,queueCapacityError} from '../runninghub-capacity.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from '../runninghub-graph-validation.js';
@@ -30,11 +30,13 @@ for(let frames=6;frames<=1440;frames++){
   const cuts=[1,2,Math.floor(frames/2)].filter(n=>n<frames),segments=h3Segments(frames,cuts);
   const actual=[];
   for(const seg of segments){
-    assert.equal(seg.modelFrames%17,5);assert.ok(seg.modelFrames>=seg.inputFrames&&seg.modelFrames<=107);
-    assert.ok(seg.inputFrames<=107);
+    assert.equal(seg.modelFrames%17,5);assert.ok(seg.modelFrames>=seg.inputFrames&&seg.modelFrames<=H3_WINDOW_FRAMES);
+    assert.ok(seg.inputFrames<=H3_WINDOW_FRAMES);
     assert.equal(seg.loadStart+seg.contextFrames,seg.start);
-    for(const cut of cuts)assert.ok(!(seg.start<cut&&seg.start+seg.length>cut));
-    if(cuts.includes(seg.start))assert.equal(seg.contextFrames,0,'No continuity across a hard cut');
+    if(frames>H3_WINDOW_FRAMES){
+      for(const cut of cuts)assert.ok(!(seg.start<cut&&seg.start+seg.length>cut));
+      if(cuts.includes(seg.start))assert.equal(seg.contextFrames,0,'No continuity across a hard cut');
+    }
     for(let j=0;j<seg.length;j++)actual.push(seg.start+j);
   }
   assert.deepEqual(actual,Array.from({length:frames},(_,i)=>i),'No loss, repetition, reordering or truncation');
@@ -42,6 +44,15 @@ for(let frames=6;frames<=1440;frames++){
 const names={imageName:'api/current-photo.png',videoName:'api/motion-guide.mp4'};
 const args={...names,source},before=JSON.stringify(manifest);
 const graph=h3GraphForInputs(manifest,args);
+for(const cuts of [[],[60]]){
+  const five={...source,totalFrames:120,sceneCuts:cuts};
+  const g=h3GraphForInputs(manifest,{...names,source:five});
+  assert.equal(h3Segments(120,cuts).length,1,'Never restart a five-second clip at 2.5 seconds, including a heuristic false cut');
+  assert.equal(Object.values(g).filter(n=>n.class_type==='SamplerCustomAdvanced').length,1);
+  assert.equal(g['1004'].inputs.length,124);
+  assert.equal(g['1012'].inputs.length,120);
+  assert.equal(h3ExecutionPlan(five).samplerCount,1);
+}
 assert.equal(JSON.stringify(manifest),before,'Shared manifest is immutable');
 for(const n of Object.values(graph))for(const v of Object.values(n.inputs))if(Array.isArray(v))assert.ok(graph[v[0]],'No dangling links');
 assert.deepEqual(graph['7'].inputs.model,['6',0]);
@@ -101,7 +112,7 @@ for(const [frames,cuts] of [[6,[]],[107,[]],[121,[1,2,55]],[1440,[106,107,555]]]
       v=values(g[b+5].inputs.image);
       assert.equal(v.length,condition.inputs.length,'Every guide frame survives native Add Guide');
       const segment=h3Segments(frames,cuts).find(s=>s.loadStart===g[b].inputs.skip_first_frames);
-      assert.ok(v.every(x=>x<segment.start+segment.length),'Padding must not leak a frame from next scene');
+      assert.ok(v.every(x=>x<segment.start+segment.length),'Padding must not leak a frame from next model window');
     }else throw Error('Unexpected frame operation '+t);
     cache.set(id,v);return v;
   };
@@ -139,6 +150,9 @@ assert.equal(JSON.parse(calls[0].payload.workflow)['7'].inputs.lora_name,H3_MODE
 await context.createTask({...request,workflowKey:'current',h3Source:null});
 assert.equal(calls[1].payload.retainSeconds,259200);
 assert.equal(calls[1].payload.workflow,JSON.stringify({unchanged:true}));
+const srgb={originalname:'reference-srgb.png'};
+await context.createTask({...request,h3Source:{...request.h3Source,referenceFile:srgb}});
+assert.equal(uploads.at(-2),srgb,'ICC-normalized reference, when present, must reach RunningHub');
 let count=calls.length,uploaded=uploads.length;
 await assert.rejects(context.createTask({...request,mode:'standard'}),/Plus/);
 await assert.rejects(context.createTask({...request,h3Source:null}),/Metadata/);
@@ -165,6 +179,16 @@ try{
   ff(['-f','lavfi','-i','testsrc2=size=192x320:rate=30:duration=1.3','-f','lavfi','-i',
     'sine=frequency=440:duration=2','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',video]);
   const photoHash=hash(photo),videoHash=hash(video);
+  const tagged=path.join(dir,'tagged.png'),normalized=path.join(dir,'normalized.png');
+  execFileSync('python3',['-c',
+    'from PIL import Image,ImageCms; import sys; im=Image.open(sys.argv[1]); im.save(sys.argv[2],icc_profile=ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes())',photo,tagged]);
+  const taggedHash=hash(tagged);
+  const managed=await prepareH3Reference({path:tagged},normalized);
+  assert.equal(managed.file.path,normalized);
+  assert.equal(managed.color.convertedToSrgb,true);
+  assert.equal(managed.color.resized,false);
+  assert.deepEqual([managed.color.width,managed.color.height],[108,192]);
+  assert.equal(hash(tagged),taggedHash,'ICC conversion must not overwrite the original upload');
   const probe=await probeH3Input({path:video},'plus');
   assert.ok(Math.abs(probe.duration-1.3)<.04,'Do not use longer audio/container duration');
   const prepared=await prepareH3Input({path:video},'plus',{path:photo});
@@ -173,6 +197,9 @@ try{
     assert.deepEqual([v.width,v.height],[1088,1920]);assert.equal(v.r_frame_rate,'24/1');
     assert.equal(Number(v.nb_frames),prepared.totalFrames);assert.ok(tracks.some(s=>s.codec_type==='audio'));
     assert.deepEqual([prepared.outputWidth,prepared.outputHeight],[1080,1920],'Photo ratio, not 192:320 guide ratio');
+    assert.equal(prepared.referenceFile.path,photo,'An untagged RGB photo remains byte-for-byte original');
+    assert.equal(prepared.referenceColor.convertedToSrgb,false);
+    assert.equal(prepared.referenceColor.resized,false);
     assert.equal(hash(photo),photoHash);assert.equal(hash(video),videoHash,'Do not overwrite uploads');
   }finally{await prepared.release();}
   assert.ok(!fs.existsSync(prepared.file.path));
@@ -181,7 +208,8 @@ try{
     'color=blue:s=160x288:r=24:d=0.5','-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]',cuts]);
   const cutSource=await prepareH3Input({path:cuts},'plus',{path:photo});
   try{assert.deepEqual(cutSource.sceneCuts,[12]);assert.equal(cutSource.hasAudio,false);
-    assert.equal(h3Segments(cutSource.totalFrames,cutSource.sceneCuts)[1].contextFrames,0);
+    assert.equal(h3Segments(cutSource.totalFrames,cutSource.sceneCuts).length,1,
+      'A short guide cut remains in the guide without starting a new generative pass');
   }finally{await cutSource.release();}
   // Read actual MP4 rotation metadata, then ensure the prepared guide follows
   // the displayed source. Compare tiny thumbnails after removing only padding.

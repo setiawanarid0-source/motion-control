@@ -13,6 +13,8 @@ const publicEntry=t=>({
   status:t.status,finishedAt:t.finishedAt||null,lastCheckedAt:t.lastCheckedAt||null,
   statusDetail:t.statusDetail||null,providerCode:t.providerCode??null,
   deliveryNote:t.deliveryNote||null,
+  providerRuntimeSeconds:t.providerRuntimeSeconds??null,providerTimingCheckedAt:t.providerTimingCheckedAt||null,
+  inputDiagnostics:t.inputDiagnostics||null,
   resultUrl:t.resultUrl||null,referenceMaskUrl:t.referenceMaskUrl||null,
   error:t.error||null,cameraQA:t.cameraQA||null
 });
@@ -63,7 +65,8 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
       mode:task.mode||'lite',video:task.video||'',submittedAt,
       status:task.status||'queued',finishedAt:null,lastCheckedAt:null,
       resultUrl:null,referenceMaskUrl:null,error:null,cameraQA:null,
-      statusDetail:null,providerCode:null,deliveryNote:null
+      statusDetail:null,providerCode:null,deliveryNote:null,
+      providerRuntimeSeconds:null,providerTimingCheckedAt:null,inputDiagnostics:task.inputDiagnostics||null
     };
     tasks.unshift(entry);
     commit(tasks);
@@ -86,7 +89,7 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     const tasks=all();const t=tasks.find(x=>x.taskId===String(taskId));if(!t)return null;
     if(DONE.has(t.status)&&!DONE.has(patch.status))return publicEntry(t);
     const permitted=['status','lastCheckedAt','resultUrl','referenceMaskUrl','error','cameraQA','finishedAt',
-      'statusDetail','providerCode','deliveryNote'];
+      'statusDetail','providerCode','deliveryNote','providerRuntimeSeconds','providerTimingCheckedAt'];
     for(const key of permitted)if(Object.hasOwn(patch,key))t[key]=patch[key];
     if(DONE.has(t.status)&&!t.finishedAt)t.finishedAt=new Date(now()).toISOString();
     if(t.status==='success')t.error=null;

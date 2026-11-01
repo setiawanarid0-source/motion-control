@@ -6,7 +6,8 @@ import os from 'node:os';
 const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
-export const H3_REVISION='motion-transfer-native-1080-v1';
+export const H3_REVISION='motion-transfer-native-1080-v2';
+export const H3_WINDOW_FRAMES=124;
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   clip:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
@@ -109,14 +110,25 @@ export function h3Segments(totalFrames,sceneCuts=[]){
     throw Error('Jumlah frame H3 tidak valid.');
   if(!Array.isArray(sceneCuts)||sceneCuts.some(n=>!Number.isSafeInteger(n)||n<=0||n>=totalFrames))
     throw Error('Batas scene H3 tidak valid.');
-  const boundaries=[0,...[...new Set(sceneCuts)].sort((a,b)=>a-b),totalFrames],segments=[];
+  // Keep short clips in one model timeline, even if the heuristic sees a cut
+  // during a pan/lighting change. The guide still contains every original cut.
+  const boundaries=totalFrames<=H3_WINDOW_FRAMES?[0,totalFrames]:
+    [0,...[...new Set(sceneCuts)].sort((a,b)=>a-b),totalFrames];
+  const segments=[];
   for(let shot=0;shot<boundaries.length-1;shot++){
-    const a=boundaries[shot],length=boundaries[shot+1]-a,count=Math.ceil(length/106);
+    const a=boundaries[shot],length=boundaries[shot+1]-a;
+    // 124 is a native 17n+5 H3 window. The old 106-frame cap split even
+    // a five-second / 120-frame shot into two independent samplers at 2.5 s.
+    const count=length<=H3_WINDOW_FRAMES?1:Math.ceil((length-1)/(H3_WINDOW_FRAMES-1));
+    const inputTotal=length+count-1;
+    let start=a,inputCursor=0;
     for(let i=0;i<count;i++){
-      const start=a+Math.round(i*length/count),end=a+Math.round((i+1)*length/count),contextFrames=i?1:0;
-      const inputFrames=end-start+contextFrames;
+      const contextFrames=i?1:0;
+      const inputFrames=Math.ceil((inputTotal-inputCursor)/(count-i));
+      const end=start+inputFrames-contextFrames;
       segments.push({start,length:end-start,contextFrames,loadStart:start-contextFrames,inputFrames,
         modelFrames:h3ModelFrames(inputFrames)});
+      inputCursor+=inputFrames;start=end;
     }
   }
   return segments;
@@ -124,13 +136,12 @@ export function h3Segments(totalFrames,sceneCuts=[]){
 
 export async function prepareH3Input(file,mode,imageFile){
   const source=await probeH3Input(file,mode);
-  const imageProbe=await probe(imageFile,'Gambar'),image=imageProbe.streams?.find(s=>s.codec_type==='video');
-  if(!image)throw Error('Gambar H3 tidak memiliki dimensi yang valid.');
-  const size=displayedSize(image),plan=h3PhotoPlan(size.sourceWidth,size.sourceHeight);
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-motion-'));
   const release=()=>fs.rm(dir,{recursive:true,force:true});
   const output=path.join(dir,'motion-guide.mp4');
   try{
+    const reference=await prepareH3Reference(imageFile,path.join(dir,'reference-srgb.png'));
+    const plan=h3PhotoPlan(reference.color.width,reference.color.height);
     // Fit ONLY the control video to the photo's aspect and H3 grid. Contain/pad
     // keeps its geometry and camera. Original photo and generated pixels are not scaled.
     const filter=`setpts=PTS-STARTPTS,fps=24,`+
@@ -156,8 +167,38 @@ export async function prepareH3Input(file,mode,imageFile){
     const sceneCuts=[...new Set([...stderr.matchAll(/pts_time:([0-9.]+)/g)]
       .map(m=>Math.round(Number(m[1])*24)))].filter(n=>n>0&&n<frames);
     return {...source,...plan,totalFrames:frames,sceneCuts,
+      referenceFile:reference.file,referenceColor:reference.color,
       file:{path:output,originalname:'motion-guide.mp4',mimetype:'video/mp4',size:bytes},release};
   }catch(error){await release();throw error;}
+}
+
+export async function prepareH3Reference(file,outputPath){
+  if(!file?.path)throw Error('Gambar H3 wajib diisi.');
+  let color;
+  try{
+    const {stdout}=await run(process.env.VANTA_MEDIA_PYTHON||'python3',[
+      new URL('./scripts/h3-reference-color.py',import.meta.url).pathname,file.path,outputPath],
+      {timeout:40000,maxBuffer:65536});
+    color=JSON.parse(stdout);
+  }catch(error){
+    let detail;
+    try{detail=JSON.parse(error.stdout||'').error;}catch{}
+    throw Error(detail||'File gambar H3 tidak dapat dibaca. Task belum dikirim ke RunningHub.');
+  }
+  const prepared=color.outputWritten?{
+    path:outputPath,originalname:'reference-srgb.png',mimetype:'image/png',size:(await fs.stat(outputPath)).size
+  }:file;
+  if(prepared.size>20*1024*1024)throw Error('Foto setelah konversi profil warna melebihi 20 MB; foto tidak diperkecil otomatis.');
+  return {file:prepared,color};
+}
+
+export function h3ExecutionPlan(source){
+  const segments=validateSource(source);
+  return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
+    canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
+    segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames})),
+    samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
+    postDecodeResize:false,postRefinement:false};
 }
 
 function inputName(value){

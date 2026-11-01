@@ -30,11 +30,16 @@ and aligned conditioning are instructions, not proof of exact motion or identity
   left/right grid borders to export 1080×1920. Landscape uses 1920×1088 with the
   same border removal. Other ratios follow the photo, short edge 1080, even
   dimensions, long edge at most 2160. No content crop to match the guide ratio.
-- The original photo file is uploaded unchanged. Grid padding on its right and
-  bottom prevents native reference encoding from rounding its dimensions by
-  resizing. H3 still encodes the photo into latent/reference features; this is
-  not pixel copying. Short edges over 2048 are rejected instead of silently
-  triggering H3's reference downscale. Minimum edge 64, ratio at most 2:1/1:2.
+- Untagged RGB photos are uploaded byte-for-byte unchanged. Photos with an ICC
+  profile are converted to sRGB with LittleCMS, at unchanged pixel dimensions,
+  and saved losslessly as PNG. The original upload is not overwritten. This
+  prevents the native loader from interpreting tagged colour values as untagged
+  RGB. EXIF orientation is included when planning dimensions. Invalid profiles
+  and HDR/16-bit references fail before a paid task; no silent tone mapping.
+  Grid padding on the reference's right and bottom avoids native dimension
+  rounding by resizing. H3 still encodes/reconstructs latent features rather
+  than copying pixels. Short edges over 2048 are rejected instead of silently
+  triggering reference downscale. Minimum edge 64, ratio at most 2:1/1:2.
 - The **control video**, not the photo or generated output, is resampled to
   24 FPS and fitted uniformly into the photo's output canvas with padding.
   This preserves all its visible content without stretch, center-crop, camera
@@ -43,8 +48,13 @@ and aligned conditioning are instructions, not proof of exact motion or identity
 - Source audio is retained on the prepared control MP4 and loaded separately
   for the final full timeline. No synthetic model audio is exported. Silent
   video does not attempt to load a nonexistent soundtrack.
-- Duration 0.25–60 seconds is accepted, not silently shortened. Segments have
-  at most 107 guide frames including context. Within a continuous shot, the
+- Duration 0.25–60 seconds is accepted, not silently shortened. Each model window
+  has at most 124 guide frames including context. A five-second, 120-frame clip
+  uses **one sampler / 124 model frames**, trimming four padding frames. A short
+  clip is not restarted at a heuristic cut: its guide still contains the cut.
+  The previous 106-frame cap incorrectly split five seconds into two 73-frame
+  generations with different noise seeds at 2.5 seconds. This avoidable restart
+  has been removed. For longer clips, within a continuous shot, the
   preceding generated frame is an additional first-frame guide at the matching
   one-frame source overlap. Hard cuts reset that context. Each segment is padded
   with its own last frame to 17n+5; only real non-overlap frames are exported,
@@ -53,13 +63,42 @@ and aligned conditioning are instructions, not proof of exact motion or identity
 - Plus is mandatory in UI and server. Memory failure is surfaced; there is no
   lower-resolution fallback, automatic paid retry or retained idle GPU.
 
+## Colour and runtime diagnostics
+
+ICC normalisation prevents a colour-management defect at the reference input;
+it does **not** lock the generative model's palette, lighting or skin texture.
+Full RGB guide conditioning can still influence generated appearance. No
+histogram matching, LUT, colour-grading, denoise or refinement pass is added.
+The export is H.264/YUV420 BT.709; RGB-to-YUV encoding is distinct from image
+resizing and is not lossless pixel copying. A source/result colour difference
+does not by itself prove an upscale or refinement operation.
+
+The server records each new H3 request's canvas, output size, actual sampler
+count, guide frame windows and reference colour metadata (never pixels or keys).
+Provider `taskCostTime` is retained as workflow execution seconds, not summed
+across output files. It is not labelled exclusive GPU time. The existing total
+History duration still starts at submission and is never reduced to hide waits.
+
+A bounded, read-only audit queries up to two previously completed H3 Motion
+Control tasks per existing monitor tick, once per task. It retrieves timing
+metadata using the task's existing credential and preserves the completion
+timestamp, result, archive and terminal state. It never creates a render. The
+difference between observed total duration and reported execution includes
+unmeasured queue/allocation/poll/delivery overhead; it is not called queue time.
+
+One model window removes the observed artificial 2.5-second restart. A longer
+window can increase peak memory and does not establish faster rendering. Actual
+runtime and visual quality must be measured on a non-explicit GPU benchmark.
+
 ## What is and is not verified
 
 Local checks cover actual FFmpeg inputs, orientation, photo/guide ratio,
 duration/audio alignment, cut boundaries, every supported frame count, native
 graph schemas and routing, no generated-image resizer/refiner, per-request
-identity isolation, provider payload, explicit validation rejection and existing
-queue/History regressions. No paid inference or Vanta browser login is performed.
+identity isolation, ICC transforms without spatial changes, provider timing,
+unchanged historical completion times, provider payload, explicit validation
+rejection and existing queue/History regressions. No paid inference or Vanta
+browser login is performed.
 
 **Not yet verified:** RunningHub installation of the three exact adapters,
 native-node version, memory fit at this canvas/duration, seam quality and the

@@ -24,7 +24,8 @@ import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
 import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
-import {prepareH3Input,h3GraphForInputs} from './minimax-h3-motion.js';
+import {prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
+import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -176,6 +177,7 @@ function taskAccount(req,taskId,accountId){
 }
 function writeTaskState(taskId,result){
   const now=new Date().toISOString();
+  const previous=taskRegistry.get(taskId);
   const patch={status:result.state,lastCheckedAt:now,
     statusDetail:typeof result.message==='string'?result.message.slice(0,240):null,
     providerCode:Number.isFinite(result.rawCode)?result.rawCode:null,
@@ -187,15 +189,21 @@ function writeTaskState(taskId,result){
     patch.resultUrl=video?.fileUrl||null;
     patch.referenceMaskUrl=mask?.fileUrl||null;
     patch.cameraQA=result.cameraQA||null;
-    patch.finishedAt=now;
+    patch.finishedAt=previous?.finishedAt||now;
+    const seconds=result.providerRuntimeSeconds;
+    if(typeof seconds==='number'&&Number.isFinite(seconds)&&seconds>=0){
+      patch.providerRuntimeSeconds=seconds;patch.providerTimingCheckedAt=now;
+    }
     patch.error=null;
   }else if(result.state==='failed'){
-    patch.finishedAt=now;
+    patch.finishedAt=previous?.finishedAt||now;
     patch.error=result.message||'RunningHub mengonfirmasi task gagal.';
   }else{
     patch.error=result.state==='check_error'?'Status terbaru belum tersedia. Pemantauan akan dicoba kembali.':null;
   }
   const stored=taskRegistry.update(taskId,patch);
+  if(stored&&stored.status!==previous?.status&&['success','failed'].includes(stored.status))
+    console.info('RunningHub task timing',JSON.stringify(taskTimingReport(stored,stored.providerRuntimeSeconds??null)));
   if(stored?.status==='success')scheduleResultMirror(stored);
   return stored;
 }
@@ -210,9 +218,9 @@ async function runningHubTaskState(taskId,account,accountId){
       ||outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
     if(video){
       const qa=await cameraStatus(taskId,video.fileUrl,accountId);
-      if(qa)return {...qa,rawCode:code};
+      if(qa)return {...qa,rawCode:code,providerRuntimeSeconds:providerExecutionSeconds(data)};
     }
-    return {state:'success',outputs,rawCode:code};
+    return {state:'success',outputs,rawCode:code,providerRuntimeSeconds:providerExecutionSeconds(data)};
   }
   // RunningHub's outputs endpoint is the authoritative source; /status is deprecated.
   if(code===813)return {state:'queued',rawCode:code,providerStatus:'QUEUED',
@@ -243,6 +251,14 @@ async function monitorRegisteredTasks(){
           error:'Koneksi RunningHub belum tersedia. Pemeriksaan akan diulang.'});
       }
     }));
+    await auditCompletedH3Timings({tasks:taskRegistry.publicList(),
+      query:task=>{
+        const original=taskRegistry.get(task.taskId);
+        if(!original?.key)throw Error('Task credential unavailable');
+        return rhJson('/task/openapi/outputs',original.key,{apiKey:original.key,taskId:task.taskId},30000);
+      },
+      update:(id,patch)=>taskRegistry.update(id,patch),
+      log:report=>console.info('H3 provider timing audit',JSON.stringify(report))});
     taskRegistry.purgeExpired();
   }catch(err){console.warn('Task lifecycle monitor',err.message);}
   finally{monitorBusy=false;}
@@ -462,7 +478,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   if(workflowKey==='minimaxH3'&&!h3Source?.file)
     throw Error('Metadata video sumber H3 belum tervalidasi.');
   if(workflowKey==='minimaxH3'&&mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus.');
-  const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey, imageFile);
+  const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey,
+    workflowKey==='minimaxH3'?(h3Source.referenceFile||imageFile):imageFile);
   const videoName = await uploadToRunningHub(apiKey, workflowKey==='minimaxH3'?h3Source.file:videoFile);
   if(workflowKey==='minimaxH3'){
     selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
@@ -669,6 +686,7 @@ async function handleGeneration(req,res){
     if(workflowKey==='minimaxH3'){
       req.progress?.('analyzing');
       h3Source=await prepareH3Input(videoFile,mode,imageFile);
+      console.info('H3 media plan',JSON.stringify(h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
       req.progress?.('analyzing');
@@ -718,7 +736,7 @@ async function handleGeneration(req,res){
     }
     // Verify both input previews and encrypted task registry before a paid submission.
     req.progress?.('saving_references');
-    stagedReferences=await stageReferences(imageFile,videoFile,{videoOnly});
+    stagedReferences=await stageReferences(h3Source?.referenceFile||imageFile,videoFile,{videoOnly});
     taskRegistry.ensureWritable();
     let lastError = null;
     let rejectedAtCapacity=0;
@@ -748,7 +766,8 @@ async function handleGeneration(req,res){
             accountName:account.name,key:account.key,workflow:workflowMeta[workflowKey].name,
             outputKind:workflowMeta[workflowKey].outputKind||'video',mode,
             video:videoFile.originalname,submittedAt:task.submittedAt,
-            status:task.taskStatus==='RUNNING'?'running':'queued'});
+            status:task.taskStatus==='RUNNING'?'running':'queued',
+            inputDiagnostics:h3Source?h3ExecutionPlan(h3Source):null});
           trackingRegistered=true;
         }catch(registerError){
           console.error('Paid task accepted but registry write failed',String(task.taskId),registerError.message);
