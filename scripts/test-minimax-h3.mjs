@@ -5,7 +5,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {H3_FPS,H3_MODELS,H3_PROMPT,H3_REVISION,H3_WINDOW_FRAMES,validateH3Probe,probeH3Input,
+import {H3_FPS,H3_MODELS,H3_PROMPT,H3_REVISION,H3_DEFAULT_PROFILE,H3_WINDOW_FRAMES,validateH3Probe,probeH3Input,
   prepareH3Input,prepareH3Reference,h3PhotoPlan,h3Segments,h3GraphForInputs,h3ExecutionPlan} from '../minimax-h3-motion.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
 import {explicitQueueMaxed,queueCapacityError} from '../runninghub-capacity.js';
@@ -15,7 +15,9 @@ assert.equal(manifest.revision,H3_REVISION);
 const videoProbe=(duration=60,width=1080,height=1920)=>({streams:[
   {codec_type:'video',width,height,duration:String(duration)},
   {codec_type:'audio',duration:'65'}],format:{duration:'65'}});
-const source={...validateH3Probe(videoProbe(),'plus'),...h3PhotoPlan(1080,1920),sceneCuts:[]};
+// Keep the controlled legacy comparison explicit; normal requests use the
+// separately asserted production profile below.
+const source={...validateH3Probe(videoProbe(),'plus'),...h3PhotoPlan(1080,1920),sceneCuts:[],inferenceProfile:'legacy-training-adapter'};
 assert.deepEqual([source.canvasWidth,source.canvasHeight,source.outputWidth,source.outputHeight],[1088,1920,1080,1920]);
 assert.deepEqual([h3PhotoPlan(1920,1080).canvasWidth,h3PhotoPlan(1920,1080).canvasHeight],[1920,1088]);
 assert.deepEqual([h3PhotoPlan(720,720).outputWidth,h3PhotoPlan(720,720).outputHeight],[1080,1080]);
@@ -33,14 +35,15 @@ for(let frames=6;frames<=1440;frames++){
     assert.equal(seg.modelFrames%17,5);assert.ok(seg.modelFrames>=seg.inputFrames&&seg.modelFrames<=H3_WINDOW_FRAMES);
     assert.ok(seg.inputFrames<=H3_WINDOW_FRAMES);
     assert.equal(seg.loadStart+seg.contextFrames,seg.start);
-    if(frames>H3_WINDOW_FRAMES){
-      for(const cut of cuts)assert.ok(!(seg.start<cut&&seg.start+seg.length>cut));
-      if(cuts.includes(seg.start))assert.equal(seg.contextFrames,0,'No continuity across a hard cut');
-    }
     for(let j=0;j<seg.length;j++)actual.push(seg.start+j);
   }
+  assert.equal(segments.length,frames<=H3_WINDOW_FRAMES?1:Math.ceil((frames-1)/(H3_WINDOW_FRAMES-1)),
+    'Camera/cut heuristics cannot multiply paid sampling windows');
   assert.deepEqual(actual,Array.from({length:frames},(_,i)=>i),'No loss, repetition, reordering or truncation');
 }
+const fifteenWindows=h3Segments(360,Array.from({length:359},(_,i)=>i+1));
+assert.equal(fifteenWindows.length,3,'Even dense false-cut detections require only three native windows for fifteen seconds');
+assert.deepEqual(fifteenWindows.map(s=>s.contextFrames),[0,1,1]);
 const names={imageName:'api/current-photo.png',videoName:'api/motion-guide.mp4'};
 const args={...names,source},before=JSON.stringify(manifest);
 const graph=h3GraphForInputs(manifest,args);
@@ -60,6 +63,18 @@ candidateWithBackend['8'].inputs.model=['9',0];
 assert.deepEqual(kitchen,candidateWithBackend,'Attention comparison changes only the model backend branch');
 const faceFocus={x:192,y:224,width:160,height:192};
 const focused=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:faceFocus}});
+assert.equal(H3_DEFAULT_PROFILE,'guide-sol-focus');
+const {inferenceProfile:_legacy,...normalSource}=source;
+const normal=h3GraphForInputs(manifest,{...args,source:{...normalSource,referenceFace:faceFocus}});
+assert.deepEqual(normal,focused,'Production must use the tested exact-reference profile, not just a private benchmark');
+assert.equal(h3ExecutionPlan(normalSource).inferenceProfile,H3_DEFAULT_PROFILE);
+assert.ok(!normal['5'],'Production inference must not retain the training-only adapter');
+assert.equal(normal['41'].inputs.steps,8,'Keep the matched DMD eight-step schedule');
+for(let i=0;i<h3Segments(source.totalFrames).length;i++){
+  const b=1000+30*i;
+  assert.deepEqual(normal[b+9].inputs.model,['10',0],'Every production window must use the optimized model');
+  assert.deepEqual(normal[b+4].inputs['ref_images.ref_image_2'],['32',0],'The same current identity reference reaches every window');
+}
 assert.equal(focused['10'].class_type,'BlockSparseAttention');
 assert.equal(focused['10'].inputs.selection,'sol-attn');
 assert.equal(focused['10'].inputs.sink_conditioning,'exact_kv_and_rows','Image/reference keys must stay exact');
@@ -224,6 +239,10 @@ assert.equal(calls.length,count+1,'No alternate model, resolution or paid retry 
 context.rhJson=async()=>{throw Error('transport timeout');};
 await assert.rejects(context.createTask(request),e=>!isDefinitelyRejectedGraph(e)&&/timeout/.test(e.message));
 assert.ok(!server.includes('minimaxH3Review'),'Head-only prototype is not a live workflow');
+assert.match(server,/inferenceProfile:req\.h3BenchmarkProfile\|\|H3_DEFAULT_PROFILE/,
+  'Normal HTTP/queue submissions must select the production inference profile');
+assert.ok(!server.includes('stageSafeH3Benchmark('),'A production restart cannot create another paid fixture render');
+assert.ok(!server.includes('stopSupersededSafeBenchmark('),'Remove the one-off fixture cancellation hook after testing');
 const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
 assert.ok(html.includes('MiniMax H3 · Motion Control'));assert.ok(!html.includes('h3-review.html'));
 assert.ok(!fs.existsSync(new URL('../public/h3-review.html',import.meta.url)));
@@ -260,6 +279,8 @@ try{
     assert.equal(prepared.referenceFile.path,photo,'An untagged RGB photo remains byte-for-byte original');
     assert.equal(prepared.referenceColor.convertedToSrgb,false);
     assert.equal(prepared.referenceColor.resized,false);
+    assert.equal(prepared.inferenceProfile,H3_DEFAULT_PROFILE);
+    assert.equal(prepared.referenceFace,null,'Synthetic no-face inputs retain only the whole reference');
     assert.equal(hash(photo),photoHash);assert.equal(hash(video),videoHash,'Do not overwrite uploads');
   }finally{await prepared.release();}
   assert.ok(!fs.existsSync(prepared.file.path));

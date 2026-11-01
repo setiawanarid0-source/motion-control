@@ -24,10 +24,10 @@ import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
 import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
-import {prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
+import {H3_DEFAULT_PROFILE,prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
-import {stageSafeH3Benchmark,safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result,resumeSafeH3Progress,stopSupersededSafeBenchmark} from './h3-safe-benchmark.js';
+import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h3-safe-benchmark.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -701,8 +701,8 @@ async function handleGeneration(req,res){
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
     if(workflowKey==='minimaxH3'){
       req.progress?.('analyzing');
-      h3Source=await prepareH3Input(videoFile,mode,imageFile,{identityFocus:req.h3BenchmarkProfile==='guide-sol-focus'});
-      if(req.h3BenchmarkProfile)h3Source.inferenceProfile=req.h3BenchmarkProfile;
+      h3Source=await prepareH3Input(videoFile,mode,imageFile,{
+        inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE});
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
       console.info('H3 media plan',JSON.stringify(h3ExecutionPlan(h3Source)));
@@ -1215,16 +1215,6 @@ console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legac
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
 generationQueue.resume();
-resumeSafeH3Progress({queue:generationQueue,observe:observeH3Progress});
-void stopSupersededSafeBenchmark({queue:generationQueue,registry:taskRegistry,
-  token:DATA_DIR==='/data'?process.env.VANTA_H3_SAFE_BENCHMARK:'',
-  cancel:(key,taskId)=>rhJson('/task/openapi/cancel',key,{apiKey:key,taskId},30000)})
-  .then(result=>{if(result)console.info('H3 superseded fixture cancellation',JSON.stringify(result));})
-  .catch(()=>console.warn('H3 fixture cancellation could not be confirmed'));
-void stageSafeH3Benchmark({queue:generationQueue,
-  token:DATA_DIR==='/data'?process.env.VANTA_H3_SAFE_BENCHMARK:''})
-  .then(job=>{if(job)console.info('H3 safe benchmark staged',JSON.stringify({jobId:job.jobId,stage:job.stage,reused:job.reused||false}));})
-  .catch(()=>console.warn('H3 safe benchmark staging failed before task submission'));
 setInterval(()=>generationQueue.purge(),60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
 void motionResults.prune().catch(e=>console.warn('Result archive cleanup',e.message));

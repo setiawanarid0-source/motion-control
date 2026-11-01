@@ -7,7 +7,8 @@ import {detectIdentityFocus,validIdentityCrop} from './h3-identity-focus.js';
 const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
-export const H3_REVISION='motion-transfer-native-1080-v2';
+export const H3_REVISION='motion-transfer-native-1080-v3';
+export const H3_DEFAULT_PROFILE='guide-sol-focus';
 export const H3_WINDOW_FRAMES=124;
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
@@ -105,17 +106,17 @@ export function h3PhotoPlan(width,height){
 }
 export function h3ModelFrames(frames){return 5+17*Math.max(0,Math.ceil((frames-5)/17));}
 
-// Export each real frame once. Continuations include one source overlap frame;
-// its matching generated frame supplies first-frame context. Cuts reset context.
+// Export each real frame once. Continuations include one aligned overlap frame.
+// Scene-change heuristics are diagnostic only: fast pans/rolls must not create
+// many tiny, independently sampled clips and restart the character identity.
 export function h3Segments(totalFrames,sceneCuts=[]){
   if(!Number.isSafeInteger(totalFrames)||totalFrames<6||totalFrames>H3_MAX_SECONDS*H3_FPS)
     throw Error('Jumlah frame H3 tidak valid.');
   if(!Array.isArray(sceneCuts)||sceneCuts.some(n=>!Number.isSafeInteger(n)||n<=0||n>=totalFrames))
     throw Error('Batas scene H3 tidak valid.');
-  // Keep short clips in one model timeline, even if the heuristic sees a cut
-  // during a pan/lighting change. The guide still contains every original cut.
-  const boundaries=totalFrames<=H3_WINDOW_FRAMES?[0,totalFrames]:
-    [0,...[...new Set(sceneCuts)].sort((a,b)=>a-b),totalFrames];
+  // Every real edit remains in the actual guide frames. Only the native model
+  // capacity sets generation boundaries, for short and long clips alike.
+  const boundaries=[0,totalFrames];
   const segments=[];
   for(let shot=0;shot<boundaries.length-1;shot++){
     const a=boundaries[shot],length=boundaries[shot+1]-a;
@@ -136,7 +137,9 @@ export function h3Segments(totalFrames,sceneCuts=[]){
   return segments;
 }
 
-export async function prepareH3Input(file,mode,imageFile,{identityFocus=false}={}){
+export async function prepareH3Input(file,mode,imageFile,{
+  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=inferenceProfile==='guide-sol-focus'
+}={}){
   const source=await probeH3Input(file,mode);
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-motion-'));
   const release=()=>fs.rm(dir,{recursive:true,force:true});
@@ -170,7 +173,7 @@ export async function prepareH3Input(file,mode,imageFile,{identityFocus=false}={
       {timeout:120000,maxBuffer:1048576});
     const sceneCuts=[...new Set([...stderr.matchAll(/pts_time:([0-9.]+)/g)]
       .map(m=>Math.round(Number(m[1])*24)))].filter(n=>n>0&&n<frames);
-    return {...source,...plan,totalFrames:frames,sceneCuts,
+    return {...source,...plan,totalFrames:frames,sceneCuts,inferenceProfile,
       referenceFile:reference.file,referenceColor:reference.color,referenceFace,
       file:{path:output,originalname:'motion-guide.mp4',mimetype:'video/mp4',size:bytes},release};
   }catch(error){await release();throw error;}
@@ -199,7 +202,7 @@ export async function prepareH3Reference(file,outputPath){
 export function h3ExecutionPlan(source){
   const segments=validateSource(source);
   return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
-    inferenceProfile:source.inferenceProfile||'legacy-training-adapter',
+    inferenceProfile:source.inferenceProfile||H3_DEFAULT_PROFILE,
     referenceFace:source.referenceFace||null,
     attentionConditioning:source.sparseConditioningMode||'exact_kv_and_rows',
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
@@ -224,7 +227,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   inputName(imageName);inputName(videoName);
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
-  const profile=source.inferenceProfile||'legacy-training-adapter';
+  const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
   if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
@@ -292,7 +295,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     if(seg.contextFrames&&previous){
       const tail=add(b+6,'ImageFromBatch',{image:previous.image,batch_index:previous.lastFrame,length:1});
       positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:[String(b+4),1],vae:['3',0],image:tail,frame_idx:0},
-        'Previous generated frame at matching source overlap; reset at cuts');
+        'Previous generated frame at matching source overlap');
     }
     const noise=add(b+8,'RandomNoise',{noise_seed:42+i});
     const guider=add(b+9,'CFGGuider',{model:[samplingModel,0],positive,negative:positive,cfg:1});

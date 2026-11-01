@@ -1,194 +1,128 @@
 # H3 Motion Control in Vanta
 
-The existing `minimaxH3` option now generates the whole scene from the uploaded
-photo, with aligned video frames as the motion guide. It replaces the previous
-head/hair source composite and the separate `/h3-review.html` prototype.
-The existing two uploads, durable queue, Account Pool, History, owner session and
-result storage remain the entry points. No extra login or review form is needed.
-VideoHelperSuite supplies media loading/export; the existing KJNodes batch join
-avoids caching a growing full-length image tensor at every segment boundary.
+The existing `minimaxH3` option animates the uploaded photo using aligned video
+frames. The photo supplies the whole appearance and scene; the video supplies
+performance, expressions, timing and camera movement. The existing two uploads,
+Plus Account Pool, durable queue and History remain the entry points.
 
-## Actual graph
+## Production graph: motion-transfer-native-1080-v3
 
-Ref2VA INT8 → training adapter V2 → DMD Ref2VA turbo → Motion Transfer v1.0 →
-Sigma Shift 12/3. CFG 1, Euler/simple, 8 steps. The model reaches both the guider
-and scheduler. Each segment receives the same current photo in native reference
-slot 1 and every aligned source frame through Add Guide at frame 0. The guide
-is not also inserted as a native reference video. No cached identity text,
-character-swap/head-swap adapter, mask, source composite, realism LoRA, ControlNet,
-TARA patch, camera-motion style LoRA or refinement pass is loaded.
+Ref2VA INT8 → DMD Ref2VA 8-step → Motion Transfer v1.0 → native Kitchen attention
+selection → H3 Sigma Shift 12/3 → Sol-Attn → both scheduler and guider. The
+training-only adapter is omitted. Sampling remains CFG 1, Euler/simple, eight
+steps with the matching DMD adapter. No unrelated style, character/head swap,
+ControlNet, TARA, face-restoration or refinement model is loaded.
 
-The prompt assigns the photo's complete subject appearance, outfit, proportions,
-texture, lighting character and environment. The video supplies pose, hands,
-head, facial performance, timing, framing and camera movement. Prompt wording
-and aligned conditioning are instructions, not proof of exact motion or identity.
+Sol-Attn is the native training-free selection, tau 1.0, first two blocks dense,
+start 20%, end 100%, minimum 12288 tokens, 256 extra tokens, with
+`exact_kv_and_rows` reference conditioning. The sparse patch must come AFTER
+Sigma Shift: it captures sigma thresholds from the upstream sampling object.
+At shift 12 the first two of eight steps are dense and the remaining six permit
+sparse attention. Both scheduler and every guider receive the patched model.
+Kitchen can fall back to PyTorch; a valid node does not prove its kernel is active.
+The unrelated native proxy is not evidence of the OpenAPI worker GPU or kernel.
 
-## Resolution and media
+Every window receives the same current whole photo as Picture 1 and all aligned
+source frames through Add Guide at frame 0. The video is not also supplied as a
+native reference video. A bundled, checksum-verified MIT YuNet detector locally
+finds one confident face on the CPU. If found, Picture 2 is a grid-sized crop from
+the SAME original photo, explicitly bound to the same subject's facial identity.
+The crop is not resized and never replaces or edits a generated face. No face or
+multiple faces means the whole-photo reference remains without Picture 2.
+Detector working images never replace the original H3 reference. No external
+face-detection service, cached identity or fixture coordinates are used for users.
 
-- **Generated frames are sampled at the final canvas**, never scaled afterward.
-  Portrait 9:16 uses 1088×1920 (H3's 32-pixel grid) and removes only the 4-pixel
-  left/right grid borders to export 1080×1920. Landscape uses 1920×1088 with the
-  same border removal. Other ratios follow the photo, short edge 1080, even
-  dimensions, long edge at most 2160. No content crop to match the guide ratio.
-- Untagged RGB photos are uploaded byte-for-byte unchanged. Photos with an ICC
-  profile are converted to sRGB with LittleCMS, at unchanged pixel dimensions,
-  and saved losslessly as PNG. The original upload is not overwritten. This
-  prevents the native loader from interpreting tagged colour values as untagged
-  RGB. EXIF orientation is included when planning dimensions. Invalid profiles
-  and HDR/16-bit references fail before a paid task; no silent tone mapping.
-  Grid padding on the reference's right and bottom avoids native dimension
-  rounding by resizing. H3 still encodes/reconstructs latent features rather
-  than copying pixels. Short edges over 2048 are rejected instead of silently
-  triggering reference downscale. Minimum edge 64, ratio at most 2:1/1:2.
-- The **control video**, not the photo or generated output, is resampled to
-  24 FPS and fitted uniformly into the photo's output canvas with padding.
-  This preserves all its visible content without stretch, center-crop, camera
-  stabilisation or optical-flow interpolation. It does not recover missing
-  detail from a low-resolution guide. Its original upload is not overwritten.
-- Source audio is retained on the prepared control MP4 and loaded separately
-  for the final full timeline. No synthetic model audio is exported. Silent
-  video does not attempt to load a nonexistent soundtrack.
-- Duration 0.25–60 seconds is accepted, not silently shortened. Each model window
-  has at most 124 guide frames including context. A five-second, 120-frame clip
-  uses **one sampler / 124 model frames**, trimming four padding frames. A short
-  clip is not restarted at a heuristic cut: its guide still contains the cut.
-  The previous 106-frame cap incorrectly split five seconds into two 73-frame
-  generations with different noise seeds at 2.5 seconds. This avoidable restart
-  has been removed. For longer clips, within a continuous shot, the
-  preceding generated frame is an additional first-frame guide at the matching
-  one-frame source overlap. Hard cuts reset that context. Each segment is padded
-  with its own last frame to 17n+5; only real non-overlap frames are exported,
-  without interpolation, crossfade or padding tails. This is a native-node
-  adaptation of short-guide generation; long-take seam quality remains untested.
-- Plus is mandatory in UI and server. Memory failure is surfaced; there is no
-  lower-resolution fallback, automatic paid retry or retained idle GPU.
+Prompt wording and aligned conditioning express the requested appearance and
+performance; they do not guarantee exact identity, texture, colour or camera.
 
-## Colour and runtime diagnostics
+## Timeline and native output
 
-ICC normalisation prevents a colour-management defect at the reference input;
-it does **not** lock the generative model's palette, lighting or skin texture.
-Full RGB guide conditioning can still influence generated appearance. No
-histogram matching, LUT, colour-grading, denoise or refinement pass is added.
-The export is H.264/YUV420 BT.709; RGB-to-YUV encoding is distinct from image
-resizing and is not lossless pixel copying. A source/result colour difference
-does not by itself prove an upscale or refinement operation.
+- Sampling uses the final output canvas. A 9:16 photo uses 1088×1920, then only
+  the four-pixel left/right grid borders are removed for 1080×1920. Landscape
+  uses the corresponding vertical border removal. Other photo ratios use a
+  1080-pixel short edge, even dimensions and a long edge no greater than 2160.
+  There is no output resizer, upscale, refiner, interpolation or face-edit pass.
+- Untagged RGB photos remain byte-for-byte unchanged. ICC-tagged photos are
+  converted to sRGB with LittleCMS at unchanged dimensions, saved losslessly,
+  without overwriting the upload. EXIF orientation is respected. Invalid profiles
+  and HDR/16-bit references fail before payment; no silent tone mapping. Right
+  and bottom grid padding avoids encoder dimension rounding through resize.
+  Reference short edges above 2048 and ratios outside 2:1/1:2 are rejected.
+- Only the control video is fitted uniformly into the photo canvas with padding
+  and sampled at 24 FPS. There is no stretch, content crop, stabilisation or
+  optical-flow interpolation. Its upload remains unchanged. Source audio is
+  aligned to the full timeline; silent inputs never load nonexistent audio.
+- Supported duration is 0.25–60 seconds. A five-second clip has 120 real frames
+  in ONE 124-frame model window. Four repeated padding frames are trimmed.
+  The old 106-frame cap caused an unnecessary identity restart at 2.5 seconds.
+- Longer clips use the minimum number of balanced native windows, at most 124
+  frames each, with one matching source/generated-frame overlap. Fifteen seconds
+  uses three samplers. Scene-change heuristics are diagnostic only: camera roll,
+  pans, flashes and actual guide cuts cannot multiply independent render windows.
+  Every real guide frame is exported once, with no crossfade, dropped frames or
+  padding tails. Long-take seam quality and 15-second runtime remain unmeasured.
+- Plus is mandatory. Memory/graph failures are surfaced without changing models,
+  lowering resolution, retrying a paid render or retaining an idle GPU.
 
-The server records each new H3 request's canvas, output size, actual sampler
-count, guide frame windows and reference colour metadata (never pixels or keys).
-Provider `taskCostTime` is retained as workflow execution seconds, not summed
-across output files. It is not labelled exclusive GPU time. The existing total
-History duration still starts at submission and is never reduced to hide waits.
+Colour management fixes tagged-input interpretation, not a generative model's
+palette or lighting drift. No histogram matching, LUT, colour grade or denoising
+post-pass is applied. H.264/YUV420 export is not lossless RGB copying. Native
+canvas sampling also does not prove recovery of details absent in the photo.
 
-A bounded, read-only audit queries up to two previously completed H3 Motion
-Control tasks per existing monitor tick, once per task. It retrieves timing
-metadata using the task's existing credential and preserves the completion
-timestamp, result, archive and terminal state. It never creates a render. The
-difference between observed total duration and reported execution includes
-unmeasured queue/allocation/poll/delivery overhead; it is not called queue time.
+## Actual render checks on 2026-11-01
 
-One model window removes the observed artificial 2.5-second restart. A longer
-window can increase peak memory and does not establish faster rendering. Actual
-runtime and visual quality must be measured on a non-explicit GPU benchmark.
+All renders used the same reviewed, fully clothed public five-second fixture,
+120 real frames at 24 FPS, native 1080×1842 export from a 1088×1856 canvas,
+eight sampling steps and Plus mode. Provider-reported execution, not an estimate:
 
-## What is and is not verified
+| Profile | Runtime | Decision |
+| --- | --- | --- |
+| Adapter omitted, dense attention | 22m21s | Face/accessory drift remained |
+| Correctly ordered Sol-Attn, exact reference conditioning and same-photo face crop | 13m38s | Selected production recipe; glasses retained in inspected frames |
+| Sol-Attn with reference attention approximated | 10m11s | Rejected for production: glasses disappeared |
 
-Local checks cover actual FFmpeg inputs, orientation, photo/guide ratio,
-duration/audio alignment, cut boundaries, every supported frame count, native
-graph schemas and routing, no generated-image resizer/refiner, per-request
-identity isolation, ICC transforms without spatial changes, provider timing,
-unchanged historical completion times, provider payload, explicit validation
-rejection and existing queue/History regressions. No paid inference or Vanta
-browser login is performed.
+The selected test was task `2116821832200179713`. Its sampling node accounted
+for about 698.5 seconds of the 818-second provider runtime. Worker hardware was
+not independently established and allocations can vary; these single runs do not
+guarantee the same speed on another photo. The fixture face is small and synthetic;
+retaining glasses is an observed improvement, not proof of identical facial
+geometry. Outfit, scene and texture differences remain possible. The general
+face-localization helper was exercised with actual OpenCV 4.6 and the same photo;
+the selected GPU test used an explicit crop of that fixed fixture.
 
-**Not yet verified:** RunningHub installation of the three exact adapters,
-native-node version, memory fit at this canvas/duration, seam quality and the
-five visual goals (static camera, expression fidelity, photo texture, complex
-camera moves and stable facial features). Selecting a 1080p canvas does not
-establish native 1080p detail or superiority over Kling. The author examples
-use 0.4 MP; Vanta's approximately 2 MP canvas is an unvalidated extension. A
-provider graph rejection must be shown, not hidden by changing models or sizes.
+The matching TARA alternative was rejected by RunningHub for a missing native
+node. It is not used in production. The incorrectly ordered sparse comparison
+was stopped only after explicit provider cancellation acknowledgment.
+One-off benchmark staging and cancellation startup hooks have been removed, so
+redeployment cannot create another paid test. The isolated fixture helper remains
+available for local regression checks with no credentials or inference calls.
+
+## Verification and observations
+
+`npm run check` covers actual FFmpeg orientation/audio/timing, all supported
+frame lengths, minimum window count, native output routing, default HTTP/queue
+profile selection, same-photo identity bounds/checksum, no output resize/refine,
+ICC handling, explicit graph rejection and existing queue/History regressions.
+No owner login or browser session is needed for these technical checks.
+
+The server records canvas/output dimensions, profile, sampler count, frame windows,
+reference colour metadata and optional face coordinates, never pixels or keys.
+A read-only observer captures actual native-node/progress timings without binary
+previews, private URLs, prompts or raw errors. Polling remains authoritative;
+missing progress cannot restart or fail a paid task. Provider `taskCostTime` is
+kept separate from total History elapsed time, which includes waiting/delivery.
+Previously completed task timings can be read without changing their timestamps,
+archives or terminal states. Result retention and account retirement are unchanged.
+
+The five requested visual goals, identity across all inputs and 15-second render
+speed are not proven by these tests. Visual review must assess the actual output.
 
 ## Primary sources
 
-- [Motion Transfer recipes and model links](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/blob/main/docs/motion-transfer.md)
-- [Author native Guide Latents workflow](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/blob/main/workflows/minimax_h3_motion_transfer_workflow_native_nodes_v1.0.json)
-- [Native ComfyUI H3 schemas and implementation](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_minimax_h3.py)
-- [BFS continuity and conditioning contracts](https://github.com/alisson-anjos/ComfyUI-BFSNodes/blob/main/bfs_shot_loop.py)
-- [VideoHelperSuite audio/video loaders](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
-
-## Per-stage observation
-
-An optional read-only observer consumes the progress URL returned by the existing
-RunningHub status query. It records native-node transitions and sampler progress,
-marks observations begun mid-node as partial, and ignores binary previews,
-prompts, private URLs and raw error contents. Polling remains authoritative;
-missing/unstable progress cannot fail or restart a task, and no new render or
-polling timer is added.
-
-The provider's native proxy reported an older, different runtime than the H3
-OpenAPI workflow supports. It is not used to infer the actual task GPU, kernel
-availability or backend selection. No execution-backend change is applied on
-this unverified basis. A completed task's aggregate runtime cannot reconstruct
-per-node timings. Actual speed improvement remains unproven.
-
-## Controlled inference check: training adapter
-
-The upstream Henge changelog and native workflow at commit
-`17034b701ba37f5768f30a56e64c974488788b92` remove the training adapter at
-inference; see <https://github.com/alisson-anjos/Henge/blob/17034b701ba37f5768f30a56e64c974488788b92/docs/motion-transfer.md>.
-Vanta has a private `no-training-adapter` test profile. It changes only that
-model branch, keeping the same turbo, motion adapter, conditioning, eight steps,
-frame count and native output canvas. The normal profile is retained pending
-render validation; removing an adapter alone does not prove faster sampling or
-stronger reference identity.
-
-An explicit deployment-only opt-in stages one reviewed, clothed public fixture
-through the existing durable queue. Its source SHA-256 is pinned; private user
-uploads are never selected. Accepted, uncertain and failed submissions are not
-automatically rerun on restart. This creates no public route or extra UI.
-Node timing and the fixture result are available through scoped deployment logs.
-
-The second private profile is the author's matching TARA motion model and native
-video-reference path. It uses Flash partitions, structure guidance 1 (no second
-model pass), and routes the patched MODEL to both scheduler and guider. It never
-duplicates the full guide through Add Guide. The same approved five-second
-fixture is used, with a distinct durable job ID and explicit opt-in. Existing
-benchmark progress streams reconnect across deployments; no task is recreated.
-TARA telemetry is restricted to backend names, evaluation counts, token-row
-counts and elapsed seconds. This is an experimental comparison, not a claim
-that the method is available on RunningHub or preserves identity on every clip.
-
-The third private comparison changes only the no-adapter graph's model-attention
-branch to the upstream Guide Latents example's `ModelAttentionBackend` with
-`comfy kitchen attention`. Availability is checked by an actual provider task,
-not inferred from the unrelated native proxy. ComfyUI may fall back to PyTorch
-when Kitchen is unavailable; a valid graph alone is not proof of an active kernel.
-
-The fourth private test uses native ComfyUI Sol-Attn (training-free, tau 1.0)
-with exact conditioning keys, 256 extra tokens and early dense steps/blocks.
-It also supplies a pixel crop from the same approved reference as Picture 2,
-explicitly bound to the same identity. The whole original reference remains
-Picture 1. The crop coordinates belong only to that fixed test fixture; normal
-uploads never receive those coordinates. No generated frame is face-edited or
-resized. Both speed and facial likeness require render comparison; this test
-profile is not promoted to normal production inference.
-
-A follow-up corrects the sparse patch's position: model attention -> H3 Sigma
-Shift -> BlockSparseAttention -> both scheduler and guider. Sparse thresholds
-are calculated from the model sampling object at patch creation, so applying
-the patch before the shift incorrectly computes its 20% threshold on the base
-schedule and activates near the end of an H3-shifted run. The private follow-up
-has a separate durable ID and only cancels its own superseded fixture after
-provider acknowledgment; it cannot cancel ordinary user tasks.
-
-The follow-up comparison changes only the conditioning sink policy to `off`:
-conditioning remains present, but its attention can be approximated along with
-the rest of the sequence. This may trade fidelity for speed, so the profile is
-private pending face/texture/motion review. It keeps the same whole photo and
-native face crop, all eight steps, warm-up schedule and output resolution.
-
-An optional general face-localization helper is bundled with its MIT-licensed
-YuNet model and checksum. It runs on the current photo locally on the CPU,
-returns one confident face rectangle in original coordinates and skips focus
-for no/multiple faces. No photo is sent to a detection service or rewritten.
-The detector's working image is separate from the unscaled H3 references.
+- [Motion Transfer recipes](https://github.com/alisson-anjos/Henge/blob/17034b701ba37f5768f30a56e64c974488788b92/docs/motion-transfer.md)
+- [Native Guide Latents workflow](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/blob/main/workflows/minimax_h3_motion_transfer_workflow_native_nodes_v1.0.json)
+- [Native H3 schemas](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_minimax_h3.py)
+- [Native sparse attention](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_sparse_attention.py)
+- [Sigma threshold semantics](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/model_sampling.py)
+- [VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
+- [Bundled YuNet source and license](../models/h3-identity/README.md)
