@@ -1,202 +1,157 @@
 # H3 Motion Control in Vanta
 
-The existing `minimaxH3` option animates the uploaded photo using aligned video
-frames. The photo supplies the whole appearance and scene; the video supplies
-performance, expressions, timing and camera movement. The existing two uploads,
-Plus Account Pool, durable queue and History remain the entry points.
+The existing `minimaxH3` route uses the photo for subject/scene appearance and
+aligned video frames for performance, expression, timing and camera movement.
+The existing uploads, Plus Account Pool, durable queue, History and 72-hour
+result retention are unchanged. No extra login, review form or head-swap UI.
 
-## Production graph: motion-transfer-native-1080-v4
+## Production v5: matched four-step inference
 
-Ref2VA INT8 → DMD Ref2VA 8-step → Motion Transfer v1.0 → native Kitchen attention
-selection → H3 Sigma Shift 12/3 → Sol-Attn → both scheduler and guider. The
-training-only adapter is omitted. Sampling remains CFG 1, Euler/simple, eight
-steps with the matching DMD adapter. No unrelated style, character/head swap,
-ControlNet, TARA, face-restoration or refinement model is loaded.
+Ref2VA INT8 → DMAD four-step student → Motion Transfer v1.0 → Kitchen attention
+selection → H3 Sigma Shift 12/2 → native Sol-Attn → scheduler AND every guider.
+Sampling is LCM/simple, CFG 1, four steps. The exact turbo asset is
+`minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors`.
+The checkpoint author's re-noise sampling contract is used. The old eight-step
+DMD adapter is not sampled with an arbitrarily shortened schedule. The
+training-only adapter remains omitted.
 
-Sol-Attn is the native training-free selection, tau 1.0, first two blocks dense,
-start 20%, end 100%, minimum 12288 tokens, 256 extra tokens, with
-`exact_kv_and_rows` reference conditioning. The sparse patch must come AFTER
-Sigma Shift: it captures sigma thresholds from the upstream sampling object.
-At shift 12 the first two of eight steps are dense and the remaining six permit
-sparse attention. Both scheduler and every guider receive the patched model.
-Kitchen can fall back to PyTorch; a valid node does not prove its kernel is active.
-The unrelated native proxy is not evidence of the OpenAPI worker GPU or kernel.
+Sol-Attn uses tau 1.0, start 20%, end 100%, first two blocks dense, minimum
+12288 tokens and 256 extra tokens. The patch is AFTER Sigma Shift, so sigma
+thresholds are calculated from the actual H3 schedule. At four steps the first
+step is dense and the other three permit sparse attention. Native `exact_kv`
+retains every query's exact attention to the packed text/reference keys. The
+additional dense target-audio query rows are not requested: generated audio is
+not exported; the original soundtrack is copied. Kitchen may fall back to
+PyTorch; successful rendering does not establish which kernel or GPU was active.
 
-Every window receives the same current whole photo as Picture 1 and all aligned
-source frames through Add Guide at frame 0. The video is not also supplied as a
-native reference video. A bundled, checksum-verified MIT YuNet detector locally
-finds one confident face on the CPU. If found, Picture 2 is a grid-sized crop from
-the SAME original photo, explicitly bound to the same subject's facial identity.
-The crop is not resized and never replaces or edits a generated face. No face or
-multiple faces means the whole-photo reference remains without Picture 2.
-Detector working images never replace the original H3 reference. No external
-face-detection service, cached identity or fixture coordinates are used for users.
+Every window receives the same current whole photo as Picture 1 and its aligned
+source frames through Add Guide at frame 0. The video is not also encoded as a
+native reference video. The bundled, checksum-verified MIT YuNet detector can
+supply Picture 2, a native-pixel face crop from the SAME current photo. It runs
+locally on the CPU, selects exactly one confident face, and skips no/multiple
+faces. Detector working images never replace the original H3 reference.
 
-The extra face reference has a hard budget of 524288 native pixels. For small
-faces it retains the existing 2.5× bounding-box context; larger faces use a
-tighter margin down to 1.25× while keeping the entire visible detected face.
-If that cannot fit, only the whole original photo is used. Neither photo nor
-crop is resized. The Python detector, JS boundary and graph compiler enforce
-the budget, so an oversized optional reference cannot reach paid sampling.
+The additional crop has a 524288-native-pixel budget. Context margins range from
+2.5× down to 1.25× while keeping the entire visible detected face. If that does
+not fit, only the original whole photo is used. No crop is resized. Python and
+the JS/graph boundary enforce the limit; user inputs never get fixture coordinates.
+No cached identity, external face-detection service, face restoration, mask,
+source composite, character/head-swap adapter or refinement pass is used.
 
-Prompt wording and aligned conditioning express the requested appearance and
-performance; they do not guarantee exact identity, texture, colour or camera.
+## Why the previous fifteen-second pipeline remained slow
 
-## Timeline and native output
+V3/v4 still used three sequential eight-step windows: twenty-four sampling steps.
+Reducing a redundant face crop did not remove those model evaluations. Actual
+approximately fifteen-second requests spent about fourteen minutes per window
+and terminated during window three after approximately forty minutes. Their
+provider response was code 805; the once-only metadata audit could not classify
+the failure. A provider timeout is not inferred solely from elapsed time.
 
-- Sampling uses the final output canvas. A 9:16 photo uses 1088×1920, then only
-  the four-pixel left/right grid borders are removed for 1080×1920. Landscape
-  uses the corresponding vertical border removal. Other photo ratios use a
-  1080-pixel short edge, even dimensions and a long edge no greater than 2160.
-  There is no output resizer, upscale, refiner, interpolation or face-edit pass.
-- Untagged RGB photos remain byte-for-byte unchanged. ICC-tagged photos are
+V5 uses three four-step windows: twelve total model steps. The change applies
+to NEW submissions. An already accepted provider graph is immutable and is
+neither restarted nor automatically rerendered during deployment.
+
+## Completed native fifteen-second benchmark
+
+Task `2116932735218311170` used the selected four-step recipe on Plus:
+
+| Measurement | Actual value |
+| --- | --- |
+| Full provider workflow execution | 1522 s / 25m22s |
+| Submission to ready result in History | 1543.384 s / 25m43.384s |
+| Sampler windows | 419.51 s, 428.56 s, 430.69 s |
+| Sum of observed sampling | 1278.76 s / 21m18.76s |
+| Real output | 360 frames, 24 FPS, exactly 15.000 s |
+| Generated canvas / border-cropped export | 1088×1952 / 1080×1924 |
+| Output file | 29971274 bytes, H.264 |
+
+The reference is a reviewed, fully clothed native 1600×2850 crop of NASA/Robert
+Markowitz's public-domain 2013 portrait. After grid padding it contributes
+4.608 million reference pixels, versus approximately 4.588 million whole-photo
+plus face-crop pixels in the slow production request. Both use the same model
+canvas. The public clothed guide is looped from five to fifteen seconds. The
+benchmark is artificial motion transfer, not an actual recording or endorsement
+by the person depicted. It is not a rerender of a private explicit upload.
+
+The complete timing is 43.384 seconds ABOVE the 25-minute target. No rounding,
+queue subtraction or earlier success timestamp is used to claim that target was
+met. Worker allocation was not independently established; this measured fixture
+is not a fixed-latency guarantee for every input. The earlier 13m38s five-second
+small-reference fixture did not represent large native-portrait inputs.
+
+Broad hair/clothing colour remained visible in inspected frames, but guide-scene
+leakage and changing small clothing markings were also visible. Exact facial
+geometry, texture, photo-scene preservation and all five motion goals are NOT
+established by this speed check. The selected model remains generative. The
+looped driver also does not prove fidelity on every continuous fifteen-second
+camera move or expression. Visual acceptance remains separate from timing.
+
+## Timeline and spatial contract
+
+- Generated pixels are sampled at the final canvas and are never scaled after
+  decoding. A 9:16 photo uses 1088×1920; removing only four-pixel left/right grid
+  borders exports 1080×1920. Landscape uses corresponding top/bottom borders.
+  Other photo ratios use a 1080 short edge, even dimensions and long edge ≤2160.
+  There is no output upscale/downscale, interpolation, refiner or face edit.
+- Untagged RGB photos remain byte-for-byte unchanged. ICC-tagged references are
   converted to sRGB with LittleCMS at unchanged dimensions, saved losslessly,
   without overwriting the upload. EXIF orientation is respected. Invalid profiles
   and HDR/16-bit references fail before payment; no silent tone mapping. Right
-  and bottom grid padding avoids encoder dimension rounding through resize.
-  Reference short edges above 2048 and ratios outside 2:1/1:2 are rejected.
-- Only the control video is fitted uniformly into the photo canvas with padding
-  and sampled at 24 FPS. There is no stretch, content crop, stabilisation or
-  optical-flow interpolation. Its upload remains unchanged. Source audio is
-  aligned to the full timeline; silent inputs never load nonexistent audio.
-- Supported duration is 0.25–60 seconds. A five-second clip has 120 real frames
-  in ONE 124-frame model window. Four repeated padding frames are trimmed.
-  The old 106-frame cap caused an unnecessary identity restart at 2.5 seconds.
-- Longer clips use the minimum number of balanced native windows, at most 124
-  frames each, with one matching source/generated-frame overlap. Fifteen seconds
-  uses three samplers. Scene-change heuristics are diagnostic only: camera roll,
-  pans, flashes and actual guide cuts cannot multiply independent render windows.
-  Every real guide frame is exported once, with no crossfade, dropped frames or
-  padding tails. Long-take seam quality and 15-second runtime remain unmeasured.
-- Plus is mandatory. Memory/graph failures are surfaced without changing models,
-  lowering resolution, retrying a paid render or retaining an idle GPU.
+  and bottom grid padding prevents native dimension rounding through resize.
+  Reference short edges >2048 and ratios outside 2:1/1:2 are rejected.
+- Only the control video is uniformly fitted/padded to the photo canvas at
+  24 FPS. No source-content crop, stretch, stabilisation or flow interpolation.
+  Audio stays aligned to the full timeline; silent clips load no missing audio.
+- Accepted duration remains 0.25–60 seconds. Each native window has at most 124
+  model frames. Five seconds uses one window / 124 model frames, exporting all
+  120 real frames. Fifteen seconds uses three windows. Later windows include
+  one matching source/generated-frame overlap. All model padding and overlap
+  frames are trimmed; every real output frame appears once.
+- Scene-change heuristics are diagnostic only. Pans, roll, flashes and actual
+  cuts in the guide do not create extra independent sampling windows. There is
+  no crossfade, hidden truncation, FPS reduction from the existing H3 contract
+  or lower-resolution fallback. Native detail absent from the input cannot be
+  guaranteed merely by choosing a 1080p canvas.
 
-Colour management fixes tagged-input interpretation, not a generative model's
-palette or lighting drift. No histogram matching, LUT, colour grade or denoising
-post-pass is applied. H.264/YUV420 export is not lossless RGB copying. Native
-canvas sampling also does not prove recovery of details absent in the photo.
+ICC management prevents tagged-input misinterpretation, not palette/lighting
+locking. No LUT, histogram matching, denoising, grading or refinement is applied.
+H.264/YUV420 encoding is not lossless RGB copying. A colour difference alone
+neither demonstrates resizing nor proves preserved photo appearance.
 
-## Actual render checks on 2026-11-01
+## Verification and observability
 
-All renders used the same reviewed, fully clothed public five-second fixture,
-120 real frames at 24 FPS, native 1080×1842 export from a 1088×1856 canvas,
-eight sampling steps and Plus mode. Provider-reported execution, not an estimate:
+`npm run check` covers actual FFmpeg orientation/audio/timebase, all supported
+frame lengths, minimum window count, matched turbo/sampler/shift/step defaults,
+HTTP/queue routing, native output graph, identity bounds/checksum, ICC handling,
+explicit graph rejection, no duplicate paid retry and existing Vanta regressions.
+The actual GPU benchmark additionally verifies provider availability, memory fit
+for this canvas/duration and a complete native output file. Other durations and
+inputs remain subject to measured acceptance rather than extrapolated promises.
 
-| Profile | Runtime | Decision |
-| --- | --- | --- |
-| Adapter omitted, dense attention | 22m21s | Face/accessory drift remained |
-| Correctly ordered Sol-Attn, exact reference conditioning and same-photo face crop | 13m38s | Selected production recipe; glasses retained in inspected frames |
-| Sol-Attn with reference attention approximated | 10m11s | Rejected for production: glasses disappeared |
+The server records profile, actual sampling recipe, canvas/output dimensions,
+window count, frame ranges and bounded reference metadata. A read-only observer
+records node/progress timings, without binary previews, private URLs, prompts
+or raw errors. Polling remains authoritative. Missing progress cannot fail or
+restart a paid task. Provider workflow time is distinct from total History time.
+Failed H3 task metadata is queried once to classify runtime limit, cancellation,
+memory exhaustion or unclassified failure, without changing terminal timestamps,
+credentials, archives or state. No reason is invented from a generic code 805.
 
-The selected test was task `2116821832200179713`. Its sampling node accounted
-for about 698.5 seconds of the 818-second provider runtime. Worker hardware was
-not independently established and allocations can vary; these single runs do not
-guarantee the same speed on another photo. The fixture face is small and synthetic;
-retaining glasses is an observed improvement, not proof of identical facial
-geometry. Outfit, scene and texture differences remain possible. The general
-face-localization helper was exercised with actual OpenCV 4.6 and the same photo;
-the selected GPU test used an explicit crop of that fixed fixture.
-
-The matching TARA alternative was rejected by RunningHub for a missing native
-node. It is not used in production. The incorrectly ordered sparse comparison
-was stopped only after explicit provider cancellation acknowledgment.
-One-off benchmark staging and cancellation startup hooks have been removed, so
-redeployment cannot repeat those paid tests. The isolated fixture helper remains
-available for local regression checks with no credentials or inference calls.
-
-### Fifteen-second DMAD validation (private until measured)
-
-The selected production eight-step recipe remains unchanged during this test.
-The separate `guide-dmad4-focus` profile uses the Kijai-converted DMAD four-step
-student (`minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors`),
-LCM/simple re-noise sampling, CFG 1 and video/audio shifts 12/2, following the
-DMAD checkpoint author's sampling contract. This is not a shortened schedule
-using the old eight-step DMD adapter. The Motion Transfer task, native canvas,
-whole-photo reference and original audio export stay the same. `exact_kv`
-keeps every query's reference attention exact, while omitting the extra dense
-target-audio query rows for generated audio that Vanta does not export.
-Fifteen seconds still uses three native windows, now twelve rather
-than twenty-four total sampling steps. Runtime and visual fidelity must be
-measured before promotion.
-
-The reviewed reference is a native 1600×2850 crop of NASA/Robert Markowitz's
-public-domain 2013 Samantha Cristoforetti portrait. The generated benchmark is
-an artificial motion-transfer test, not a recording or endorsement by the
-person depicted. Its padded reference contains 4.608 million pixels, compared
-with approximately 4.588 million whole-photo-plus-face reference pixels in the
-slow production task. Both use the same 1088×1952 model canvas. The fully clothed
-public guide is looped to exactly 360 frames/15 seconds. No reference/output
-resizing, post-generation interpolation or refiner is used.
-
-Both source files have pinned hashes; the 1.43MB public-domain portrait is bundled
-to avoid external image-host failures during deployment preparation. Starting this trial requires the exact
-deployment-only `VANTA_H3_LONG_BENCHMARK` opt-in on `/data`; a permanent exclusive
-checkpoint prevents another paid submission even after queue retention expires.
-No route, owner login or private upload is used. Unknown acceptance, rejection
-and download failure cannot auto-retry. Normal requests cannot select the
-private profile from a browser body. The opt-in is cleared after staging.
-
-A bounded once-only metadata audit classifies failed H3 tasks as runtime limit,
-cancelled, memory exhaustion or unclassified, using their retained credentials
-without exporting them. It never changes terminal timestamps, submits or
-cancels a render. This distinguishes a provider time limit from a user stop;
-ending around forty minutes alone is not proof of either cause.
-
-## Verification and observations
-
-`npm run check` covers actual FFmpeg orientation/audio/timing, all supported
-frame lengths, minimum window count, native output routing, default HTTP/queue
-profile selection, same-photo identity bounds/checksum, no output resize/refine,
-ICC handling, explicit graph rejection and existing queue/History regressions.
-No owner login or browser session is needed for these technical checks.
-
-The server records canvas/output dimensions, profile, sampler count, frame windows,
-reference colour metadata and optional face coordinates, never pixels or keys.
-A read-only observer captures actual native-node/progress timings without binary
-previews, private URLs, prompts or raw errors. Polling remains authoritative;
-missing progress cannot restart or fail a paid task. Provider `taskCostTime` is
-kept separate from total History elapsed time, which includes waiting/delivery.
-Previously completed task timings can be read without changing their timestamps,
-archives or terminal states. Result retention and account retirement are unchanged.
-
-The five requested visual goals, identity across all inputs and 15-second render
-speed are not proven by these tests. Visual review must assess the actual output.
-
-### Production input regression found after the fixture checks
-
-A later five-second native-portrait task on v3 took 1243 provider seconds
-(20m43s); its sampler alone took about 1115 seconds (18m35s). The request used
-the intended profile and one 124-frame model window, not an older deployment.
-Its 1533×2734 original photo also produced a 1024×1408 extra face crop: 1441792
-additional native pixels, about 47 times the fixture crop. Native reference
-tokens participate in every sampling step. Therefore small-fixture runtime is
-not a representative acceptance result for that larger input, and limiting
-only output resolution/frame count was insufficient.
-
-V4 bounds this redundant extra reference without changing the whole photo,
-output size, number of steps or exact reference attention. A 400×560 detected
-face on a 1533×2734 portrait now produces a 512×704 crop (360448 pixels), rather
-than 1024×1408. This is a checked input-cost reduction, not a measured GPU speed
-claim; no new runtime or facial-fidelity guarantee follows from the unit test.
-The primary `ref_image_size=max` reference is intentionally retained at native
-dimensions. It can still dominate cost. Existing accepted tasks are untouched.
-
-The earlier head/hair implementation used a different Character Swap task model,
-lower-resolution generation and source compositing; the current pipeline uses
-Motion Transfer. Its facial behavior cannot be assumed identical. Returning to
-that whole old graph would reintroduce resizing/compositing and would not satisfy
-the present full-photo/native-output contract. Facial regression remains
-unresolved without a controlled comparison; the budget fix does not claim it.
+The explicit long-trial helper has pinned public asset hashes, a bundled 1.43MB
+portrait and a deployment-only opt-in on `/data`. A permanent exclusive checkpoint
+prevents another paid run even beyond queue expiry. The opt-in has been cleared.
+An earlier preparation failure never entered the provider queue; the corrected
+trial is blocked if an earlier durable queue record exists. There is no public
+benchmark route or automatic paid fallback.
 
 ## Primary sources
 
 - [Motion Transfer recipes](https://github.com/alisson-anjos/Henge/blob/17034b701ba37f5768f30a56e64c974488788b92/docs/motion-transfer.md)
-- [Native Guide Latents workflow](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/blob/main/workflows/minimax_h3_motion_transfer_workflow_native_nodes_v1.0.json)
-- [Native H3 schemas](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_minimax_h3.py)
+- [DMAD checkpoint and LCM/simple sampling](https://github.com/Yzmblog/DMAD/blob/main/README.md)
+- [Henge converted turbo filenames](https://github.com/alisson-anjos/Henge/blob/main/config/model-repos.example.json)
+- [Native H3 nodes](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_minimax_h3.py)
 - [Native sparse attention](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_sparse_attention.py)
 - [Sigma threshold semantics](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/model_sampling.py)
 - [VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
-- [Bundled YuNet source and license](../models/h3-identity/README.md)
-- [DMAD sampling and checkpoint documentation](https://github.com/Yzmblog/DMAD/blob/main/README.md)
-- [Henge supported turbo filenames](https://github.com/alisson-anjos/Henge/blob/main/config/model-repos.example.json)
-- [NASA public-domain portrait and original file](https://commons.wikimedia.org/wiki/File:Samantha_Cristoforetti_official_portrait.jpg)
+- [YuNet source and license](../models/h3-identity/README.md)
+- [Public portrait attribution](../test-fixtures/h3/README.md)

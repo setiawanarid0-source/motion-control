@@ -63,13 +63,17 @@ candidateWithBackend['8'].inputs.model=['9',0];
 assert.deepEqual(kitchen,candidateWithBackend,'Attention comparison changes only the model backend branch');
 const faceFocus={x:192,y:224,width:160,height:192};
 const focused=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:faceFocus}});
-assert.equal(H3_DEFAULT_PROFILE,'guide-sol-focus');
+assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-focus');
 const {inferenceProfile:_legacy,...normalSource}=source;
 const normal=h3GraphForInputs(manifest,{...args,source:{...normalSource,referenceFace:faceFocus}});
-assert.deepEqual(normal,focused,'Production must use the tested exact-reference profile, not just a private benchmark');
+assert.deepEqual(normal,h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:H3_DEFAULT_PROFILE,referenceFace:faceFocus}}),
+  'Production must use the selected recipe, not just a private benchmark');
 assert.equal(h3ExecutionPlan(normalSource).inferenceProfile,H3_DEFAULT_PROFILE);
 assert.ok(!normal['5'],'Production inference must not retain the training-only adapter');
-assert.equal(normal['41'].inputs.steps,8,'Keep the matched DMD eight-step schedule');
+assert.equal(normal['41'].inputs.steps,4,'Use the matched DMAD four-step student');
+assert.equal(normal['6'].inputs.lora_name,H3_MODELS.turboDmad4);
+assert.equal(normal['40'].inputs.sampler_name,'lcm');
+assert.equal(normal['10'].inputs.sink_conditioning,'exact_kv');
 for(let i=0;i<h3Segments(source.totalFrames).length;i++){
   const b=1000+30*i;
   assert.deepEqual(normal[b+9].inputs.model,['10',0],'Every production window must use the optimized model');
@@ -331,4 +335,4 @@ try{
   await assert.rejects(probeH3Input({path:invalid},'plus'),/video H3 tidak dapat dibaca/);
   await assert.rejects(prepareH3Input({path:video},'plus',{path:invalid}),/gambar H3 tidak dapat dibaca/);
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
-console.log('PASS: H3 full-photo motion graph, native 1080 canvas, exhaustive timeline/cut/padding coverage, real audio/orientation, isolated inputs, and provider boundary. GPU/visual acceptance untested.');
+console.log('PASS: H3 full-photo motion graph, native 1080 canvas, exhaustive timeline/cut/padding coverage, real audio/orientation, isolated inputs, and provider boundary. Local checks do not invoke GPU inference; provider timing and visual acceptance are measured separately.');

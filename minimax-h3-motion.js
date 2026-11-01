@@ -7,8 +7,8 @@ import {detectIdentityFocus,validIdentityCrop} from './h3-identity-focus.js';
 const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
-export const H3_REVISION='motion-transfer-native-1080-v4';
-export const H3_DEFAULT_PROFILE='guide-sol-focus';
+export const H3_REVISION='motion-transfer-native-1080-v5';
+export const H3_DEFAULT_PROFILE='guide-dmad4-focus';
 export const H3_WINDOW_FRAMES=124;
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
