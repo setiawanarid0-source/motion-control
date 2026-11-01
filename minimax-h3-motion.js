@@ -220,7 +220,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||'legacy-training-adapter';
-  if(!['legacy-training-adapter','no-training-adapter','tara-native'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
+  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
@@ -231,6 +231,10 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   add(6,'LoraLoaderModelOnly',{model:[profile==='legacy-training-adapter'?'5':'1',0],lora_name:H3_MODELS.turbo,strength_model:1});
   add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:H3_MODELS.motion,strength_model:1},'Motion Transfer v1.0');
   add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:3});
+  if(profile==='guide-kitchen'){
+    add(9,'ModelAttentionBackend',{model:['7',0],attention:'comfy kitchen attention'});
+    g['8'].inputs.model=['9',0];
+  }
   if(tara)add(9,'BFSMiniMaxH3NativeTemporal',{model:['8',0],motion_video_index:1,strength:2,
     window_seconds:.2,falloff_seconds:.25,max_penalty:6,attention_backend:'flash partitions (no compile)',
     structure_guidance:1,structure_sigma_min:0},'Native aligned video reference; matching TARA LoRA');

@@ -53,6 +53,11 @@ delete legacyWithoutAdapter['5'];legacyWithoutAdapter['6'].inputs.model=['1',0];
 assert.deepEqual(candidate,legacyWithoutAdapter,'Controlled inference test changes only the training adapter branch');
 assert.equal(h3ExecutionPlan({...source,inferenceProfile:'no-training-adapter'}).inferenceProfile,'no-training-adapter');
 assert.throws(()=>h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'arbitrary'}}),/Profil inferensi/);
+const kitchen=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-kitchen'}});
+const candidateWithBackend=structuredClone(candidate);
+candidateWithBackend['9']={class_type:'ModelAttentionBackend',inputs:{model:['7',0],attention:'comfy kitchen attention'}};
+candidateWithBackend['8'].inputs.model=['9',0];
+assert.deepEqual(kitchen,candidateWithBackend,'Attention comparison changes only the model backend branch');
 for(const frames of [120,360]){
   const tara=h3GraphForInputs(manifest,{...names,source:{...source,totalFrames:frames,inferenceProfile:'tara-native'}});
   assert.ok(!tara['5']);assert.equal(tara['7'].inputs.lora_name,H3_MODELS.motionTara);

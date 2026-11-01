@@ -12,8 +12,11 @@ export const SAFE_H3_JOB='b5c72ed0-7e57-4a48-a55b-4ecd3ab790f1';
 export const SAFE_H3_TOKEN='safe-noadapter-20261101-v1';
 export const SAFE_H3_TARA_JOB='15ab386b-05a0-4d19-aa3b-154d13852cb2';
 export const SAFE_H3_TARA_TOKEN='safe-tara-20261101-v1';
+export const SAFE_H3_KITCHEN_JOB='501a6a84-09b4-4f22-93cf-fa85df57d346';
+export const SAFE_H3_KITCHEN_TOKEN='safe-kitchen-20261101-v1';
 const TRIALS=[{jobId:SAFE_H3_JOB,token:SAFE_H3_TOKEN,profile:'no-training-adapter'},
-  {jobId:SAFE_H3_TARA_JOB,token:SAFE_H3_TARA_TOKEN,profile:'tara-native'}];
+  {jobId:SAFE_H3_TARA_JOB,token:SAFE_H3_TARA_TOKEN,profile:'tara-native'},
+  {jobId:SAFE_H3_KITCHEN_JOB,token:SAFE_H3_KITCHEN_TOKEN,profile:'guide-kitchen'}];
 const DEVICE='h3-safe-benchmark-20261101-v1';
 const ASSET='https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/examples/character_swap_v1.0_1.mp4';
 const SHA='0bb85d33ff2d1dc69b015d77715888d0388903c8582e97cd0f6bd7253b85355d';

@@ -13,13 +13,13 @@ function parsePromptTip(candidate) {
 }
 
 export function findValidationRejection(data) {
-  if(!data||typeof data!=='object'||data.data?.taskId)return null;
+  if(!data||typeof data!=='object'||data.taskId||data.data?.taskId)return null;
   const sources=[
     data.msg,data.promptTips,data.data?.promptTips,data.data?.message,data.message
   ];
   for(const raw of sources) {
     const p=parsePromptTip(raw);
-    if(p?.result===false && p.error?.type==='prompt_outputs_failed_validation')
+    if(p?.result===false && ['prompt_outputs_failed_validation','missing_node_type'].includes(p.error?.type))
       return p;
   }
   return null;
@@ -42,7 +42,8 @@ export function graphValidationError(response) {
       return [clean(nodeId,15),nodeType,message].filter(Boolean).join(' · ');
     }).filter(Boolean).join(' | ');
   const error=new Error(
-    'RunningHub menolak graph workflow (prompt_outputs_failed_validation). '
+    'RunningHub menolak graph workflow ('+rejected.error.type+'). '
+    +(rejected.error.type==='missing_node_type'?'Node tidak tersedia: '+clean(rejected.error.message,160)+'. ':'')
     +(details?'Node bermasalah: '+details+'. ':'')
     +'Periksa ketersediaan node, model, dan workflow H3 di RunningHub. Task tidak diterima.'
   );

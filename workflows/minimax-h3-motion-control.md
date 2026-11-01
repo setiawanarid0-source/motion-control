@@ -157,3 +157,9 @@ benchmark progress streams reconnect across deployments; no task is recreated.
 TARA telemetry is restricted to backend names, evaluation counts, token-row
 counts and elapsed seconds. This is an experimental comparison, not a claim
 that the method is available on RunningHub or preserves identity on every clip.
+
+The third private comparison changes only the no-adapter graph's model-attention
+branch to the upstream Guide Latents example's `ModelAttentionBackend` with
+`comfy kitchen attention`. Availability is checked by an actual provider task,
+not inferred from the unrelated native proxy. ComfyUI may fall back to PyTorch
+when Kitchen is unavailable; a valid graph alone is not proof of an active kernel.

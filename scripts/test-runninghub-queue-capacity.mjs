@@ -42,6 +42,11 @@ const responses=[
   {code:429,msg:'TASK_QUEUE_MAXED',data:null},
   {code:0,msg:'success',data:{taskId:'2109126366731984999',taskStatus:'RUNNING'}}
 ];
+const absentNode={code:500,msg:JSON.stringify({result:false,error:{type:'missing_node_type',message:"Node 'TARA' not found"}})};
+assert.equal(graphValidationError(absentNode)?.definitelyRejected,true,'Explicit pre-execution missing-node error is a rejected graph');
+assert.equal(graphValidationError({...absentNode,data:{taskId:'2109126366731984999'}}),null,'Accepted task IDs always forbid retry');
+assert.equal(graphValidationError({...absentNode,taskId:'2109126366731984999'}),null);
+assert.equal(graphValidationError({msg:JSON.stringify({result:false,error:{type:'execution_error'}})}),null);
 const uploads=[],requests=[];
 let nextReply=0;
 const context={

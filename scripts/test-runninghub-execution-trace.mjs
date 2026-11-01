@@ -8,6 +8,7 @@ assert.equal(h3NodeClass('1004',plan),'MiniMaxH3ReferenceToVideo');
 assert.equal(h3NodeClass('1040',plan),null);
 assert.equal(h3NodeClass('1010',{}),null);
 assert.equal(h3NodeClass('9',{...plan,inferenceProfile:'tara-native'}),'BFSMiniMaxH3NativeTemporal');
+assert.equal(h3NodeClass('9',{...plan,inferenceProfile:'guide-kitchen'}),'ModelAttentionBackend');
 for(const url of ['wss://www.runninghub.ai/ws?token=private','wss://worker.runninghub.cn/ws'])assert.ok(allowedProgressUrl(url));
 for(const url of ['ws://www.runninghub.ai/ws','wss://127.0.0.1/ws','wss://runninghub.ai.attacker.invalid/ws',
   'wss://user:secret@www.runninghub.ai/ws','wss://www.runninghub.ai:8080/ws'])assert.ok(!allowedProgressUrl(url));
