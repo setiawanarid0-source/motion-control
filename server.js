@@ -27,7 +27,7 @@ import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
-import {stageSafeH3Benchmark,safeH3Profile,safeH3Result} from './h3-safe-benchmark.js';
+import {stageSafeH3Benchmark,safeH3Profile,safeH3Result,resumeSafeH3Progress} from './h3-safe-benchmark.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -1212,6 +1212,7 @@ console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legac
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
 generationQueue.resume();
+resumeSafeH3Progress({queue:generationQueue,observe:observeH3Progress});
 void stageSafeH3Benchmark({queue:generationQueue,
   token:DATA_DIR==='/data'?process.env.VANTA_H3_SAFE_BENCHMARK:''})
   .then(job=>{if(job)console.info('H3 safe benchmark staged',JSON.stringify({jobId:job.jobId,stage:job.stage,reused:job.reused||false}));})

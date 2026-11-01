@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {createGenerationQueue} from '../generation-queue.js';
-import {stageSafeH3Benchmark,safeH3Profile,safeH3Result,SAFE_H3_JOB,SAFE_H3_TOKEN} from '../h3-safe-benchmark.js';
+import {stageSafeH3Benchmark,safeH3Profile,safeH3Result,resumeSafeH3Progress,SAFE_H3_JOB,SAFE_H3_TOKEN,SAFE_H3_TARA_JOB,SAFE_H3_TARA_TOKEN} from '../h3-safe-benchmark.js';
 const root=await fs.mkdtemp(path.join(os.tmpdir(),'h3-safe-benchmark-test-'));
 let downloads=0,stages=0;
 const download=async()=>{downloads++;return Buffer.from('unapproved content');};
@@ -37,6 +37,15 @@ try{
     assert.equal(safeH3Result({taskId:'2113333333333333333',status:'success'},q).inferenceProfile,'no-training-adapter');
     const replay=await stageSafeH3Benchmark({queue:q,token:SAFE_H3_TOKEN,download:async()=>{throw Error('No repeat');}});
     assert.equal(replay.reused,true);
+    const second=await stageSafeH3Benchmark({queue:q,token:SAFE_H3_TARA_TOKEN,download:async()=>media});
+    assert.equal(second.jobId,SAFE_H3_TARA_JOB);
+    assert.equal(safeH3Profile(q.read(second.jobId)),'tara-native');
+    q.update(SAFE_H3_TARA_JOB,{stage:'accepted',task:{taskId:'2113333333333333334',netWssUrl:'wss://www.runninghub.ai/ws?private'}});
+    const resumed=[];
+    resumeSafeH3Progress({queue:q,observe:(id,url)=>resumed.push({id,url})});
+    assert.equal(resumed.length,2,'Reconnect accepted benchmark progress after deployment without creating tasks');
+    assert.equal(resumed[1].id,'2113333333333333334');
+    assert.equal(safeH3Result({taskId:'2113333333333333334',status:'success'},q).inferenceProfile,'tara-native');
   }
   console.log('PASS: opt-in clothed benchmark, approved-media hash, durable once-only submission and private inference profile');
 }finally{await fs.rm(root,{recursive:true,force:true});}

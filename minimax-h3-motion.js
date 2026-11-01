@@ -15,7 +15,8 @@ export const H3_MODELS=Object.freeze({
   audioVae:'minimax_h3_audio_vae_fp32.safetensors',
   adapter:'minimax_h3_ref2va_training_adapter_v2.safetensors',
   turbo:'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors',
-  motion:'minimax_h3_motion_transfer_v1.0_ref2va.safetensors'
+  motion:'minimax_h3_motion_transfer_v1.0_ref2va.safetensors',
+  motionTara:'minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors'
 });
 // Photo supplies the ENTIRE appearance, including the setting. Video supplies
 // performance and camera. No head mask, source composite or beauty/style LoRA.
@@ -219,21 +220,25 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||'legacy-training-adapter';
-  if(!['legacy-training-adapter','no-training-adapter'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
+  if(!['legacy-training-adapter','no-training-adapter','tara-native'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
+  const tara=profile==='tara-native';
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:H3_MODELS.clip,type:'minimax',device:'default'});
   add(3,'VAELoader',{vae_name:H3_MODELS.videoVae});add(4,'VAELoader',{vae_name:H3_MODELS.audioVae});
   if(profile==='legacy-training-adapter')
     add(5,'LoraLoaderModelOnly',{model:['1',0],lora_name:H3_MODELS.adapter,strength_model:1});
-  add(6,'LoraLoaderModelOnly',{model:[profile==='no-training-adapter'?'1':'5',0],lora_name:H3_MODELS.turbo,strength_model:1});
-  add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:H3_MODELS.motion,strength_model:1},'Motion Transfer v1.0');
+  add(6,'LoraLoaderModelOnly',{model:[profile==='legacy-training-adapter'?'5':'1',0],lora_name:H3_MODELS.turbo,strength_model:1});
+  add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:H3_MODELS.motion,strength_model:1},'Motion Transfer v1.0');
   add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:3});
+  if(tara)add(9,'BFSMiniMaxH3NativeTemporal',{model:['8',0],motion_video_index:1,strength:2,
+    window_seconds:.2,falloff_seconds:.25,max_penalty:6,attention_backend:'flash partitions (no compile)',
+    structure_guidance:1,structure_sigma_min:0},'Native aligned video reference; matching TARA LoRA');
   add(30,'LoadImage',{image:imageName});
   const reference=add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,
     right:source.referencePadRight,bottom:source.referencePadBottom,feathering:0},'Original photo pixels; grid padding only');
   add(40,'KSamplerSelect',{sampler_name:'euler'});
-  add(41,'BasicScheduler',{model:['8',0],scheduler:'simple',steps:8,denoise:1});
+  add(41,'BasicScheduler',{model:[tara?'9':'8',0],scheduler:'simple',steps:8,denoise:1});
   const exports=[];let previous=null;
   for(let i=0;i<segments.length;i++){
     const seg=segments[i],b=1000+i*30;
@@ -245,10 +250,11 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       const padding=add(b+2,'RepeatImageBatch',{image:last,amount:seg.modelFrames-seg.inputFrames});
       guide=add(b+3,'ImageBatch',{image1:guide,image2:padding});
     }
-    add(b+4,'MiniMaxH3ReferenceToVideo',{clip:['2',0],vae:['3',0],audio_vae:['4',0],prompt:H3_PROMPT,
+    add(b+4,'MiniMaxH3ReferenceToVideo',{clip:['2',0],vae:['3',0],audio_vae:['4',0],
+      prompt:tara?H3_PROMPT.replace('The aligned motion guide supplies','<Video 1> supplies'):H3_PROMPT,
       width:source.canvasWidth,height:source.canvasHeight,length:seg.modelFrames,ref_image_size:'max',
-      'ref_images.ref_image_1':reference},'Photo supplies full appearance in every segment');
-    let positive=add(b+5,'MiniMaxH3AddGuide',{positive:[String(b+4),0],latent:[String(b+4),1],vae:['3',0],
+      'ref_images.ref_image_1':reference,...(tara?{'ref_videos.ref_video_1':guide}:{})},'Photo supplies full appearance in every segment');
+    let positive=tara?[String(b+4),0]:add(b+5,'MiniMaxH3AddGuide',{positive:[String(b+4),0],latent:[String(b+4),1],vae:['3',0],
       image:guide,frame_idx:0},'All aligned motion frames; no native reference-video duplicate');
     if(seg.contextFrames&&previous){
       const tail=add(b+6,'ImageFromBatch',{image:previous.image,batch_index:previous.lastFrame,length:1});
@@ -256,7 +262,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
         'Previous generated frame at matching source overlap; reset at cuts');
     }
     const noise=add(b+8,'RandomNoise',{noise_seed:42+i});
-    const guider=add(b+9,'CFGGuider',{model:['8',0],positive,negative:positive,cfg:1});
+    const guider=add(b+9,'CFGGuider',{model:[tara?'9':'8',0],positive,negative:positive,cfg:1});
     const samples=add(b+10,'SamplerCustomAdvanced',{noise,guider,sampler:['40',0],sigmas:['41',0],latent_image:[String(b+4),1]});
     // The H3 VAE handles its own spatial/temporal tiling.
     const decoded=add(b+11,'VAEDecode',{samples,vae:['3',0]});

@@ -9,6 +9,7 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
   if(!/^motion-transfer-native-1080-v[123]$/.test(String(plan?.revision)))return null;
+  if(String(node)==='9'&&plan.inferenceProfile==='tara-native')return 'BFSMiniMaxH3NativeTemporal';
   if(BASE_NODES[node])return BASE_NODES[node];
   const n=Number(node),offset=(n-1000)%30,index=Math.floor((n-1000)/30);
   return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODES.length?
@@ -64,6 +65,16 @@ export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit}){
       lastValue=data.value;
       send('progress',{node,nodeClass:h3NodeClass(node,plan),value:data.value,max:data.max,
         observedSeconds:Math.max(0,Math.round((now()-startedAt)/10)/100),partial});
+    }else if(message.type==='bfs-tara-monitor'){
+      const node=nodeId(data.node);
+      if(!node||!['evaluating','evaluation_complete'].includes(data.phase)||
+        !Number.isSafeInteger(data.evaluation)||data.evaluation<1||data.evaluation>100000)return;
+      const fields={node,nodeClass:h3NodeClass(node,plan),phase:data.phase,evaluation:data.evaluation};
+      if(['flash partitions (no compile)','flex (original)','comfy kitchen (experimental)'].includes(data.backend))
+        fields.backend=data.backend;
+      for(const name of ['motion_rows','packed_rows','duration_seconds','elapsed_seconds'])
+        if(Number.isFinite(data[name])&&data[name]>=0&&data[name]<=10000000)fields[name]=data[name];
+      send('temporal_evaluation',fields);
     }else if(message.type==='execution_success'||message.type==='execution_error'){
       finishNode();finished=true;send(message.type);
     }

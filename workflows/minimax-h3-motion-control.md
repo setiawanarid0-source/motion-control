@@ -147,3 +147,13 @@ through the existing durable queue. Its source SHA-256 is pinned; private user
 uploads are never selected. Accepted, uncertain and failed submissions are not
 automatically rerun on restart. This creates no public route or extra UI.
 Node timing and the fixture result are available through scoped deployment logs.
+
+The second private profile is the author's matching TARA motion model and native
+video-reference path. It uses Flash partitions, structure guidance 1 (no second
+model pass), and routes the patched MODEL to both scheduler and guider. It never
+duplicates the full guide through Add Guide. The same approved five-second
+fixture is used, with a distinct durable job ID and explicit opt-in. Existing
+benchmark progress streams reconnect across deployments; no task is recreated.
+TARA telemetry is restricted to backend names, evaluation counts, token-row
+counts and elapsed seconds. This is an experimental comparison, not a claim
+that the method is available on RunningHub or preserves identity on every clip.

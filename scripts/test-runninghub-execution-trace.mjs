@@ -7,6 +7,7 @@ assert.equal(h3NodeClass('1010',plan),'SamplerCustomAdvanced');
 assert.equal(h3NodeClass('1004',plan),'MiniMaxH3ReferenceToVideo');
 assert.equal(h3NodeClass('1040',plan),null);
 assert.equal(h3NodeClass('1010',{}),null);
+assert.equal(h3NodeClass('9',{...plan,inferenceProfile:'tara-native'}),'BFSMiniMaxH3NativeTemporal');
 for(const url of ['wss://www.runninghub.ai/ws?token=private','wss://worker.runninghub.cn/ws'])assert.ok(allowedProgressUrl(url));
 for(const url of ['ws://www.runninghub.ai/ws','wss://127.0.0.1/ws','wss://runninghub.ai.attacker.invalid/ws',
   'wss://user:secret@www.runninghub.ai/ws','wss://www.runninghub.ai:8080/ws'])assert.ok(!allowedProgressUrl(url));
@@ -17,6 +18,11 @@ trace.message(new Uint8Array([0,1,2]));trace.message('not-json');
 for(const invalid of ['null','[]','true','42','{"type":"executing","data":{"node":{"toString":"private"}}}'])
   assert.doesNotThrow(()=>trace.message(invalid),'Malformed provider messages must not crash the web service');
 send('executing',{node:'1004',prompt:'must not be logged'});
+send('bfs-tara-monitor',{node:'9',phase:'evaluating',evaluation:1,backend:'flash partitions (no compile)',
+  motion_rows:100,packed_rows:1000,prompt:'private-reference',url:'private-url'});
+const telemetry=events.find(e=>e.event==='temporal_evaluation');
+assert.equal(telemetry.packed_rows,1000);
+assert.ok(!JSON.stringify(telemetry).includes('private'));
 clock=5000;send('executing',{node:'1010'});
 clock=8000;send('progress',{node:'1010',value:1,max:8,secret:'private'});
 send('progress',{node:'1010',value:1,max:8});

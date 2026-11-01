@@ -53,6 +53,24 @@ delete legacyWithoutAdapter['5'];legacyWithoutAdapter['6'].inputs.model=['1',0];
 assert.deepEqual(candidate,legacyWithoutAdapter,'Controlled inference test changes only the training adapter branch');
 assert.equal(h3ExecutionPlan({...source,inferenceProfile:'no-training-adapter'}).inferenceProfile,'no-training-adapter');
 assert.throws(()=>h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'arbitrary'}}),/Profil inferensi/);
+for(const frames of [120,360]){
+  const tara=h3GraphForInputs(manifest,{...names,source:{...source,totalFrames:frames,inferenceProfile:'tara-native'}});
+  assert.ok(!tara['5']);assert.equal(tara['7'].inputs.lora_name,H3_MODELS.motionTara);
+  assert.equal(tara['9'].class_type,'BFSMiniMaxH3NativeTemporal');
+  assert.deepEqual(tara['9'].inputs.model,['8',0]);
+  assert.deepEqual(tara['41'].inputs.model,['9',0],'TARA must reach scheduler as well as guider');
+  assert.equal(tara['9'].inputs.structure_guidance,1,'No hidden extra model pass per step');
+  for(let i=0;i<h3Segments(frames).length;i++){
+    const b=1000+i*30;
+    assert.deepEqual(tara[b+9].inputs.model,['9',0]);
+    assert.ok(tara[b+4].inputs['ref_videos.ref_video_1'],'Native video reference is required by TARA');
+    assert.deepEqual(tara[b+4].inputs['ref_images.ref_image_1'],['31',0]);
+    assert.ok(!tara[b+5],'Full-video Add Guide must not duplicate native motion tokens');
+    assert.match(tara[b+4].inputs.prompt,/<Video 1> supplies/);
+    assert.equal(tara[b+4].inputs.width,1088);assert.equal(tara[b+4].inputs.ref_image_size,'max');
+    assert.equal(tara[b+13].inputs.width,1080);
+  }
+}
 for(const cuts of [[],[60]]){
   const five={...source,totalFrames:120,sceneCuts:cuts};
   const g=h3GraphForInputs(manifest,{...names,source:five});
