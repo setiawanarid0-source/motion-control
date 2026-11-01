@@ -24,7 +24,7 @@ export function allowedProgressUrl(value){
 export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit}){
   let current=null,startedAt=0,partial=true,lastValue=null,finished=false;
   const send=(event,fields={})=>emit({taskId:String(taskId),event,...fields});
-  const nodeId=v=>/^\d{1,7}$/.test(String(v??''))?String(v):null;
+  const nodeId=v=>(typeof v==='string'||typeof v==='number')&&/^\d{1,7}$/.test(String(v))?String(v):null;
   function finishNode(){
     if(current!==null)send('node_end',{node:current,nodeClass:h3NodeClass(current,plan),
       observedSeconds:Math.max(0,Math.round((now()-startedAt)/10)/100),partial});
@@ -38,7 +38,8 @@ export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit}){
   return {message(raw){
     if(finished||typeof raw!=='string'||raw.length>65536)return;
     let message;try{message=JSON.parse(raw);}catch{return;}
-    const data=message?.data||{};
+    if(!message||typeof message!=='object'||Array.isArray(message))return;
+    const data=message.data&&typeof message.data==='object'&&!Array.isArray(message.data)?message.data:{};
     if(message.type==='executing'){
       if(data.node===null){finishNode();return;}
       const node=nodeId(data.node);if(node)select(node,false);
@@ -76,7 +77,7 @@ export function createH3ExecutionMonitor({WebSocketImpl=globalThis.WebSocket,log
     const connection={socket,trace,timeout};connections.set(id,connection);
     socket.addEventListener('open',()=>log({taskId:id,event:'stream_open'}));
     socket.addEventListener('message',event=>{
-      trace.message(event.data);
+      try{trace.message(event.data);}catch{close(id);return;}
       if(trace.finished)close(id);
     });
     socket.addEventListener('error',()=>{log({taskId:id,event:'stream_unavailable'});close(id);});

@@ -12,6 +12,8 @@ let clock=0;const events=[];
 const trace=createExecutionTrace({taskId:'2113333333333333333',plan,now:()=>clock,emit:x=>events.push(x)});
 const send=(type,data)=>trace.message(JSON.stringify({type,data}));
 trace.message(new Uint8Array([0,1,2]));trace.message('not-json');
+for(const invalid of ['null','[]','true','42','{"type":"executing","data":{"node":{"toString":"private"}}}'])
+  assert.doesNotThrow(()=>trace.message(invalid),'Malformed provider messages must not crash the web service');
 send('executing',{node:'1004',prompt:'must not be logged'});
 clock=5000;send('executing',{node:'1010'});
 clock=8000;send('progress',{node:'1010',value:1,max:8,secret:'private'});
