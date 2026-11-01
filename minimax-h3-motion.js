@@ -206,11 +206,18 @@ export function h3ExecutionPlan(source){
     inferenceProfile:source.inferenceProfile||H3_DEFAULT_PROFILE,
     sampling:h3SamplingPlan(source),
     referenceFace:source.referenceFace||null,
-    attentionConditioning:source.sparseConditioningMode||'exact_kv_and_rows',
+    attentionConditioning:h3AttentionConditioning(source),
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
     postDecodeResize:false,postRefinement:false};
+}
+
+function h3AttentionConditioning(source){
+  // Native exact_kv keeps every query's access to the reference exact. The
+  // extra dense target-audio query rows are unnecessary for source-audio export.
+  return source.sparseConditioningMode||
+    ((source.inferenceProfile||H3_DEFAULT_PROFILE)==='guide-dmad4-focus'?'exact_kv':'exact_kv_and_rows');
 }
 
 export function h3SamplingPlan(source){
@@ -255,8 +262,8 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     g['8'].inputs.model=['9',0];
   }
   if(focused){
-    const sinks=source.sparseConditioningMode||'exact_kv_and_rows';
-    if(!['exact_kv_and_rows','off'].includes(sinks))throw Error('Mode attention H3 tidak valid.');
+    const sinks=h3AttentionConditioning(source);
+    if(!['exact_kv','exact_kv_and_rows','off'].includes(sinks))throw Error('Mode attention H3 tidak valid.');
     add(10,'BlockSparseAttention',{model:['8',0],selection:'sol-attn','selection.tau':1,
       start_percent:.2,end_percent:1,dense_blocks:'0,1',min_tokens:12288,extra_tokens:256,
       sink_conditioning:sinks,verbose:true});

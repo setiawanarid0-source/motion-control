@@ -112,8 +112,10 @@ student (`minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors`),
 LCM/simple re-noise sampling, CFG 1 and video/audio shifts 12/2, following the
 DMAD checkpoint author's sampling contract. This is not a shortened schedule
 using the old eight-step DMD adapter. The Motion Transfer task, native canvas,
-whole-photo reference, exact reference attention and original audio export stay
-the same. Fifteen seconds still uses three native windows, now twelve rather
+whole-photo reference and original audio export stay the same. `exact_kv`
+keeps every query's reference attention exact, while omitting the extra dense
+target-audio query rows for generated audio that Vanta does not export.
+Fifteen seconds still uses three native windows, now twelve rather
 than twenty-four total sampling steps. Runtime and visual fidelity must be
 measured before promotion.
 
@@ -126,7 +128,8 @@ slow production task. Both use the same 1088×1952 model canvas. The fully cloth
 public guide is looped to exactly 360 frames/15 seconds. No reference/output
 resizing, post-generation interpolation or refiner is used.
 
-Both source files have pinned hashes. Starting this trial requires the exact
+Both source files have pinned hashes; the 1.43MB public-domain portrait is bundled
+to avoid external image-host failures during deployment preparation. Starting this trial requires the exact
 deployment-only `VANTA_H3_LONG_BENCHMARK` opt-in on `/data`; a permanent exclusive
 checkpoint prevents another paid submission even after queue retention expires.
 No route, owner login or private upload is used. Unknown acceptance, rejection

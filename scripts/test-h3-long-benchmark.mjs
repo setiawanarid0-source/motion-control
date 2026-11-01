@@ -2,17 +2,23 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import {createGenerationQueue} from '../generation-queue.js';
 import {h3PhotoPlan} from '../minimax-h3-motion.js';
 import {LONG_H3_JOB,LONG_H3_TOKEN,longH3Profile,longH3Result,longH3ModelChoices,stageLongH3Benchmark,runLongH3Deployment} from '../h3-long-benchmark.js';
 const dir=await fs.mkdtemp(path.join(os.tmpdir(),'h3-long-test-'));
 let called=0;
 try{
+  const bundled=await fs.readFile(new URL('../test-fixtures/h3/portrait.jpg',import.meta.url));
+  assert.equal(createHash('sha256').update(bundled).digest('hex'),'7018a5a3dc37452bf7532436cb5924af4516fce32f1ff0c4bd7e649b7834e345');
   const stage=async args=>{called++;assert.equal(args.checkpointDir,'/data/h3-benchmark-checkpoints');return {stage:'queued'};};
   for(const args of [{rootDir:'/tmp',token:LONG_H3_TOKEN},{rootDir:'/data',token:''},{rootDir:'/data',token:'old-token'}])
     assert.equal(await runLongH3Deployment({...args,stage}),null);
   assert.equal(called,0);
   assert.equal((await runLongH3Deployment({rootDir:'/data',token:LONG_H3_TOKEN,stage})).stage,'queued');
+  assert.equal((await runLongH3Deployment({rootDir:'/data',token:LONG_H3_TOKEN,stage,
+    queue:{read:()=>({stage:'uncertain'})}})).stage,'uncertain');
+  assert.equal(called,1,'An earlier durable trial must block another submission');
   const queue={read:()=>null,stage:async()=>{throw Error('Unapproved bytes must never be queued');}};
   const args={queue,checkpointDir:dir,download:async()=>{called++;return Buffer.from('changed public fixture');}};
   await assert.rejects(stageLongH3Benchmark(args),/hash mismatch/);

@@ -8,8 +8,9 @@ import {promisify} from 'node:util';
 import axios from 'axios';
 import {findValidationRejection} from './runninghub-graph-validation.js';
 const run=promisify(execFile);
-export const LONG_H3_JOB='a7bbd9f5-6d77-4df7-b7ac-fbdc8cc18015';
-export const LONG_H3_TOKEN='safe-dmad15-large-20261101-v1';
+export const LONG_H3_JOB='a7bbd9f5-6d77-4df7-b7ac-fbdc8cc18016';
+export const LONG_H3_TOKEN='safe-dmad15-large-20261101-v2';
+const PREVIOUS_JOB='a7bbd9f5-6d77-4df7-b7ac-fbdc8cc18015';
 const DEVICE='h3-safe-long-benchmark-20261101-v1';
 const IMAGE='H3-safe-reference-large.png',VIDEO='H3-safe-guide-15s.mp4';
 export const LONG_H3_ASSETS=Object.freeze([
@@ -45,7 +46,9 @@ export function longH3Result(task,queue){
     inferenceProfile:longH3Profile(job)};
 }
 export async function stageLongH3Benchmark({queue,checkpointDir,
-  download=async asset=>Buffer.from((await axios.get(asset.url,{responseType:'arraybuffer',timeout:60000,
+  download=async asset=>asset.name==='portrait.jpg'?
+    fs.readFile(new URL('./test-fixtures/h3/portrait.jpg',import.meta.url)):
+    Buffer.from((await axios.get(asset.url,{responseType:'arraybuffer',timeout:60000,
     headers:{'User-Agent':'VantaTechnicalBenchmark/1.0 (non-commercial local workflow test)'},
     maxContentLength:20*1024*1024,maxBodyLength:20*1024*1024})).data),execute=run}){
   const old=queue.read(LONG_H3_JOB);
@@ -57,31 +60,40 @@ export async function stageLongH3Benchmark({queue,checkpointDir,
     JSON.stringify({jobId:LONG_H3_JOB,startedAt:new Date().toISOString()}),{flag:'wx',mode:0o600});}
   catch(error){if(error.code==='EEXIST')return {jobId:LONG_H3_JOB,stage:'checkpointed',reused:true};throw error;}
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-long-safe-'));
+  let phase='sources';
   try{
     for(const asset of LONG_H3_ASSETS){
+      phase='load:'+asset.name;
       const data=await download(asset);
       if(createHash('sha256').update(data).digest('hex')!==asset.sha)throw Error('Approved long fixture hash mismatch');
       await fs.writeFile(path.join(dir,asset.name),data);
     }
     const image=path.join(dir,IMAGE),guide=path.join(dir,'guide-5s.mp4'),video=path.join(dir,VIDEO);
+    phase='photo_crop';
     // NASA/Robert Markowitz public-domain portrait, inspected fully clothed.
     // Native-pixel crop, no resize: the padded H3 reference is 4.608MP,
     // comparable to the 4.588MP total reference pixels in the slow user task.
     await execute(process.env.VANTA_MEDIA_PYTHON||'python3',['-c',
       'from PIL import Image; import sys; im=Image.open(sys.argv[1]); assert im.size==(3200,4000); im.crop((800,100,2400,2950)).save(sys.argv[2])',
       path.join(dir,'portrait.jpg'),image],{timeout:60000,maxBuffer:65536});
+    phase='guide_extract';
     await execute('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y','-ss','2.958333',
       '-i',path.join(dir,'motion-demo.mp4'),'-vf','crop=544:928:0:72','-t','5','-frames:v','120','-an',
       '-c:v','libx264','-preset','fast','-crf','16','-pix_fmt','yuv420p','-threads','2',guide],{timeout:60000,maxBuffer:65536});
+    phase='guide_loop';
     await execute('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y','-stream_loop','2','-i',guide,
       '-t','15','-c','copy',video],{timeout:60000,maxBuffer:65536});
+    phase='durable_stage';
     return await queue.stage({jobId:LONG_H3_JOB,deviceId:DEVICE,
       body:{workflow:'minimaxH3',mode:'plus',accountId:'auto'},
       image:{path:image,originalname:IMAGE,mimetype:'image/png',size:(await fs.stat(image)).size},
       video:{path:video,originalname:VIDEO,mimetype:'video/mp4',size:(await fs.stat(video)).size}});
-  }finally{await fs.rm(dir,{recursive:true,force:true});}
+  }catch(error){error.fixtureStage=phase;throw error;}
+  finally{await fs.rm(dir,{recursive:true,force:true});}
 }
 export async function runLongH3Deployment({rootDir,token,stage=stageLongH3Benchmark,...args}){
   if(rootDir!=='/data'||token!==LONG_H3_TOKEN)return null;
+  const previous=args.queue?.read(PREVIOUS_JOB);
+  if(previous)return {jobId:PREVIOUS_JOB,stage:previous.stage,reused:true};
   return stage({...args,checkpointDir:path.join(rootDir,'h3-benchmark-checkpoints')});
 }

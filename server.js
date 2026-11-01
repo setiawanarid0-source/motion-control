@@ -1228,7 +1228,9 @@ pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
 generationQueue.resume();
 void runLongH3Deployment({queue:generationQueue,rootDir:DATA_DIR,token:process.env.VANTA_H3_LONG_BENCHMARK||''})
   .then(job=>{if(job)console.info('H3 long benchmark staged',JSON.stringify({jobId:job.jobId,stage:job.stage,reused:job.reused||false}));})
-  .catch(()=>console.warn('H3 long benchmark staging failed before submission'));
+  .catch(error=>console.warn('H3 long benchmark staging failed before submission',JSON.stringify({
+    phase:error.fixtureStage||null,errorClass:['Error','AxiosError','TypeError'].includes(error.name)?error.name:'other',
+    httpStatus:Number.isInteger(error.response?.status)?error.response.status:null})));
 setInterval(()=>generationQueue.purge(),60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
 void motionResults.prune().catch(e=>console.warn('Result archive cleanup',e.message));

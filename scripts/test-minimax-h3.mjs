@@ -105,7 +105,7 @@ assert.equal(dmad['6'].inputs.lora_name,H3_MODELS.turboDmad4);
 assert.equal(dmad['40'].inputs.sampler_name,'lcm','DMAD uses its trained re-noise rule');
 assert.equal(dmad['41'].inputs.steps,4);
 assert.equal(dmad['8'].inputs.shift_video,12);assert.equal(dmad['8'].inputs.shift_audio,2);
-assert.equal(dmad['10'].inputs.sink_conditioning,'exact_kv_and_rows','Do not discard exact reference attention to make the trial faster');
+assert.equal(dmad['10'].inputs.sink_conditioning,'exact_kv','Keep exact reference attention; generated target audio is not exported');
 assert.equal(dmad['1004'].inputs.ref_image_size,'max');
 assert.equal(h3ExecutionPlan(longDmadSource).samplerCount,3);
 assert.equal(h3ExecutionPlan(longDmadSource).sampling.steps,4);
