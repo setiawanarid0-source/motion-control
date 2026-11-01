@@ -6,7 +6,7 @@ import os from 'node:os';
 const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
-export const H3_REVISION='motion-transfer-native-1080-v2';
+export const H3_REVISION='motion-transfer-native-1080-v3';
 export const H3_WINDOW_FRAMES=124;
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
@@ -192,13 +192,13 @@ export async function prepareH3Reference(file,outputPath){
   return {file:prepared,color};
 }
 
-export function h3ExecutionPlan(source){
+export function h3ExecutionPlan(source,attentionBackend=null){
   const segments=validateSource(source);
   return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
-    postDecodeResize:false,postRefinement:false};
+    attentionBackend:attentionBackend||'provider default',postDecodeResize:false,postRefinement:false};
 }
 
 function inputName(value){
@@ -213,10 +213,11 @@ function validateSource(source){
   if(Object.entries(expected).some(([key,value])=>source[key]!==value))throw Error('Metadata canvas H3 belum tervalidasi.');
   return h3Segments(source.totalFrames,source.sceneCuts);
 }
-export function h3GraphForInputs(base,{imageName,videoName,source}){
+export function h3GraphForInputs(base,{imageName,videoName,source,attentionBackend=null}){
   inputName(imageName);inputName(videoName);
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
+  if(attentionBackend!==null&&attentionBackend!=='comfy kitchen attention')throw Error('Backend H3 tidak tervalidasi.');
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:H3_MODELS.clip,type:'minimax',device:'default'});
@@ -224,7 +225,8 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   add(5,'LoraLoaderModelOnly',{model:['1',0],lora_name:H3_MODELS.adapter,strength_model:1});
   add(6,'LoraLoaderModelOnly',{model:['5',0],lora_name:H3_MODELS.turbo,strength_model:1});
   add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:H3_MODELS.motion,strength_model:1},'Motion Transfer v1.0');
-  add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:3});
+  const model=attentionBackend?add(9,'ModelAttentionBackend',{model:['7',0],attention:attentionBackend}):['7',0];
+  add(8,'MiniMaxH3SigmaShift',{model,shift_video:12,shift_audio:3});
   add(30,'LoadImage',{image:imageName});
   const reference=add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,
     right:source.referencePadRight,bottom:source.referencePadBottom,feathering:0},'Original photo pixels; grid padding only');

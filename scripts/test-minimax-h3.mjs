@@ -44,6 +44,14 @@ for(let frames=6;frames<=1440;frames++){
 const names={imageName:'api/current-photo.png',videoName:'api/motion-guide.mp4'};
 const args={...names,source},before=JSON.stringify(manifest);
 const graph=h3GraphForInputs(manifest,args);
+const accelerated=h3GraphForInputs(manifest,{...args,attentionBackend:'comfy kitchen attention'});
+assert.equal(accelerated['9'].class_type,'ModelAttentionBackend');
+assert.equal(accelerated['9'].inputs.attention,'comfy kitchen attention');
+assert.deepEqual(accelerated['9'].inputs.model,['7',0]);
+assert.deepEqual(accelerated['8'].inputs.model,['9',0],'Backend must reach actual sampling, not a disconnected patch');
+assert.deepEqual(accelerated['41'].inputs.model,['8',0]);
+assert.deepEqual(accelerated['1009'].inputs.model,['8',0]);
+assert.throws(()=>h3GraphForInputs(manifest,{...args,attentionBackend:'unverified backend'}),/Backend/);
 for(const cuts of [[],[60]]){
   const five={...source,totalFrames:120,sceneCuts:cuts};
   const g=h3GraphForInputs(manifest,{...names,source:five});
@@ -133,7 +141,8 @@ assert.equal(graph['30'].inputs.image,'api/current-photo.png','No cross-request 
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
 const calls=[],uploads=[];let response={code:0,data:{taskId:'2113333333333333333',taskStatus:'RUNNING'}};
-const context={workflowGraphs:{minimaxH3:manifest,current:{unchanged:true}},h3GraphForInputs,
+const context={workflowGraphs:{minimaxH3:manifest,current:{unchanged:true}},h3GraphForInputs,h3ExecutionPlan,
+  nativeH3Runtime:{inspect:async()=>({selectedAttention:null})},
   uploadToRunningHub:async(key,file)=>{uploads.push(file);return 'api/'+file.originalname;},
   runningHubInstanceType,explicitQueueMaxed,queueCapacityError,graphValidationError,
   rhJson:async(url,key,payload)=>{calls.push({url,payload});return response;}};
@@ -141,18 +150,21 @@ vm.createContext(context);vm.runInContext(server.slice(begin,end)+'\nthis.create
 const request={apiKey:'fixture-only',workflowId:'owner-workflow',workflowKey:'minimaxH3',mode:'plus',
   imageFile:{originalname:'original-photo.png'},videoFile:{originalname:'unprepared.mp4'},
   h3Source:{...source,file:{originalname:'motion-guide.mp4'}}};
-await context.createTask(request);
+const accepted=await context.createTask(request);
 assert.equal(uploads.length,2,'Only original photo and aligned guide, no 1080 source composite');
 assert.equal(uploads[0],request.imageFile,'Original photo is not resized or re-encoded before upload');
 assert.equal(calls[0].payload.instanceType,'plus');assert.equal(calls[0].payload.workflowId,'owner-workflow');
 assert.equal(calls[0].payload.retainSeconds,undefined);assert.equal(calls[0].payload.nodeInfoList.length,0);
 assert.equal(JSON.parse(calls[0].payload.workflow)['7'].inputs.lora_name,H3_MODELS.motion);
+assert.equal(accepted.inputDiagnostics.attentionBackend,'provider default');
 await context.createTask({...request,workflowKey:'current',h3Source:null});
 assert.equal(calls[1].payload.retainSeconds,259200);
 assert.equal(calls[1].payload.workflow,JSON.stringify({unchanged:true}));
 const srgb={originalname:'reference-srgb.png'};
+context.nativeH3Runtime.inspect=async()=>({selectedAttention:'comfy kitchen attention'});
 await context.createTask({...request,h3Source:{...request.h3Source,referenceFile:srgb}});
 assert.equal(uploads.at(-2),srgb,'ICC-normalized reference, when present, must reach RunningHub');
+assert.equal(JSON.parse(calls.at(-1).payload.workflow)['9'].inputs.attention,'comfy kitchen attention');
 let count=calls.length,uploaded=uploads.length;
 await assert.rejects(context.createTask({...request,mode:'standard'}),/Plus/);
 await assert.rejects(context.createTask({...request,h3Source:null}),/Metadata/);

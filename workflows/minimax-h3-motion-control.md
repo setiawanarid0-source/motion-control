@@ -18,6 +18,15 @@ is not also inserted as a native reference video. No cached identity text,
 character-swap/head-swap adapter, mask, source composite, realism LoRA, ControlNet,
 TARA patch, camera-motion style LoRA or refinement pass is loaded.
 
+The H3-specific dense attention backend from the author's native recipe is
+selected only when RunningHub's authenticated native API advertises it in
+`ModelAttentionBackend` (`comfy kitchen attention`). The patch reaches both
+guider and scheduler through Sigma Shift. If the capability lookup is unavailable
+or the backend is not advertised, the provider's existing default is retained;
+no unsupported backend or output-size fallback is guessed. Capability reads are
+bounded, cached, contain no task submission and do not expose API-key URLs.
+This selects a supported execution backend, not a measured latency guarantee.
+
 The prompt assigns the photo's complete subject appearance, outfit, proportions,
 texture, lighting character and environment. The video supplies pose, hands,
 head, facial performance, timing, framing and camera movement. Prompt wording
@@ -85,6 +94,20 @@ metadata using the task's existing credential and preserves the completion
 timestamp, result, archive and terminal state. It never creates a render. The
 difference between observed total duration and reported execution includes
 unmeasured queue/allocation/poll/delivery overhead; it is not called queue time.
+
+The existing status poll also attaches an optional, read-only progress observer
+when RunningHub provides `netWssUrl`. It records observed native-node transitions
+and sampler progress without submitting a render. Connections begun mid-node
+are marked partial; their elapsed time is not the full node duration. Binary
+preview images, prompts, URLs and error contents are discarded. Only trusted
+RunningHub WSS hosts are permitted. Polling remains authoritative because the
+provider documents this progress channel as unstable; unavailable progress must
+not fail, cancel or restart a task. No additional polling timer is added.
+
+The native proxy's capability snapshot includes only sanitized version, device,
+approved runtime-flag and backend fields. A proxy snapshot does not establish
+which GPU or runtime version executed a past OpenAPI task. It must not be used
+to claim a specific old-run hardware bottleneck.
 
 One model window removes the observed artificial 2.5-second restart. A longer
 window can increase peak memory and does not establish faster rendering. Actual
