@@ -1,7 +1,7 @@
 // Optional, read-only provider progress. Polling remains authoritative.
 // Binary preview frames, URLs, prompts, error text and credentials are ignored.
 const BASE_NODES={1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',5:'LoraLoaderModelOnly',
-  6:'LoraLoaderModelOnly',7:'LoraLoaderModelOnly',8:'MiniMaxH3SigmaShift',9:'ModelAttentionBackend',30:'LoadImage',
+  6:'LoraLoaderModelOnly',7:'LoraLoaderModelOnly',8:'MiniMaxH3SigmaShift',30:'LoadImage',
   31:'ImagePadForOutpaint',40:'KSamplerSelect',41:'BasicScheduler',49:'ImageBatchMulti',
   50:'VHS_LoadAudioUpload',490:'VHS_VideoCombine'};
 const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBatch',

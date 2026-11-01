@@ -27,7 +27,6 @@ import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {createH3ExecutionMonitor} from './runninghub-execution-trace.js';
-import {createNativeRuntimeInspector} from './runninghub-native-runtime.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -211,8 +210,6 @@ function writeTaskState(taskId,result){
 }
 const h3ExecutionMonitor=createH3ExecutionMonitor({
   log:report=>console.info('H3 execution trace',JSON.stringify(report))});
-const nativeH3Runtime=createNativeRuntimeInspector();
-let nativeH3AuditStarted=false;
 async function runningHubTaskState(taskId,account,accountId){
   const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
   // The provider can return a progress URL while an existing task is running.
@@ -271,15 +268,6 @@ async function monitorRegisteredTasks(){
       },
       update:(id,patch)=>taskRegistry.update(id,patch),
       log:report=>console.info('H3 provider timing audit',JSON.stringify(report))});
-    if(!nativeH3AuditStarted){
-      const candidate=taskRegistry.publicList().find(t=>/^MiniMax H3 · Motion Control/.test(String(t.workflow)));
-      const original=candidate?taskRegistry.get(candidate.taskId):null;
-      if(original?.key){
-        nativeH3AuditStarted=true;
-        const capabilities=await nativeH3Runtime.inspect(original.key,original.mode);
-        console.info('H3 native capability audit',JSON.stringify(capabilities));
-      }
-    }
     taskRegistry.purgeExpired();
   }catch(err){console.warn('Task lifecycle monitor',err.message);}
   finally{monitorBusy=false;}
@@ -496,21 +484,14 @@ async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
 }
 async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
   let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
-  let h3Runtime=null;
   if(workflowKey==='minimaxH3'&&!h3Source?.file)
     throw Error('Metadata video sumber H3 belum tervalidasi.');
   if(workflowKey==='minimaxH3'&&mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus.');
-  if(workflowKey==='minimaxH3'){
-    h3ExecutionPlan(h3Source); // Validate locally before any provider lookup.
-    h3Runtime=await nativeH3Runtime.inspect(apiKey,mode);
-    console.info('H3 selected runtime',JSON.stringify(h3Runtime));
-  }
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey,
     workflowKey==='minimaxH3'?(h3Source.referenceFile||imageFile):imageFile);
   const videoName = await uploadToRunningHub(apiKey, workflowKey==='minimaxH3'?h3Source.file:videoFile);
   if(workflowKey==='minimaxH3'){
-    selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source,
-      attentionBackend:h3Runtime.selectedAttention});
+    selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
   }
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
   const payload = {
@@ -551,8 +532,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     const tips = data?.data?.promptTips;
     throw new Error(data?.msg || tips || 'RunningHub gagal membuat task.');
   }
-  return { ...data.data, submittedAt,
-    ...(workflowKey==='minimaxH3'?{inputDiagnostics:h3ExecutionPlan(h3Source,h3Runtime?.selectedAttention)}:{}) };
+  return { ...data.data, submittedAt };
 }
 
 const upload = multer({
@@ -796,9 +776,7 @@ async function handleGeneration(req,res){
             outputKind:workflowMeta[workflowKey].outputKind||'video',mode,
             video:videoFile.originalname,submittedAt:task.submittedAt,
             status:task.taskStatus==='RUNNING'?'running':'queued',
-            inputDiagnostics:task.inputDiagnostics||null});
-          if(task.inputDiagnostics)console.info('H3 accepted execution plan',JSON.stringify({
-            taskId:String(task.taskId),...task.inputDiagnostics}));
+            inputDiagnostics:h3Source?h3ExecutionPlan(h3Source):null});
           trackingRegistered=true;
         }catch(registerError){
           console.error('Paid task accepted but registry write failed',String(task.taskId),registerError.message);

@@ -18,15 +18,6 @@ is not also inserted as a native reference video. No cached identity text,
 character-swap/head-swap adapter, mask, source composite, realism LoRA, ControlNet,
 TARA patch, camera-motion style LoRA or refinement pass is loaded.
 
-The H3-specific dense attention backend from the author's native recipe is
-selected only when RunningHub's authenticated native API advertises it in
-`ModelAttentionBackend` (`comfy kitchen attention`). The patch reaches both
-guider and scheduler through Sigma Shift. If the capability lookup is unavailable
-or the backend is not advertised, the provider's existing default is retained;
-no unsupported backend or output-size fallback is guessed. Capability reads are
-bounded, cached, contain no task submission and do not expose API-key URLs.
-This selects a supported execution backend, not a measured latency guarantee.
-
 The prompt assigns the photo's complete subject appearance, outfit, proportions,
 texture, lighting character and environment. The video supplies pose, hands,
 head, facial performance, timing, framing and camera movement. Prompt wording
@@ -95,20 +86,6 @@ timestamp, result, archive and terminal state. It never creates a render. The
 difference between observed total duration and reported execution includes
 unmeasured queue/allocation/poll/delivery overhead; it is not called queue time.
 
-The existing status poll also attaches an optional, read-only progress observer
-when RunningHub provides `netWssUrl`. It records observed native-node transitions
-and sampler progress without submitting a render. Connections begun mid-node
-are marked partial; their elapsed time is not the full node duration. Binary
-preview images, prompts, URLs and error contents are discarded. Only trusted
-RunningHub WSS hosts are permitted. Polling remains authoritative because the
-provider documents this progress channel as unstable; unavailable progress must
-not fail, cancel or restart a task. No additional polling timer is added.
-
-The native proxy's capability snapshot includes only sanitized version, device,
-approved runtime-flag and backend fields. A proxy snapshot does not establish
-which GPU or runtime version executed a past OpenAPI task. It must not be used
-to claim a specific old-run hardware bottleneck.
-
 One model window removes the observed artificial 2.5-second restart. A longer
 window can increase peak memory and does not establish faster rendering. Actual
 runtime and visual quality must be measured on a non-explicit GPU benchmark.
@@ -138,3 +115,18 @@ provider graph rejection must be shown, not hidden by changing models or sizes.
 - [Native ComfyUI H3 schemas and implementation](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_minimax_h3.py)
 - [BFS continuity and conditioning contracts](https://github.com/alisson-anjos/ComfyUI-BFSNodes/blob/main/bfs_shot_loop.py)
 - [VideoHelperSuite audio/video loaders](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
+
+## Per-stage observation
+
+An optional read-only observer consumes the progress URL returned by the existing
+RunningHub status query. It records native-node transitions and sampler progress,
+marks observations begun mid-node as partial, and ignores binary previews,
+prompts, private URLs and raw error contents. Polling remains authoritative;
+missing/unstable progress cannot fail or restart a task, and no new render or
+polling timer is added.
+
+The provider's native proxy reported an older, different runtime than the H3
+OpenAPI workflow supports. It is not used to infer the actual task GPU, kernel
+availability or backend selection. No execution-backend change is applied on
+this unverified basis. A completed task's aggregate runtime cannot reconstruct
+per-node timings. Actual speed improvement remains unproven.
