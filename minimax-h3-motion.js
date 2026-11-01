@@ -237,10 +237,9 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     g['8'].inputs.model=['9',0];
   }
   if(profile==='guide-sol-focus'){
-    add(10,'BlockSparseAttention',{model:['9',0],selection:'sol-attn','selection.tau':1,
+    add(10,'BlockSparseAttention',{model:['8',0],selection:'sol-attn','selection.tau':1,
       start_percent:.2,end_percent:1,dense_blocks:'0,1',min_tokens:12288,extra_tokens:256,
       sink_conditioning:'exact_kv_and_rows',verbose:true});
-    g['8'].inputs.model=['10',0];
   }
   if(tara)add(9,'BFSMiniMaxH3NativeTemporal',{model:['8',0],motion_video_index:1,strength:2,
     window_seconds:.2,falloff_seconds:.25,max_penalty:6,attention_backend:'flash partitions (no compile)',
@@ -265,7 +264,8 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     'It must not change the guide camera, pose or framing.\nThe aligned motion guide supplies');
   if(tara)prompt=prompt.replace('The aligned motion guide supplies','<Video 1> supplies');
   add(40,'KSamplerSelect',{sampler_name:'euler'});
-  add(41,'BasicScheduler',{model:[tara?'9':'8',0],scheduler:'simple',steps:8,denoise:1});
+  const samplingModel=tara?'9':profile==='guide-sol-focus'?'10':'8';
+  add(41,'BasicScheduler',{model:[samplingModel,0],scheduler:'simple',steps:8,denoise:1});
   const exports=[];let previous=null;
   for(let i=0;i<segments.length;i++){
     const seg=segments[i],b=1000+i*30;
@@ -290,7 +290,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
         'Previous generated frame at matching source overlap; reset at cuts');
     }
     const noise=add(b+8,'RandomNoise',{noise_seed:42+i});
-    const guider=add(b+9,'CFGGuider',{model:[tara?'9':'8',0],positive,negative:positive,cfg:1});
+    const guider=add(b+9,'CFGGuider',{model:[samplingModel,0],positive,negative:positive,cfg:1});
     const samples=add(b+10,'SamplerCustomAdvanced',{noise,guider,sampler:['40',0],sigmas:['41',0],latent_image:[String(b+4),1]});
     // The H3 VAE handles its own spatial/temporal tiling.
     const decoded=add(b+11,'VAEDecode',{samples,vae:['3',0]});

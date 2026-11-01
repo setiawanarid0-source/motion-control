@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {createGenerationQueue} from '../generation-queue.js';
-import {stageSafeH3Benchmark,safeH3Profile,safeH3FaceFocus,safeH3Result,resumeSafeH3Progress,SAFE_H3_JOB,SAFE_H3_TOKEN,SAFE_H3_TARA_JOB,SAFE_H3_TARA_TOKEN} from '../h3-safe-benchmark.js';
+import {stageSafeH3Benchmark,safeH3Profile,safeH3FaceFocus,safeH3Result,resumeSafeH3Progress,stopSupersededSafeBenchmark,SAFE_H3_JOB,SAFE_H3_TOKEN,SAFE_H3_TARA_JOB,SAFE_H3_TARA_TOKEN,SAFE_H3_SOL_JOB,SAFE_H3_SOL2_TOKEN} from '../h3-safe-benchmark.js';
 const root=await fs.mkdtemp(path.join(os.tmpdir(),'h3-safe-benchmark-test-'));
 let downloads=0,stages=0;
 const download=async()=>{downloads++;return Buffer.from('unapproved content');};
@@ -21,6 +21,20 @@ try{
   assert.equal(safeH3Profile({jobId:SAFE_H3_JOB}),null);
   assert.equal(safeH3Profile({body:{h3BenchmarkProfile:'no-training-adapter'}}),null);
   assert.equal(safeH3FaceFocus({jobId:SAFE_H3_JOB}),null,'Fixture coordinates cannot be applied to arbitrary uploads');
+  const task={taskId:'2113333333333333333',status:'running',key:'private',video:'H3-safe-guide-5s.mp4',inputDiagnostics:{inferenceProfile:'guide-sol-focus'}};
+  const stopped=[];
+  const cancelArgs={token:SAFE_H3_SOL2_TOKEN,queue:{read:id=>id===SAFE_H3_SOL_JOB?{
+    jobId:id,deviceId:'h3-safe-benchmark-20261101-v1',image:{originalname:'H3-safe-reference.png'},
+    video:{originalname:'H3-safe-guide-5s.mp4'},stage:'accepted',task:{taskId:task.taskId}}:null},
+    registry:{get:()=>task,update:(id,patch)=>stopped.push({id,patch})},cancel:async()=>({code:0})};
+  assert.equal(await stopSupersededSafeBenchmark({...cancelArgs,token:''}),null);
+  assert.equal((await stopSupersededSafeBenchmark(cancelArgs)).providerCode,0);
+  assert.equal(stopped.length,1);assert.equal(stopped[0].patch.status,'failed');
+  assert.equal((await stopSupersededSafeBenchmark({...cancelArgs,cancel:async()=>({code:null})})).providerCode,null);
+  assert.equal(stopped.length,1,'Missing acknowledgment cannot mark a task stopped');
+  task.video='user-upload.mp4';
+  assert.equal(await stopSupersededSafeBenchmark(cancelArgs),null,'Never cancel ordinary user tasks');
+  assert.equal(stopped.length,1);
   // Optional local integration fixture; CI and production tests do not download
   // media, require credentials, or make paid provider calls.
   if(process.env.VANTA_H3_SAFE_SOURCE){

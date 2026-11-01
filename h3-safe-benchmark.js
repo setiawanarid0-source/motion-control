@@ -16,10 +16,13 @@ export const SAFE_H3_KITCHEN_JOB='501a6a84-09b4-4f22-93cf-fa85df57d346';
 export const SAFE_H3_KITCHEN_TOKEN='safe-kitchen-20261101-v1';
 export const SAFE_H3_SOL_JOB='6683bcb0-b420-40c2-8b9b-1bf6d4a1f8cd';
 export const SAFE_H3_SOL_TOKEN='safe-sol-focus-20261101-v1';
+export const SAFE_H3_SOL2_JOB='39d4603c-ee05-4b9a-8662-2836726a0b64';
+export const SAFE_H3_SOL2_TOKEN='safe-sol-focus-shifted-20261101-v1';
 const TRIALS=[{jobId:SAFE_H3_JOB,token:SAFE_H3_TOKEN,profile:'no-training-adapter'},
   {jobId:SAFE_H3_TARA_JOB,token:SAFE_H3_TARA_TOKEN,profile:'tara-native'},
   {jobId:SAFE_H3_KITCHEN_JOB,token:SAFE_H3_KITCHEN_TOKEN,profile:'guide-kitchen'},
-  {jobId:SAFE_H3_SOL_JOB,token:SAFE_H3_SOL_TOKEN,profile:'guide-sol-focus'}];
+  {jobId:SAFE_H3_SOL_JOB,token:SAFE_H3_SOL_TOKEN,profile:'guide-sol-focus'},
+  {jobId:SAFE_H3_SOL2_JOB,token:SAFE_H3_SOL2_TOKEN,profile:'guide-sol-focus'}];
 const DEVICE='h3-safe-benchmark-20261101-v1';
 const ASSET='https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/examples/character_swap_v1.0_1.mp4';
 const SHA='0bb85d33ff2d1dc69b015d77715888d0388903c8582e97cd0f6bd7253b85355d';
@@ -74,4 +77,19 @@ export function resumeSafeH3Progress({queue,observe}){
     if(safeH3Profile(job)&&job.stage==='accepted'&&job.task?.taskId)
       observe(job.task.taskId,job.task.netWssUrl);
   }
+}
+export async function stopSupersededSafeBenchmark({queue,registry,cancel,token}){
+  if(token!==SAFE_H3_SOL2_TOKEN)return null;
+  const job=queue.read(SAFE_H3_SOL_JOB);
+  if(safeH3Profile(job)!=='guide-sol-focus'||job.stage!=='accepted')return null;
+  const task=registry.get(String(job.task?.taskId||''));
+  if(!task||String(task.taskId)!==String(job.task.taskId)||['success','failed'].includes(task.status)||task.video!=='H3-safe-guide-5s.mp4'||
+    task.inputDiagnostics?.inferenceProfile!=='guide-sol-focus')return null;
+  const response=await cancel(task.key,task.taskId);
+  if(response?.code===0||response?.code==='0'){
+    registry.update(task.taskId,{status:'failed',finishedAt:new Date().toISOString(),
+      error:'Uji teknis dihentikan setelah koreksi urutan node.'});
+  }
+  return {taskId:task.taskId,providerCode:response?.code!==null&&response?.code!==undefined&&
+    Number.isFinite(Number(response.code))?Number(response.code):null};
 }

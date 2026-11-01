@@ -172,3 +172,11 @@ Picture 1. The crop coordinates belong only to that fixed test fixture; normal
 uploads never receive those coordinates. No generated frame is face-edited or
 resized. Both speed and facial likeness require render comparison; this test
 profile is not promoted to normal production inference.
+
+A follow-up corrects the sparse patch's position: model attention -> H3 Sigma
+Shift -> BlockSparseAttention -> both scheduler and guider. Sparse thresholds
+are calculated from the model sampling object at patch creation, so applying
+the patch before the shift incorrectly computes its 20% threshold on the base
+schedule and activates near the end of an H3-shifted run. The private follow-up
+has a separate durable ID and only cancels its own superseded fixture after
+provider acknowledgment; it cannot cancel ordinary user tasks.

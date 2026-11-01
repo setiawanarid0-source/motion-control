@@ -64,7 +64,17 @@ assert.equal(focused['10'].class_type,'BlockSparseAttention');
 assert.equal(focused['10'].inputs.selection,'sol-attn');
 assert.equal(focused['10'].inputs.sink_conditioning,'exact_kv_and_rows','Image/reference keys must stay exact');
 assert.equal(focused['10'].inputs.extra_tokens,256);
-assert.deepEqual(focused['8'].inputs.model,['10',0]);
+assert.deepEqual(focused['8'].inputs.model,['9',0]);
+assert.deepEqual(focused['10'].inputs.model,['8',0],'Sparse sigma thresholds must be calculated AFTER H3 Sigma Shift');
+assert.deepEqual(focused['41'].inputs.model,['10',0]);
+assert.deepEqual(focused['1009'].inputs.model,['10',0]);
+const shiftBeforeSparse=(id)=>focused[id].class_type==='MiniMaxH3SigmaShift'?focused[id].inputs.shift_video:
+  focused[id].inputs.model?shiftBeforeSparse(focused[id].inputs.model[0]):1;
+const shift=shiftBeforeSparse(focused['10'].inputs.model[0]);
+const sigma=(t,s)=>s*t/(1+(s-1)*t);
+const cutoff=sigma(1-focused['10'].inputs.start_percent,shift);
+assert.deepEqual(Array.from({length:8},(_,i)=>i).filter(i=>sigma(1-i/8,12)<=cutoff),[2,3,4,5,6,7],
+  'With H3 shift 12, optimization must activate after two warm-up steps rather than near the end');
 assert.deepEqual(focused['32'].inputs,{image:['30',0],...faceFocus},'Face reference is a native-pixel crop of the same original photo');
 assert.deepEqual(focused['1004'].inputs['ref_images.ref_image_1'],['31',0]);
 assert.deepEqual(focused['1004'].inputs['ref_images.ref_image_2'],['32',0]);
