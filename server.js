@@ -27,7 +27,7 @@ import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
-import {stageSafeH3Benchmark,safeH3Profile,safeH3Result,resumeSafeH3Progress} from './h3-safe-benchmark.js';
+import {stageSafeH3Benchmark,safeH3Profile,safeH3FaceFocus,safeH3Result,resumeSafeH3Progress} from './h3-safe-benchmark.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -703,6 +703,7 @@ async function handleGeneration(req,res){
       req.progress?.('analyzing');
       h3Source=await prepareH3Input(videoFile,mode,imageFile);
       if(req.h3BenchmarkProfile)h3Source.inferenceProfile=req.h3BenchmarkProfile;
+      if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       console.info('H3 media plan',JSON.stringify(h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
@@ -869,7 +870,7 @@ async function runQueuedGeneration(job,report){
     headers:{'x-vanta-device':job.deviceId},
     cookies:{},query:{},body:job.body,
     files:{...(job.image?{referenceImage:[job.image]}:{}),videoReference:[job.video]},
-    progress:report,submissionAttempted:false,h3BenchmarkProfile:safeH3Profile(job)
+    progress:report,submissionAttempted:false,h3BenchmarkProfile:safeH3Profile(job),h3SafeFaceFocus:safeH3FaceFocus(job)
   };
   let result=null,httpStatus=200;
   const response={

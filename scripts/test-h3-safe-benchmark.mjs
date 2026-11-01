@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {createGenerationQueue} from '../generation-queue.js';
-import {stageSafeH3Benchmark,safeH3Profile,safeH3Result,resumeSafeH3Progress,SAFE_H3_JOB,SAFE_H3_TOKEN,SAFE_H3_TARA_JOB,SAFE_H3_TARA_TOKEN} from '../h3-safe-benchmark.js';
+import {stageSafeH3Benchmark,safeH3Profile,safeH3FaceFocus,safeH3Result,resumeSafeH3Progress,SAFE_H3_JOB,SAFE_H3_TOKEN,SAFE_H3_TARA_JOB,SAFE_H3_TARA_TOKEN} from '../h3-safe-benchmark.js';
 const root=await fs.mkdtemp(path.join(os.tmpdir(),'h3-safe-benchmark-test-'));
 let downloads=0,stages=0;
 const download=async()=>{downloads++;return Buffer.from('unapproved content');};
@@ -20,6 +20,7 @@ try{
   assert.equal(downloads,1,'Restart cannot rerun an accepted/uncertain/failed benchmark');
   assert.equal(safeH3Profile({jobId:SAFE_H3_JOB}),null);
   assert.equal(safeH3Profile({body:{h3BenchmarkProfile:'no-training-adapter'}}),null);
+  assert.equal(safeH3FaceFocus({jobId:SAFE_H3_JOB}),null,'Fixture coordinates cannot be applied to arbitrary uploads');
   // Optional local integration fixture; CI and production tests do not download
   // media, require credentials, or make paid provider calls.
   if(process.env.VANTA_H3_SAFE_SOURCE){

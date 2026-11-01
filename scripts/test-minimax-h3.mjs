@@ -58,6 +58,21 @@ const candidateWithBackend=structuredClone(candidate);
 candidateWithBackend['9']={class_type:'ModelAttentionBackend',inputs:{model:['7',0],attention:'comfy kitchen attention'}};
 candidateWithBackend['8'].inputs.model=['9',0];
 assert.deepEqual(kitchen,candidateWithBackend,'Attention comparison changes only the model backend branch');
+const faceFocus={x:192,y:224,width:160,height:192};
+const focused=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:faceFocus}});
+assert.equal(focused['10'].class_type,'BlockSparseAttention');
+assert.equal(focused['10'].inputs.selection,'sol-attn');
+assert.equal(focused['10'].inputs.sink_conditioning,'exact_kv_and_rows','Image/reference keys must stay exact');
+assert.equal(focused['10'].inputs.extra_tokens,256);
+assert.deepEqual(focused['8'].inputs.model,['10',0]);
+assert.deepEqual(focused['32'].inputs,{image:['30',0],...faceFocus},'Face reference is a native-pixel crop of the same original photo');
+assert.deepEqual(focused['1004'].inputs['ref_images.ref_image_1'],['31',0]);
+assert.deepEqual(focused['1004'].inputs['ref_images.ref_image_2'],['32',0]);
+assert.equal(focused['1004'].inputs.ref_image_size,'max');
+assert.ok(focused['1004'].inputs.prompt.indexOf('<Picture 2>')<focused['1004'].inputs.prompt.indexOf('summary:'));
+assert.equal(focused['1004'].inputs.width,1088);assert.equal(focused['1013'].inputs.width,1080);
+for(const invalid of [{...faceFocus,x:-1},{...faceFocus,width:31},{...faceFocus,x:4000}])
+  assert.throws(()=>h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:invalid}}),/Area referensi/);
 for(const frames of [120,360]){
   const tara=h3GraphForInputs(manifest,{...names,source:{...source,totalFrames:frames,inferenceProfile:'tara-native'}});
   assert.ok(!tara['5']);assert.equal(tara['7'].inputs.lora_name,H3_MODELS.motionTara);

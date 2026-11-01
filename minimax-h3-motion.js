@@ -197,6 +197,7 @@ export function h3ExecutionPlan(source){
   const segments=validateSource(source);
   return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
     inferenceProfile:source.inferenceProfile||'legacy-training-adapter',
+    referenceFace:source.referenceFace||null,
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
@@ -220,7 +221,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||'legacy-training-adapter';
-  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
+  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
@@ -231,9 +232,15 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   add(6,'LoraLoaderModelOnly',{model:[profile==='legacy-training-adapter'?'5':'1',0],lora_name:H3_MODELS.turbo,strength_model:1});
   add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:H3_MODELS.motion,strength_model:1},'Motion Transfer v1.0');
   add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:3});
-  if(profile==='guide-kitchen'){
+  if(['guide-kitchen','guide-sol-focus'].includes(profile)){
     add(9,'ModelAttentionBackend',{model:['7',0],attention:'comfy kitchen attention'});
     g['8'].inputs.model=['9',0];
+  }
+  if(profile==='guide-sol-focus'){
+    add(10,'BlockSparseAttention',{model:['9',0],selection:'sol-attn','selection.tau':1,
+      start_percent:.2,end_percent:1,dense_blocks:'0,1',min_tokens:12288,extra_tokens:256,
+      sink_conditioning:'exact_kv_and_rows',verbose:true});
+    g['8'].inputs.model=['10',0];
   }
   if(tara)add(9,'BFSMiniMaxH3NativeTemporal',{model:['8',0],motion_video_index:1,strength:2,
     window_seconds:.2,falloff_seconds:.25,max_penalty:6,attention_backend:'flash partitions (no compile)',
@@ -241,6 +248,22 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   add(30,'LoadImage',{image:imageName});
   const reference=add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,
     right:source.referencePadRight,bottom:source.referencePadBottom,feathering:0},'Original photo pixels; grid padding only');
+  let face=null;
+  if(profile==='guide-sol-focus'&&source.referenceFace){
+    const f=source.referenceFace;
+    if(!['x','y','width','height'].every(k=>Number.isSafeInteger(f[k]))||f.x<0||f.y<0||
+      f.width<32||f.height<32||f.width%32||f.height%32||f.x+f.width>source.referenceWidth||f.y+f.height>source.referenceHeight)
+      throw Error('Area referensi wajah H3 tidak valid.');
+    face=add(32,'ImageCrop',{image:['30',0],x:f.x,y:f.y,width:f.width,height:f.height},
+      'Additional native-pixel identity reference from the same photo; no output face editing');
+  }
+  let prompt=H3_PROMPT;
+  if(face)prompt=prompt.replace('The aligned motion guide supplies',
+    '<Picture 2> is a close-up cropped from <Picture 1>, depicting the SAME <Subject 1>, not another person. '+
+    'Preserve its visible eyes, nose, lips, jaw and facial proportions throughout the performance. '+
+    'Picture 1 supplies the whole appearance and environment; Picture 2 supplies additional facial identity only. '+
+    'It must not change the guide camera, pose or framing.\nThe aligned motion guide supplies');
+  if(tara)prompt=prompt.replace('The aligned motion guide supplies','<Video 1> supplies');
   add(40,'KSamplerSelect',{sampler_name:'euler'});
   add(41,'BasicScheduler',{model:[tara?'9':'8',0],scheduler:'simple',steps:8,denoise:1});
   const exports=[];let previous=null;
@@ -255,9 +278,10 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       guide=add(b+3,'ImageBatch',{image1:guide,image2:padding});
     }
     add(b+4,'MiniMaxH3ReferenceToVideo',{clip:['2',0],vae:['3',0],audio_vae:['4',0],
-      prompt:tara?H3_PROMPT.replace('The aligned motion guide supplies','<Video 1> supplies'):H3_PROMPT,
+      prompt,
       width:source.canvasWidth,height:source.canvasHeight,length:seg.modelFrames,ref_image_size:'max',
-      'ref_images.ref_image_1':reference,...(tara?{'ref_videos.ref_video_1':guide}:{})},'Photo supplies full appearance in every segment');
+      'ref_images.ref_image_1':reference,...(face?{'ref_images.ref_image_2':face}:{}),
+      ...(tara?{'ref_videos.ref_video_1':guide}:{})},'Photo supplies full appearance in every segment');
     let positive=tara?[String(b+4),0]:add(b+5,'MiniMaxH3AddGuide',{positive:[String(b+4),0],latent:[String(b+4),1],vae:['3',0],
       image:guide,frame_idx:0},'All aligned motion frames; no native reference-video duplicate');
     if(seg.contextFrames&&previous){

@@ -11,6 +11,11 @@ export function h3NodeClass(node,plan){
   if(!/^motion-transfer-native-1080-v[123]$/.test(String(plan?.revision)))return null;
   if(String(node)==='9'&&plan.inferenceProfile==='tara-native')return 'BFSMiniMaxH3NativeTemporal';
   if(String(node)==='9'&&plan.inferenceProfile==='guide-kitchen')return 'ModelAttentionBackend';
+  if(plan.inferenceProfile==='guide-sol-focus'){
+    if(String(node)==='9')return 'ModelAttentionBackend';
+    if(String(node)==='10')return 'BlockSparseAttention';
+    if(String(node)==='32')return 'ImageCrop';
+  }
   if(BASE_NODES[node])return BASE_NODES[node];
   const n=Number(node),offset=(n-1000)%30,index=Math.floor((n-1000)/30);
   return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODES.length?

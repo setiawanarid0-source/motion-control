@@ -14,9 +14,12 @@ export const SAFE_H3_TARA_JOB='15ab386b-05a0-4d19-aa3b-154d13852cb2';
 export const SAFE_H3_TARA_TOKEN='safe-tara-20261101-v1';
 export const SAFE_H3_KITCHEN_JOB='501a6a84-09b4-4f22-93cf-fa85df57d346';
 export const SAFE_H3_KITCHEN_TOKEN='safe-kitchen-20261101-v1';
+export const SAFE_H3_SOL_JOB='6683bcb0-b420-40c2-8b9b-1bf6d4a1f8cd';
+export const SAFE_H3_SOL_TOKEN='safe-sol-focus-20261101-v1';
 const TRIALS=[{jobId:SAFE_H3_JOB,token:SAFE_H3_TOKEN,profile:'no-training-adapter'},
   {jobId:SAFE_H3_TARA_JOB,token:SAFE_H3_TARA_TOKEN,profile:'tara-native'},
-  {jobId:SAFE_H3_KITCHEN_JOB,token:SAFE_H3_KITCHEN_TOKEN,profile:'guide-kitchen'}];
+  {jobId:SAFE_H3_KITCHEN_JOB,token:SAFE_H3_KITCHEN_TOKEN,profile:'guide-kitchen'},
+  {jobId:SAFE_H3_SOL_JOB,token:SAFE_H3_SOL_TOKEN,profile:'guide-sol-focus'}];
 const DEVICE='h3-safe-benchmark-20261101-v1';
 const ASSET='https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/examples/character_swap_v1.0_1.mp4';
 const SHA='0bb85d33ff2d1dc69b015d77715888d0388903c8582e97cd0f6bd7253b85355d';
@@ -25,6 +28,11 @@ export function safeH3Profile(job){
   return trial&&job.deviceId===DEVICE&&
     job.image?.originalname==='H3-safe-reference.png'&&job.video?.originalname==='H3-safe-guide-5s.mp4'
     ?trial.profile:null;
+}
+// Coordinates refer only to the SHA-verified clothed fixture's reference pane.
+// They are not reused for user uploads. A general detector is separate work.
+export function safeH3FaceFocus(job){
+  return safeH3Profile(job)==='guide-sol-focus'?{x:192,y:224,width:160,height:192}:null;
 }
 export async function stageSafeH3Benchmark({queue,token=process.env.VANTA_H3_SAFE_BENCHMARK,
   download=async()=>Buffer.from((await axios.get(ASSET,{responseType:'arraybuffer',timeout:60000,

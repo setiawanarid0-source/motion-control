@@ -163,3 +163,12 @@ branch to the upstream Guide Latents example's `ModelAttentionBackend` with
 `comfy kitchen attention`. Availability is checked by an actual provider task,
 not inferred from the unrelated native proxy. ComfyUI may fall back to PyTorch
 when Kitchen is unavailable; a valid graph alone is not proof of an active kernel.
+
+The fourth private test uses native ComfyUI Sol-Attn (training-free, tau 1.0)
+with exact conditioning keys, 256 extra tokens and early dense steps/blocks.
+It also supplies a pixel crop from the same approved reference as Picture 2,
+explicitly bound to the same identity. The whole original reference remains
+Picture 1. The crop coordinates belong only to that fixed test fixture; normal
+uploads never receive those coordinates. No generated frame is face-edited or
+resized. Both speed and facial likeness require render comparison; this test
+profile is not promoted to normal production inference.
