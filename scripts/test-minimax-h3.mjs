@@ -44,6 +44,15 @@ for(let frames=6;frames<=1440;frames++){
 const names={imageName:'api/current-photo.png',videoName:'api/motion-guide.mp4'};
 const args={...names,source},before=JSON.stringify(manifest);
 const graph=h3GraphForInputs(manifest,args);
+const candidate=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'no-training-adapter'}});
+assert.ok(!candidate['5'],'Inference candidate must omit the training-only adapter');
+assert.deepEqual(candidate['6'].inputs.model,['1',0]);
+assert.deepEqual(candidate['7'].inputs.model,['6',0]);
+const legacyWithoutAdapter=structuredClone(graph);
+delete legacyWithoutAdapter['5'];legacyWithoutAdapter['6'].inputs.model=['1',0];
+assert.deepEqual(candidate,legacyWithoutAdapter,'Controlled inference test changes only the training adapter branch');
+assert.equal(h3ExecutionPlan({...source,inferenceProfile:'no-training-adapter'}).inferenceProfile,'no-training-adapter');
+assert.throws(()=>h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'arbitrary'}}),/Profil inferensi/);
 for(const cuts of [[],[60]]){
   const five={...source,totalFrames:120,sceneCuts:cuts};
   const g=h3GraphForInputs(manifest,{...names,source:five});

@@ -195,6 +195,7 @@ export async function prepareH3Reference(file,outputPath){
 export function h3ExecutionPlan(source){
   const segments=validateSource(source);
   return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
+    inferenceProfile:source.inferenceProfile||'legacy-training-adapter',
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
@@ -217,12 +218,15 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   inputName(imageName);inputName(videoName);
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
+  const profile=source.inferenceProfile||'legacy-training-adapter';
+  if(!['legacy-training-adapter','no-training-adapter'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:H3_MODELS.clip,type:'minimax',device:'default'});
   add(3,'VAELoader',{vae_name:H3_MODELS.videoVae});add(4,'VAELoader',{vae_name:H3_MODELS.audioVae});
-  add(5,'LoraLoaderModelOnly',{model:['1',0],lora_name:H3_MODELS.adapter,strength_model:1});
-  add(6,'LoraLoaderModelOnly',{model:['5',0],lora_name:H3_MODELS.turbo,strength_model:1});
+  if(profile==='legacy-training-adapter')
+    add(5,'LoraLoaderModelOnly',{model:['1',0],lora_name:H3_MODELS.adapter,strength_model:1});
+  add(6,'LoraLoaderModelOnly',{model:[profile==='no-training-adapter'?'1':'5',0],lora_name:H3_MODELS.turbo,strength_model:1});
   add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:H3_MODELS.motion,strength_model:1},'Motion Transfer v1.0');
   add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:3});
   add(30,'LoadImage',{image:imageName});

@@ -27,6 +27,7 @@ import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
+import {stageSafeH3Benchmark,safeH3Profile,safeH3Result} from './h3-safe-benchmark.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -205,6 +206,10 @@ function writeTaskState(taskId,result){
   const stored=taskRegistry.update(taskId,patch);
   if(stored&&stored.status!==previous?.status&&['success','failed'].includes(stored.status))
     console.info('RunningHub task timing',JSON.stringify(taskTimingReport(stored,stored.providerRuntimeSeconds??null)));
+  if(stored&&stored.status!==previous?.status&&['success','failed'].includes(stored.status)){
+    const benchmark=safeH3Result(stored,generationQueue);
+    if(benchmark)console.info('H3 safe benchmark result',JSON.stringify(benchmark));
+  }
   if(stored?.status==='success')scheduleResultMirror(stored);
   return stored;
 }
@@ -697,6 +702,7 @@ async function handleGeneration(req,res){
     if(workflowKey==='minimaxH3'){
       req.progress?.('analyzing');
       h3Source=await prepareH3Input(videoFile,mode,imageFile);
+      if(req.h3BenchmarkProfile)h3Source.inferenceProfile=req.h3BenchmarkProfile;
       console.info('H3 media plan',JSON.stringify(h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
@@ -863,7 +869,7 @@ async function runQueuedGeneration(job,report){
     headers:{'x-vanta-device':job.deviceId},
     cookies:{},query:{},body:job.body,
     files:{...(job.image?{referenceImage:[job.image]}:{}),videoReference:[job.video]},
-    progress:report,submissionAttempted:false
+    progress:report,submissionAttempted:false,h3BenchmarkProfile:safeH3Profile(job)
   };
   let result=null,httpStatus=200;
   const response={
@@ -1206,6 +1212,10 @@ console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legac
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
 generationQueue.resume();
+void stageSafeH3Benchmark({queue:generationQueue,
+  token:DATA_DIR==='/data'?process.env.VANTA_H3_SAFE_BENCHMARK:''})
+  .then(job=>{if(job)console.info('H3 safe benchmark staged',JSON.stringify({jobId:job.jobId,stage:job.stage,reused:job.reused||false}));})
+  .catch(()=>console.warn('H3 safe benchmark staging failed before task submission'));
 setInterval(()=>generationQueue.purge(),60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
 void motionResults.prune().catch(e=>console.warn('Result archive cleanup',e.message));

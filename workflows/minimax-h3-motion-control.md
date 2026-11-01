@@ -130,3 +130,20 @@ OpenAPI workflow supports. It is not used to infer the actual task GPU, kernel
 availability or backend selection. No execution-backend change is applied on
 this unverified basis. A completed task's aggregate runtime cannot reconstruct
 per-node timings. Actual speed improvement remains unproven.
+
+## Controlled inference check: training adapter
+
+The upstream Henge changelog and native workflow at commit
+`17034b701ba37f5768f30a56e64c974488788b92` remove the training adapter at
+inference; see <https://github.com/alisson-anjos/Henge/blob/17034b701ba37f5768f30a56e64c974488788b92/docs/motion-transfer.md>.
+Vanta has a private `no-training-adapter` test profile. It changes only that
+model branch, keeping the same turbo, motion adapter, conditioning, eight steps,
+frame count and native output canvas. The normal profile is retained pending
+render validation; removing an adapter alone does not prove faster sampling or
+stronger reference identity.
+
+An explicit deployment-only opt-in stages one reviewed, clothed public fixture
+through the existing durable queue. Its source SHA-256 is pinned; private user
+uploads are never selected. Accepted, uncertain and failed submissions are not
+automatically rerun on restart. This creates no public route or extra UI.
+Node timing and the fixture result are available through scoped deployment logs.
