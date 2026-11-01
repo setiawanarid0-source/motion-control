@@ -5,186 +5,205 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {H3_FPS,H3_LORA,H3_TASK,H3_PROMPT,validateH3Probe,probeH3Input,prepareH3Input,h3Segments,h3GraphForInputs} from '../minimax-h3.js';
+import {H3_FPS,H3_MODELS,H3_PROMPT,H3_REVISION,validateH3Probe,probeH3Input,
+  prepareH3Input,h3PhotoPlan,h3Segments,h3GraphForInputs} from '../minimax-h3-motion.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
 import {explicitQueueMaxed,queueCapacityError} from '../runninghub-capacity.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from '../runninghub-graph-validation.js';
-
-const graph=JSON.parse(fs.readFileSync(new URL('../workflows/minimax-h3-character-swap-api.json',import.meta.url)));
-const raw=JSON.stringify(graph);
-const probe=(duration=60,width=1080,height=1920)=>({streams:[
+const manifest=JSON.parse(fs.readFileSync(new URL('../workflows/minimax-h3-motion-control.json',import.meta.url)));
+assert.equal(manifest.revision,H3_REVISION);
+const videoProbe=(duration=60,width=1080,height=1920)=>({streams:[
   {codec_type:'video',width,height,duration:String(duration)},
   {codec_type:'audio',duration:'65'}],format:{duration:'65'}});
-const source=validateH3Probe(probe());
-assert.deepEqual([source.width,source.height,source.totalFrames,source.fps],[480,864,1440,24]);
-const plus=validateH3Probe(probe(),'plus');
-assert.deepEqual([plus.width,plus.height],[640,1152]);
-assert.deepEqual([source.outputWidth,source.outputHeight],[1080,1920]);
-assert.deepEqual([validateH3Probe(probe(5,1920,1080)).outputWidth,validateH3Probe(probe(5,1920,1080)).outputHeight],[1920,1080]);
-assert.deepEqual([validateH3Probe(probe(5,1920,1080)).width,validateH3Probe(probe(5,1920,1080)).height],[864,480]);
-const rotated=probe(5,1920,1080);rotated.streams[0].side_data_list=[{rotation:-90}];
-assert.deepEqual([validateH3Probe(rotated).width,validateH3Probe(rotated).height],[480,864]);
-for(const seconds of [0,.1,61,Infinity])assert.throws(()=>validateH3Probe(probe(seconds)),/0,25–60/);
-assert.throws(()=>validateH3Probe({streams:[]}),/dimensi/);
-assert.throws(()=>validateH3Probe(probe(),'lite'),/Standard atau Plus/);
-
-// Check every possible supported duration, including non-multiples of 5s.
+const source={...validateH3Probe(videoProbe(),'plus'),...h3PhotoPlan(1080,1920),sceneCuts:[]};
+assert.deepEqual([source.canvasWidth,source.canvasHeight,source.outputWidth,source.outputHeight],[1088,1920,1080,1920]);
+assert.deepEqual([h3PhotoPlan(1920,1080).canvasWidth,h3PhotoPlan(1920,1080).canvasHeight],[1920,1088]);
+assert.deepEqual([h3PhotoPlan(720,720).outputWidth,h3PhotoPlan(720,720).outputHeight],[1080,1080]);
+for(const seconds of [0,.1,61,Infinity])assert.throws(()=>validateH3Probe(videoProbe(seconds),'plus'),/0,25–60/);
+assert.throws(()=>validateH3Probe({streams:[]},'plus'),/dimensi/);
+for(const mode of ['standard','lite','other'])assert.throws(()=>validateH3Probe(videoProbe(),mode),/Plus/);
+for(const size of [[2049,3000],[3200,1080],[100,20]])assert.throws(()=>h3PhotoPlan(...size));
+const rotation=videoProbe(1,1920,1080);rotation.streams[0].side_data_list=[{rotation:-90}];
+assert.deepEqual([validateH3Probe(rotation).sourceWidth,validateH3Probe(rotation).sourceHeight],[1080,1920]);
+// Coverage is exhaustive across all supported lengths, including one-frame cuts.
 for(let frames=6;frames<=1440;frames++){
-  const ranges=h3Segments(frames);
-  let cursor=0;
-  for(const segment of ranges){
-    assert.equal(segment.start,cursor,'No gaps, repeated source frames or timeline reset');
-    assert.ok(segment.length>=6&&segment.length<=120);
-    cursor+=segment.length;
+  const cuts=[1,2,Math.floor(frames/2)].filter(n=>n<frames),segments=h3Segments(frames,cuts);
+  const actual=[];
+  for(const seg of segments){
+    assert.equal(seg.modelFrames%17,5);assert.ok(seg.modelFrames>=seg.inputFrames&&seg.modelFrames<=107);
+    assert.ok(seg.inputFrames<=107);
+    assert.equal(seg.loadStart+seg.contextFrames,seg.start);
+    for(const cut of cuts)assert.ok(!(seg.start<cut&&seg.start+seg.length>cut));
+    if(cuts.includes(seg.start))assert.equal(seg.contextFrames,0,'No continuity across a hard cut');
+    for(let j=0;j<seg.length;j++)actual.push(seg.start+j);
   }
-  assert.equal(cursor,frames,'The whole source must be covered, including the final segment');
+  assert.deepEqual(actual,Array.from({length:frames},(_,i)=>i),'No loss, repetition, reordering or truncation');
 }
-const names={imageName:'api/ref.jpg',videoName:'api/guide.mp4',sourceVideoName:'api/source-1080.mp4'};
-const rendered=h3GraphForInputs(graph,{...names,source});
-const timeline=JSON.parse(rendered['331'].inputs.timeline_data);
-assert.equal(JSON.stringify(graph),raw,'Never mutate a shared workflow between accounts or requests');
-assert.equal(timeline.video.videoFile,'api/guide.mp4');
-assert.equal(timeline.global.refs[0].imageFile,'api/ref.jpg');
-assert.equal(timeline.global.taskType,H3_TASK);
-assert.equal(timeline.global.prompt,H3_PROMPT);
-assert.equal(timeline.segments.length,12);
-assert.equal(timeline.output.audioMode,'source');
-assert.equal(timeline.output.continuityEnabled,true);
-assert.equal(timeline.output.continuityKeepTail,false,'No H3 alignment/prefix frames may extend the final video');
-assert.equal(timeline.output.maxExportFrames,1440);
-assert.equal(timeline.output.exportMode,'all','One final video, not separate segment outputs');
-assert.equal(rendered['5'].inputs.lora_name,H3_LORA);
-assert.equal(rendered['5'].inputs.strength_model,1);
-assert.deepEqual(rendered['331'].inputs.model,['5',0],'LoRA must be in the actual sampling model path');
-assert.deepEqual(rendered['490'].inputs.images,['493',0]);
-assert.deepEqual(rendered['493'].inputs.cropped_images,['331',0]);
-assert.deepEqual(rendered['493'].inputs.original_images,['33',0],'Body and background come from the 1080p source');
-assert.deepEqual(rendered['493'].inputs.cropped_masks,['492',0],'Never paste the entire generated frame');
-assert.equal(rendered['493'].inputs.resize_method,'lanczos');
-assert.equal(rendered['33'].inputs.video,'api/source-1080.mp4');
-assert.equal(rendered['33'].inputs.frame_load_cap,1440);
-assert.equal(rendered['331'].inputs.export_source_images,true);
-assert.deepEqual(rendered['490'].inputs.audio,['33',2],'Use the actual source soundtrack');
-assert.deepEqual(rendered['490'].inputs.frame_rate,['331',2]);
-for(const node of Object.values(rendered))for(const input of Object.values(node.inputs)){
-  if(Array.isArray(input)){assert.ok(rendered[input[0]],'Dangling graph link');assert.ok(Number.isInteger(input[1]));}
+const names={imageName:'api/current-photo.png',videoName:'api/motion-guide.mp4'};
+const args={...names,source},before=JSON.stringify(manifest);
+const graph=h3GraphForInputs(manifest,args);
+assert.equal(JSON.stringify(manifest),before,'Shared manifest is immutable');
+for(const n of Object.values(graph))for(const v of Object.values(n.inputs))if(Array.isArray(v))assert.ok(graph[v[0]],'No dangling links');
+assert.deepEqual(graph['7'].inputs.model,['6',0]);
+assert.equal(graph['5'].inputs.lora_name,H3_MODELS.adapter);
+assert.equal(graph['6'].inputs.lora_name,H3_MODELS.turbo);
+assert.equal(graph['7'].inputs.lora_name,H3_MODELS.motion);
+assert.deepEqual(graph['41'].inputs.model,['8',0]);
+assert.equal(graph['41'].inputs.steps,8);
+assert.equal(graph['40'].inputs.sampler_name,'euler');
+const disallowed=/Swap|SAM3|Director|Mask|Composite|Uncrop|Resize|ImageScale|Upscale|Refine|Stabili|Interpolate|ControlNet|Temporal/;
+assert.ok(!Object.values(graph).some(n=>disallowed.test(n.class_type)),'No head edit, output resizer, refiner or unverified patch stack');
+assert.ok(!JSON.stringify(graph).includes('character_swap'));
+assert.match(H3_PROMPT,/motion_transfer:/);
+assert.match(H3_PROMPT,/body proportions, clothing/);
+assert.match(H3_PROMPT,/keep the camera stationary/);
+assert.match(H3_PROMPT,/horizontal-to-vertical/);
+assert.match(H3_PROMPT,/expression timing and intensity/);
+assert.match(H3_PROMPT,/do not beautify, smooth skin/);
+assert.deepEqual(graph['31'].inputs,{image:['30',0],left:0,top:0,right:8,bottom:0,feathering:0});
+const segs=h3Segments(source.totalFrames,source.sceneCuts);
+for(let i=0;i<segs.length;i++){
+  const s=segs[i],b=1000+i*30;
+  const cond=graph[b+4].inputs,load=graph[b].inputs;
+  assert.equal(cond.width,1088);assert.equal(cond.height,1920);
+  assert.deepEqual(cond['ref_images.ref_image_1'],['31',0]);
+  assert.ok(!Object.keys(cond).some(k=>k.startsWith('ref_videos')),'Do not double-encode guide as native video');
+  assert.equal(cond.prompt,H3_PROMPT);assert.equal(cond.length,s.modelFrames);
+  assert.equal(load.skip_first_frames,s.loadStart);assert.equal(load.frame_load_cap,s.inputFrames);
+  assert.equal(load.force_size,'Disabled');
+  assert.deepEqual(graph[b+10].inputs.latent_image,[String(b+4),1],'Sample reference AV latent, not conditioning or guide');
+  assert.deepEqual(graph[b+9].inputs.model,['8',0]);
+  assert.equal(graph[b+12].inputs.batch_index,s.contextFrames);
+  assert.equal(graph[b+12].inputs.length,s.length);
+  assert.equal(graph[b+13].inputs.width,1080);assert.equal(graph[b+13].inputs.x,4);
+  if(s.contextFrames){
+    const prev=segs[i-1];
+    assert.deepEqual(graph[b+6].inputs.image,[String(b-30+11),0]);
+    assert.equal(graph[b+6].inputs.batch_index,prev.contextFrames+prev.length-1);
+    assert.equal(graph[b+7].inputs.frame_idx,0,'Anchor exact matching overlap, not a future frame');
+  }
 }
-const single=h3GraphForInputs(graph,{...names,videoName:'b.mp4',source:validateH3Probe(probe(2.3))});
-assert.equal(JSON.parse(single['331'].inputs.timeline_data).output.continuityEnabled,false);
-assert.notEqual(single['331'].inputs.cache_name,rendered['331'].inputs.cache_name,'No cross-job segment cache reuse');
-for(const unsafe of ['../secret','/etc/passwd','https://example.com/video.mp4'])
-  assert.throws(()=>h3GraphForInputs(graph,{...names,videoName:unsafe,source}),/upload/);
-assert.throws(()=>h3GraphForInputs(graph,{...names,sourceVideoName:'../secret',source}),/upload/);
+// Interpret the actual built graph's frame operations. Check guide padding and
+// export on short cuts/non-grid tails rather than just rechecking the planner.
+for(const [frames,cuts] of [[6,[]],[107,[]],[121,[1,2,55]],[1440,[106,107,555]]]){
+  const g=h3GraphForInputs(manifest,{...names,source:{...source,totalFrames:frames,sceneCuts:cuts}}),cache=new Map();
+  const values=link=>{
+    const id=String(link[0]);if(cache.has(id))return cache.get(id);
+    const {class_type:t,inputs:n}=g[id];let v;
+    if(t==='VHS_LoadVideo')v=Array.from({length:n.frame_load_cap},(_,i)=>n.skip_first_frames+i);
+    else if(t==='ImageFromBatch')v=values(n.image).slice(n.batch_index,n.batch_index+n.length);
+    else if(t==='RepeatImageBatch')v=Array.from({length:n.amount},()=>values(n.image)).flat();
+    else if(t==='ImageBatch')v=[...values(n.image1),...values(n.image2)];
+    else if(t==='ImageBatchMulti')v=Array.from({length:n.inputcount},(_,i)=>values(n['image_'+(i+1)])).flat();
+    else if(t==='ImageCrop')v=values(n.image);
+    else if(t==='VAEDecode'){
+      const sampler=g[n.samples[0]],condition=g[sampler.inputs.latent_image[0]],b=Number(sampler.inputs.latent_image[0])-4;
+      v=values(g[b+5].inputs.image);
+      assert.equal(v.length,condition.inputs.length,'Every guide frame survives native Add Guide');
+      const segment=h3Segments(frames,cuts).find(s=>s.loadStart===g[b].inputs.skip_first_frames);
+      assert.ok(v.every(x=>x<segment.start+segment.length),'Padding must not leak a frame from next scene');
+    }else throw Error('Unexpected frame operation '+t);
+    cache.set(id,v);return v;
+  };
+  assert.deepEqual(values(g['490'].inputs.images),Array.from({length:frames},(_,i)=>i));
+}
+assert.deepEqual(graph['490'].inputs.audio,['50',0]);
+assert.equal(graph['50'].inputs.duration,60,'Full original soundtrack, not first-segment audio');
+const silent=h3GraphForInputs(manifest,{...args,source:{...source,hasAudio:false}});
+assert.ok(!silent['50']);assert.ok(!('audio' in silent['490'].inputs));
+for(const unsafe of ['../secret','/etc/passwd','https://example.com/video.mp4'])assert.throws(()=>h3GraphForInputs(manifest,{...args,videoName:unsafe}),/upload/);
+for(const change of [{canvasWidth:512},{outputWidth:720},{padLeft:0},{totalFrames:1441},{hasAudio:undefined}])
+  assert.throws(()=>h3GraphForInputs(manifest,{...args,source:{...source,...change}}));
+const another=h3GraphForInputs(manifest,{...args,imageName:'api/other-photo.png'});
+assert.equal(another['30'].inputs.image,'api/other-photo.png');
+assert.equal(graph['30'].inputs.image,'api/current-photo.png','No cross-request identity mutation');
 
-// Never blend source camera/context from the preceding scene into a new shot.
-const shots=h3Segments(1440,[121,122,555]);
-assert.equal(shots.reduce((n,s)=>n+s.length,0),1440);
-for(const cut of [121,122,555]){
-  assert.equal(shots.find(s=>s.start===cut)?.continuityFromPrev,false);
-  assert.ok(shots.every(s=>!(s.start<cut&&s.start+s.length>cut)));
-}
-const sceneGraph=h3GraphForInputs(graph,{...names,source:{...source,sceneCuts:[121,122,555]}});
-const shotTimeline=JSON.parse(sceneGraph['331'].inputs.timeline_data);
-assert.deepEqual(shotTimeline.global.refs,[{index:0,imageFile:names.imageName}]);
-for(let i=0;i<shotTimeline.segments.length;i++){
-  const seg=shotTimeline.segments[i],id=1000+i*30;
-  assert.equal(sceneGraph[String(id)].inputs.batch_index,seg.start);
-  assert.equal(sceneGraph[String(id)].inputs.length,seg.length);
-  assert.deepEqual(sceneGraph[String(id+4)].inputs.image,['331',4]);
-  assert.equal(sceneGraph[String(id+16)].inputs.operation,'subtract','Original hands remain in front of the head');
-}
-assert.match(H3_PROMPT,/Do not transfer the reference picture's body, outfit/);
-
-// Run the actual production createTask function against a recording provider.
-// No network calls, API keys or paid tasks are needed for this test.
+// Exercise the production provider boundary without credentials or paid jobs.
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
-const begin=server.indexOf('async function createTask(');
-const create=server.slice(begin,server.indexOf('const upload = multer(',begin));
-const calls=[],uploads=[];
-let response={code:0,data:{taskId:'2113333333333333333',taskStatus:'RUNNING'}};
-const context={workflowGraphs:{minimaxH3:graph,current:{unchanged:true}},h3GraphForInputs,
-  uploadToRunningHub:async(key,file)=>{uploads.push({key,file});return 'api/'+file.originalname;},
+const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
+const calls=[],uploads=[];let response={code:0,data:{taskId:'2113333333333333333',taskStatus:'RUNNING'}};
+const context={workflowGraphs:{minimaxH3:manifest,current:{unchanged:true}},h3GraphForInputs,
+  uploadToRunningHub:async(key,file)=>{uploads.push(file);return 'api/'+file.originalname;},
   runningHubInstanceType,explicitQueueMaxed,queueCapacityError,graphValidationError,
-  rhJson:async(url,key,payload)=>{calls.push({url,key,payload});return response;}};
-vm.createContext(context);vm.runInContext(create+'\nthis.createTask=createTask;',context);
-const args={apiKey:'fixture-not-a-real-key',workflowId:'owner-workflow',workflowKey:'minimaxH3',
-  mode:'plus',imageFile:{originalname:'ref.jpg'},videoFile:{originalname:'guide.mp4'},
-  h3Source:{...source,file:{originalname:'guide.mp4'},sourceFile:{originalname:'source-1080.mp4'}}};
-const result=await context.createTask(args);
-assert.equal(result.taskStatus,'RUNNING');
-assert.equal(calls[0].payload.instanceType,'plus');
-assert.equal(calls[0].payload.workflowId,'owner-workflow','Keep the existing owner-accessible workflow ID');
-assert.equal(calls[0].payload.retainSeconds,undefined,'H3 must not reserve a 72-hour paid GPU instance');
-assert.equal(calls[0].payload.nodeInfoList.length,0,'H3 must not override non-existent legacy image/video nodes');
-assert.equal(JSON.parse(calls[0].payload.workflow)['5'].inputs.lora_name,H3_LORA);
-assert.equal(uploads.length,3,'Upload the image, H3 guide and original 1080p video separately');
-await context.createTask({...args,workflowKey:'current',h3Source:undefined});
+  rhJson:async(url,key,payload)=>{calls.push({url,payload});return response;}};
+vm.createContext(context);vm.runInContext(server.slice(begin,end)+'\nthis.createTask=createTask;',context);
+const request={apiKey:'fixture-only',workflowId:'owner-workflow',workflowKey:'minimaxH3',mode:'plus',
+  imageFile:{originalname:'original-photo.png'},videoFile:{originalname:'unprepared.mp4'},
+  h3Source:{...source,file:{originalname:'motion-guide.mp4'}}};
+await context.createTask(request);
+assert.equal(uploads.length,2,'Only original photo and aligned guide, no 1080 source composite');
+assert.equal(uploads[0],request.imageFile,'Original photo is not resized or re-encoded before upload');
+assert.equal(calls[0].payload.instanceType,'plus');assert.equal(calls[0].payload.workflowId,'owner-workflow');
+assert.equal(calls[0].payload.retainSeconds,undefined);assert.equal(calls[0].payload.nodeInfoList.length,0);
+assert.equal(JSON.parse(calls[0].payload.workflow)['7'].inputs.lora_name,H3_MODELS.motion);
+await context.createTask({...request,workflowKey:'current',h3Source:null});
+assert.equal(calls[1].payload.retainSeconds,259200);
 assert.equal(calls[1].payload.workflow,JSON.stringify({unchanged:true}));
-assert.equal(calls[1].payload.retainSeconds,259200,'Existing workflow behavior is unchanged');
-assert.deepEqual(JSON.parse(JSON.stringify(calls[1].payload.nodeInfoList)).map(n=>n.nodeId),['30','33','331']);
+let count=calls.length,uploaded=uploads.length;
+await assert.rejects(context.createTask({...request,mode:'standard'}),/Plus/);
+await assert.rejects(context.createTask({...request,h3Source:null}),/Metadata/);
+assert.equal(calls.length,count);assert.equal(uploads.length,uploaded);
 response={code:1,msg:JSON.stringify({result:false,error:{type:'prompt_outputs_failed_validation'},
-  node_errors:{331:{class_type:'MiniMaxH3Director',errors:[{message:'Required input missing'}]}}})};
-await assert.rejects(context.createTask(args),isDefinitelyRejectedGraph,'Provider rejection must not turn into an unknown paid job');
-const before=calls.length;
-await assert.rejects(context.createTask({...args,h3Source:null}),/Metadata/);
-assert.equal(calls.length,before,'Missing H3 metadata must not create a paid task');
+  node_errors:{7:{class_type:'LoraLoaderModelOnly',errors:[{message:'Value not in list'}]}}})};
+await assert.rejects(context.createTask(request),isDefinitelyRejectedGraph);
+assert.equal(calls.length,count+1,'No alternate model, resolution or paid retry after rejection');
+context.rhJson=async()=>{throw Error('transport timeout');};
+await assert.rejects(context.createTask(request),e=>!isDefinitelyRejectedGraph(e)&&/timeout/.test(e.message));
+assert.ok(!server.includes('minimaxH3Review'),'Head-only prototype is not a live workflow');
+const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+assert.ok(html.includes('MiniMax H3 · Motion Control'));assert.ok(!html.includes('h3-review.html'));
+assert.ok(!fs.existsSync(new URL('../public/h3-review.html',import.meta.url)));
 
-// Probe real media with a different FPS and audio track, keeping the source bytes unchanged.
-const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-h3-check-'));
+// Real input media: photo ratio owns output, source timing owns frame count.
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-h3-motion-check-'));
+const ff=args=>execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-threads','1',...args],{timeout:60000});
+const inspect=p=>JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',p],{encoding:'utf8'}));
+const hash=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 try{
-  const file=path.join(dir,'source.mp4');
-  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','testsrc2=size=192x320:rate=30:duration=1.3',
-    '-f','lavfi','-i','sine=frequency=440:duration=2','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',file],{timeout:30000});
-  const hash=()=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-  const original=hash();
-  const real=await probeH3Input({path:file},'standard');
-  assert.ok(Math.abs(real.duration-1.3)<.04,'Use video duration, not the longer audio track');
-  assert.ok(Math.abs(real.totalFrames/H3_FPS-real.duration)<=1/H3_FPS);
-  assert.equal(hash(),original,'Never compensate, crop, stretch or re-encode the H3 driving source');
-  const prepared=await prepareH3Input({path:file},'standard');
+  const photo=path.join(dir,'photo.png'),video=path.join(dir,'source.mp4');
+  ff(['-f','lavfi','-i','testsrc2=size=108x192','-frames:v','1','-threads','1',photo]);
+  ff(['-f','lavfi','-i','testsrc2=size=192x320:rate=30:duration=1.3','-f','lavfi','-i',
+    'sine=frequency=440:duration=2','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',video]);
+  const photoHash=hash(photo),videoHash=hash(video);
+  const probe=await probeH3Input({path:video},'plus');
+  assert.ok(Math.abs(probe.duration-1.3)<.04,'Do not use longer audio/container duration');
+  const prepared=await prepareH3Input({path:video},'plus',{path:photo});
   try{
-    const media=p=>JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',p],{encoding:'utf8'}));
-    const a=media(prepared.file.path),b=media(prepared.sourceFile.path);
-    const guide=a.streams.find(s=>s.codec_type==='video'),hi=b.streams.find(s=>s.codec_type==='video');
-    assert.equal(guide.r_frame_rate,'24/1');assert.equal(hi.r_frame_rate,'24/1');
-    assert.equal(guide.nb_frames,hi.nb_frames,'Both video paths must be frame-for-frame aligned');
-    assert.equal(Number(hi.nb_frames),prepared.totalFrames);
-    assert.deepEqual([hi.width,hi.height],[1080,1800],'Preserve source aspect without cropping');
-    assert.deepEqual([guide.width,guide.height],[prepared.width,prepared.height]);
-    assert.ok(b.streams.some(s=>s.codec_type==='audio'));
-    assert.ok(!a.streams.some(s=>s.codec_type==='audio'),'The guide cannot supply a generated soundtrack');
-    assert.equal(hash(),original,'Prepare independent files, never overwrite the user upload');
+    const tracks=inspect(prepared.file.path).streams,v=tracks.find(s=>s.codec_type==='video');
+    assert.deepEqual([v.width,v.height],[1088,1920]);assert.equal(v.r_frame_rate,'24/1');
+    assert.equal(Number(v.nb_frames),prepared.totalFrames);assert.ok(tracks.some(s=>s.codec_type==='audio'));
+    assert.deepEqual([prepared.outputWidth,prepared.outputHeight],[1080,1920],'Photo ratio, not 192:320 guide ratio');
+    assert.equal(hash(photo),photoHash);assert.equal(hash(video),videoHash,'Do not overwrite uploads');
   }finally{await prepared.release();}
-  assert.equal(fs.existsSync(prepared.file.path),false);
-
-  const cutsFile=path.join(dir,'cuts.mp4');
-  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','color=red:s=160x288:r=24:d=0.5',
-    '-f','lavfi','-i','color=blue:s=160x288:r=24:d=0.5','-filter_complex',
-    '[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]',cutsFile],{timeout:30000});
-  const cutsPrepared=await prepareH3Input({path:cutsFile},'standard');
-  try{assert.deepEqual(cutsPrepared.sceneCuts,[12]);
-    assert.equal(h3Segments(cutsPrepared.totalFrames,cutsPrepared.sceneCuts)[1].continuityFromPrev,false);
-  }finally{await cutsPrepared.release();}
-  // Preserve the displayed orientation, including real MP4 rotation matrices.
-  const baseFile=path.join(dir,'orientation.mp4');
-  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i',
-    'testsrc2=size=192x108:rate=24:duration=0.5','-vf','drawbox=x=4:y=4:w=40:h=25:color=white:t=fill',baseFile]);
-  const modern=String(execFileSync('ffmpeg',['-hide_banner','-h','full'],{maxBuffer:4*1024*1024})).includes('-display_rotation');
-  const firstFrame=p=>execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-i',p,
-    '-vf','scale=64:64:flags=lanczos','-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-']);
+  assert.ok(!fs.existsSync(prepared.file.path));
+  const cuts=path.join(dir,'cuts.mp4');
+  ff(['-f','lavfi','-i','color=red:s=160x288:r=24:d=0.5','-f','lavfi','-i',
+    'color=blue:s=160x288:r=24:d=0.5','-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]',cuts]);
+  const cutSource=await prepareH3Input({path:cuts},'plus',{path:photo});
+  try{assert.deepEqual(cutSource.sceneCuts,[12]);assert.equal(cutSource.hasAudio,false);
+    assert.equal(h3Segments(cutSource.totalFrames,cutSource.sceneCuts)[1].contextFrames,0);
+  }finally{await cutSource.release();}
+  // Read actual MP4 rotation metadata, then ensure the prepared guide follows
+  // the displayed source. Compare tiny thumbnails after removing only padding.
+  const base=path.join(dir,'orientation.mp4');
+  ff(['-f','lavfi','-i','testsrc2=size=192x108:rate=24:duration=0.5','-vf','drawbox=x=4:y=4:w=40:h=25:color=white:t=fill',base]);
   for(const degrees of [90,180]){
-    const rotatedFile=path.join(dir,'rotated-'+degrees+'.mp4');
-    execFileSync('ffmpeg',['-hide_banner','-loglevel','error',
-      ...(modern?['-display_rotation',String(degrees)]:[]),'-i',baseFile,'-c','copy',
-      ...(!modern?['-metadata:s:v:0','rotate='+degrees]:[]),rotatedFile]);
-    const rotatedPrepared=await prepareH3Input({path:rotatedFile},'standard');
+    const rotated=path.join(dir,'rotated-'+degrees+'.mp4');
+    ff(['-i',base,'-c','copy','-metadata:s:v:0','rotate='+degrees,rotated]);
+    const p=await prepareH3Input({path:rotated},'plus',{path:photo});
     try{
-      const expected=firstFrame(rotatedFile),actual=firstFrame(rotatedPrepared.sourceFile.path);
+      const w=p.sourceWidth,h=p.sourceHeight;
+      const factor=Math.min(p.outputWidth/w,p.outputHeight/h);
+      const activeW=Math.floor(w*factor/2)*2,activeH=Math.floor(h*factor/2)*2;
+      const crop=`crop=${activeW}:${activeH}:${Math.floor((p.canvasWidth-activeW)/2)}:${Math.floor((p.canvasHeight-activeH)/2)},`;
+      const frame=(file,filter)=>ff(['-i',file,'-vf',filter+'scale=64:64:flags=lanczos','-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-']);
+      const expected=frame(rotated,''),actual=frame(p.file.path,crop);
       const mae=actual.reduce((sum,n,i)=>sum+Math.abs(n-expected[i]),0)/actual.length;
-      assert.ok(mae<5,`H3 must not introduce a ${degrees}° orientation error (${mae})`);
-    }finally{await rotatedPrepared.release();}
+      assert.ok(mae<5,`Displayed orientation must survive ${degrees} degrees (${mae})`);
+    }finally{await p.release();}
   }
   const invalid=path.join(dir,'invalid.mp4');fs.writeFileSync(invalid,'bad-media');
-  await assert.rejects(probeH3Input({path:invalid},'standard'),/tidak dapat dibaca/);
+  await assert.rejects(probeH3Input({path:invalid},'plus'),/video H3 tidak dapat dibaca/);
+  await assert.rejects(prepareH3Input({path:video},'plus',{path:invalid}),/gambar H3 tidak dapat dibaca/);
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
-console.log('PASS: H3 face/hair masked 1080p source composite, scene resets, aligned real media, full timeline, original audio, isolated inputs and provider payload');
+console.log('PASS: H3 full-photo motion graph, native 1080 canvas, exhaustive timeline/cut/padding coverage, real audio/orientation, isolated inputs, and provider boundary. GPU/visual acceptance untested.');

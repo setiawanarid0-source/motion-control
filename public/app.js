@@ -215,7 +215,7 @@ function updateGenerate(){
   refreshLabNotice();
 }
 function workflowName(){
-  if(state.workflow==='minimaxH3')return 'MiniMax H3 · Face & Hair · 1080p';
+  if(state.workflow==='minimaxH3')return 'MiniMax H3 · Motion Control · 1080p';
   if(state.workflow==='rife60')return 'RIFE Adaptive · hingga 60 FPS';
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
   if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
@@ -1038,10 +1038,17 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');
   $('#fullLabNotice').classList.toggle('hidden',state.workflow!=='r4Lab');
   $('#h3Notice').classList.toggle('hidden',state.workflow!=='minimaxH3');
+  const h3=state.workflow==='minimaxH3';
+  $$('.mode-card').forEach(x=>{x.disabled=h3&&x.dataset.mode!=='plus';});
+  if(h3){
+    state.mode='plus';
+    $$('.mode-card').forEach(x=>x.classList.toggle('selected',x.dataset.mode==='plus'));
+  }
   updateEstimates();updateGenerate();
   if(state.workflow==='rife60')restoreRecentRifeFailure();
 });
 $$('.mode-card').forEach(b=>b.onclick=()=>{
+  if(b.disabled)return;
   $$('.mode-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.mode=b.dataset.mode;
 });
 initDropzone($('#imageDrop'),$('#referenceImage'),'image');initDropzone($('#videoDrop'),$('#videoReference'),'video');

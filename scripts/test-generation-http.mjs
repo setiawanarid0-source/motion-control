@@ -126,6 +126,15 @@ try{
   const workflowsReply=await fetch(url+'/api/workflows',{headers});
   const workflows=await workflowsReply.json();
   assert.ok(workflows.workflows.some(w=>w.id==='minimaxH3'&&w.outputKind==='video'));
+  const h3Info=workflows.workflows.find(w=>w.id==='minimaxH3');
+  assert.equal(h3Info.requiredMode,'plus');
+  assert.ok(h3Info.name.includes('Motion Control'));
+  assert.ok(!workflows.workflows.some(w=>w.id==='minimaxH3Review'));
+  const retiredPage=await fetch(url+'/h3-review.html',{headers});
+  const retiredHtml=await retiredPage.text();
+  assert.equal(retiredPage.status,200,'Removed page falls back to the main application');
+  assert.ok(retiredHtml.includes('data-workflow="minimaxH3"'));
+  assert.ok(!retiredHtml.includes('H3 Aligned Head'),'Standalone head-only page is retired');
   const h3Id=crypto.randomUUID();
   const h3Start=await fetch(url+'/api/generate',{
     method:'POST',headers:{...headers,'X-Vanta-Request-Id':h3Id},body:form('plus','minimaxH3')
