@@ -3,6 +3,7 @@ import {promisify} from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import {detectIdentityFocus,validIdentityCrop} from './h3-identity-focus.js';
 const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
@@ -135,7 +136,7 @@ export function h3Segments(totalFrames,sceneCuts=[]){
   return segments;
 }
 
-export async function prepareH3Input(file,mode,imageFile){
+export async function prepareH3Input(file,mode,imageFile,{identityFocus=false}={}){
   const source=await probeH3Input(file,mode);
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-motion-'));
   const release=()=>fs.rm(dir,{recursive:true,force:true});
@@ -143,6 +144,8 @@ export async function prepareH3Input(file,mode,imageFile){
   try{
     const reference=await prepareH3Reference(imageFile,path.join(dir,'reference-srgb.png'));
     const plan=h3PhotoPlan(reference.color.width,reference.color.height);
+    const referenceFace=identityFocus?await detectIdentityFocus(reference.file,{
+      width:reference.color.width,height:reference.color.height}):null;
     // Fit ONLY the control video to the photo's aspect and H3 grid. Contain/pad
     // keeps its geometry and camera. Original photo and generated pixels are not scaled.
     const filter=`setpts=PTS-STARTPTS,fps=24,`+
@@ -168,7 +171,7 @@ export async function prepareH3Input(file,mode,imageFile){
     const sceneCuts=[...new Set([...stderr.matchAll(/pts_time:([0-9.]+)/g)]
       .map(m=>Math.round(Number(m[1])*24)))].filter(n=>n>0&&n<frames);
     return {...source,...plan,totalFrames:frames,sceneCuts,
-      referenceFile:reference.file,referenceColor:reference.color,
+      referenceFile:reference.file,referenceColor:reference.color,referenceFace,
       file:{path:output,originalname:'motion-guide.mp4',mimetype:'video/mp4',size:bytes},release};
   }catch(error){await release();throw error;}
 }
@@ -198,6 +201,7 @@ export function h3ExecutionPlan(source){
   return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
     inferenceProfile:source.inferenceProfile||'legacy-training-adapter',
     referenceFace:source.referenceFace||null,
+    attentionConditioning:source.sparseConditioningMode||'exact_kv_and_rows',
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
@@ -237,9 +241,11 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     g['8'].inputs.model=['9',0];
   }
   if(profile==='guide-sol-focus'){
+    const sinks=source.sparseConditioningMode||'exact_kv_and_rows';
+    if(!['exact_kv_and_rows','off'].includes(sinks))throw Error('Mode attention H3 tidak valid.');
     add(10,'BlockSparseAttention',{model:['8',0],selection:'sol-attn','selection.tau':1,
       start_percent:.2,end_percent:1,dense_blocks:'0,1',min_tokens:12288,extra_tokens:256,
-      sink_conditioning:'exact_kv_and_rows',verbose:true});
+      sink_conditioning:sinks,verbose:true});
   }
   if(tara)add(9,'BFSMiniMaxH3NativeTemporal',{model:['8',0],motion_video_index:1,strength:2,
     window_seconds:.2,falloff_seconds:.25,max_penalty:6,attention_backend:'flash partitions (no compile)',
@@ -250,8 +256,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   let face=null;
   if(profile==='guide-sol-focus'&&source.referenceFace){
     const f=source.referenceFace;
-    if(!['x','y','width','height'].every(k=>Number.isSafeInteger(f[k]))||f.x<0||f.y<0||
-      f.width<32||f.height<32||f.width%32||f.height%32||f.x+f.width>source.referenceWidth||f.y+f.height>source.referenceHeight)
+    if(!validIdentityCrop(f,source.referenceWidth,source.referenceHeight))
       throw Error('Area referensi wajah H3 tidak valid.');
     face=add(32,'ImageCrop',{image:['30',0],x:f.x,y:f.y,width:f.width,height:f.height},
       'Additional native-pixel identity reference from the same photo; no output face editing');

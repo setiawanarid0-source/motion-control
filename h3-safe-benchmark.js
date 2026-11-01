@@ -18,11 +18,14 @@ export const SAFE_H3_SOL_JOB='6683bcb0-b420-40c2-8b9b-1bf6d4a1f8cd';
 export const SAFE_H3_SOL_TOKEN='safe-sol-focus-20261101-v1';
 export const SAFE_H3_SOL2_JOB='39d4603c-ee05-4b9a-8662-2836726a0b64';
 export const SAFE_H3_SOL2_TOKEN='safe-sol-focus-shifted-20261101-v1';
+export const SAFE_H3_SOLFAST_JOB='f77cda62-19be-4c36-b509-3b3877ffbe13';
+export const SAFE_H3_SOLFAST_TOKEN='safe-sol-focus-free-20261101-v1';
 const TRIALS=[{jobId:SAFE_H3_JOB,token:SAFE_H3_TOKEN,profile:'no-training-adapter'},
   {jobId:SAFE_H3_TARA_JOB,token:SAFE_H3_TARA_TOKEN,profile:'tara-native'},
   {jobId:SAFE_H3_KITCHEN_JOB,token:SAFE_H3_KITCHEN_TOKEN,profile:'guide-kitchen'},
   {jobId:SAFE_H3_SOL_JOB,token:SAFE_H3_SOL_TOKEN,profile:'guide-sol-focus'},
-  {jobId:SAFE_H3_SOL2_JOB,token:SAFE_H3_SOL2_TOKEN,profile:'guide-sol-focus'}];
+  {jobId:SAFE_H3_SOL2_JOB,token:SAFE_H3_SOL2_TOKEN,profile:'guide-sol-focus'},
+  {jobId:SAFE_H3_SOLFAST_JOB,token:SAFE_H3_SOLFAST_TOKEN,profile:'guide-sol-focus'}];
 const DEVICE='h3-safe-benchmark-20261101-v1';
 const ASSET='https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/examples/character_swap_v1.0_1.mp4';
 const SHA='0bb85d33ff2d1dc69b015d77715888d0388903c8582e97cd0f6bd7253b85355d';
@@ -35,7 +38,11 @@ export function safeH3Profile(job){
 // Coordinates refer only to the SHA-verified clothed fixture's reference pane.
 // They are not reused for user uploads. A general detector is separate work.
 export function safeH3FaceFocus(job){
-  return safeH3Profile(job)==='guide-sol-focus'?{x:192,y:224,width:160,height:192}:null;
+  return safeH3Profile(job)==='guide-sol-focus'&&job.jobId!==SAFE_H3_SOLFAST_JOB?
+    {x:192,y:224,width:160,height:192}:null;
+}
+export function safeH3Conditioning(job){
+  return job?.jobId===SAFE_H3_SOLFAST_JOB&&safeH3Profile(job)==='guide-sol-focus'?'off':null;
 }
 export async function stageSafeH3Benchmark({queue,token=process.env.VANTA_H3_SAFE_BENCHMARK,
   download=async()=>Buffer.from((await axios.get(ASSET,{responseType:'arraybuffer',timeout:60000,

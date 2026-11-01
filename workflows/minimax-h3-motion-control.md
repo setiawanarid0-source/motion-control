@@ -180,3 +180,15 @@ the patch before the shift incorrectly computes its 20% threshold on the base
 schedule and activates near the end of an H3-shifted run. The private follow-up
 has a separate durable ID and only cancels its own superseded fixture after
 provider acknowledgment; it cannot cancel ordinary user tasks.
+
+The follow-up comparison changes only the conditioning sink policy to `off`:
+conditioning remains present, but its attention can be approximated along with
+the rest of the sequence. This may trade fidelity for speed, so the profile is
+private pending face/texture/motion review. It keeps the same whole photo and
+native face crop, all eight steps, warm-up schedule and output resolution.
+
+An optional general face-localization helper is bundled with its MIT-licensed
+YuNet model and checksum. It runs on the current photo locally on the CPU,
+returns one confident face rectangle in original coordinates and skips focus
+for no/multiple faces. No photo is sent to a detection service or rewritten.
+The detector's working image is separate from the unscaled H3 references.

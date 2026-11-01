@@ -81,6 +81,9 @@ assert.deepEqual(focused['1004'].inputs['ref_images.ref_image_2'],['32',0]);
 assert.equal(focused['1004'].inputs.ref_image_size,'max');
 assert.ok(focused['1004'].inputs.prompt.indexOf('<Picture 2>')<focused['1004'].inputs.prompt.indexOf('summary:'));
 assert.equal(focused['1004'].inputs.width,1088);assert.equal(focused['1013'].inputs.width,1080);
+const fewerSinks=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:faceFocus,sparseConditioningMode:'off'}});
+const expectedFewer=structuredClone(focused);expectedFewer['10'].inputs.sink_conditioning='off';
+assert.deepEqual(fewerSinks,expectedFewer,'The additional performance comparison changes only the conditioning sink policy');
 for(const invalid of [{...faceFocus,x:-1},{...faceFocus,width:31},{...faceFocus,x:4000}])
   assert.throws(()=>h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:invalid}}),/Area referensi/);
 for(const frames of [120,360]){

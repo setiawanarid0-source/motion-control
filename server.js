@@ -27,7 +27,7 @@ import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
-import {stageSafeH3Benchmark,safeH3Profile,safeH3FaceFocus,safeH3Result,resumeSafeH3Progress,stopSupersededSafeBenchmark} from './h3-safe-benchmark.js';
+import {stageSafeH3Benchmark,safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result,resumeSafeH3Progress,stopSupersededSafeBenchmark} from './h3-safe-benchmark.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -701,9 +701,10 @@ async function handleGeneration(req,res){
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
     if(workflowKey==='minimaxH3'){
       req.progress?.('analyzing');
-      h3Source=await prepareH3Input(videoFile,mode,imageFile);
+      h3Source=await prepareH3Input(videoFile,mode,imageFile,{identityFocus:req.h3BenchmarkProfile==='guide-sol-focus'});
       if(req.h3BenchmarkProfile)h3Source.inferenceProfile=req.h3BenchmarkProfile;
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
+      if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
       console.info('H3 media plan',JSON.stringify(h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
@@ -870,7 +871,8 @@ async function runQueuedGeneration(job,report){
     headers:{'x-vanta-device':job.deviceId},
     cookies:{},query:{},body:job.body,
     files:{...(job.image?{referenceImage:[job.image]}:{}),videoReference:[job.video]},
-    progress:report,submissionAttempted:false,h3BenchmarkProfile:safeH3Profile(job),h3SafeFaceFocus:safeH3FaceFocus(job)
+    progress:report,submissionAttempted:false,h3BenchmarkProfile:safeH3Profile(job),
+    h3SafeFaceFocus:safeH3FaceFocus(job),h3SafeConditioning:safeH3Conditioning(job)
   };
   let result=null,httpStatus=200;
   const response={
