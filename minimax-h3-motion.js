@@ -17,6 +17,7 @@ export const H3_MODELS=Object.freeze({
   audioVae:'minimax_h3_audio_vae_fp32.safetensors',
   adapter:'minimax_h3_ref2va_training_adapter_v2.safetensors',
   turbo:'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors',
+  turboDmad4:'minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors',
   motion:'minimax_h3_motion_transfer_v1.0_ref2va.safetensors',
   motionTara:'minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors'
 });
@@ -138,7 +139,7 @@ export function h3Segments(totalFrames,sceneCuts=[]){
 }
 
 export async function prepareH3Input(file,mode,imageFile,{
-  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=inferenceProfile==='guide-sol-focus'
+  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus'].includes(inferenceProfile)
 }={}){
   const source=await probeH3Input(file,mode);
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-motion-'));
@@ -203,12 +204,21 @@ export function h3ExecutionPlan(source){
   const segments=validateSource(source);
   return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
     inferenceProfile:source.inferenceProfile||H3_DEFAULT_PROFILE,
+    sampling:h3SamplingPlan(source),
     referenceFace:source.referenceFace||null,
     attentionConditioning:source.sparseConditioningMode||'exact_kv_and_rows',
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
     postDecodeResize:false,postRefinement:false};
+}
+
+export function h3SamplingPlan(source){
+  const dmad=(source.inferenceProfile||H3_DEFAULT_PROFILE)==='guide-dmad4-focus';
+  // DMAD's four-step student uses re-noise sampling (LCM/simple), not an
+  // eight-step DMD adapter with its scheduler shortened arbitrarily.
+  return {steps:dmad?4:8,sampler:dmad?'lcm':'euler',scheduler:'simple',
+    turbo:dmad?H3_MODELS.turboDmad4:H3_MODELS.turbo,audioShift:dmad?2:3};
 }
 
 function inputName(value){
@@ -228,22 +238,23 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
-  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
+  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
+  const focused=['guide-sol-focus','guide-dmad4-focus'].includes(profile),sampling=h3SamplingPlan(source);
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:H3_MODELS.clip,type:'minimax',device:'default'});
   add(3,'VAELoader',{vae_name:H3_MODELS.videoVae});add(4,'VAELoader',{vae_name:H3_MODELS.audioVae});
   if(profile==='legacy-training-adapter')
     add(5,'LoraLoaderModelOnly',{model:['1',0],lora_name:H3_MODELS.adapter,strength_model:1});
-  add(6,'LoraLoaderModelOnly',{model:[profile==='legacy-training-adapter'?'5':'1',0],lora_name:H3_MODELS.turbo,strength_model:1});
+  add(6,'LoraLoaderModelOnly',{model:[profile==='legacy-training-adapter'?'5':'1',0],lora_name:sampling.turbo,strength_model:1});
   add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:H3_MODELS.motion,strength_model:1},'Motion Transfer v1.0');
-  add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:3});
-  if(['guide-kitchen','guide-sol-focus'].includes(profile)){
+  add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:sampling.audioShift});
+  if(profile==='guide-kitchen'||focused){
     add(9,'ModelAttentionBackend',{model:['7',0],attention:'comfy kitchen attention'});
     g['8'].inputs.model=['9',0];
   }
-  if(profile==='guide-sol-focus'){
+  if(focused){
     const sinks=source.sparseConditioningMode||'exact_kv_and_rows';
     if(!['exact_kv_and_rows','off'].includes(sinks))throw Error('Mode attention H3 tidak valid.');
     add(10,'BlockSparseAttention',{model:['8',0],selection:'sol-attn','selection.tau':1,
@@ -257,7 +268,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   const reference=add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,
     right:source.referencePadRight,bottom:source.referencePadBottom,feathering:0},'Original photo pixels; grid padding only');
   let face=null;
-  if(profile==='guide-sol-focus'&&source.referenceFace){
+  if(focused&&source.referenceFace){
     const f=source.referenceFace;
     if(!validIdentityCrop(f,source.referenceWidth,source.referenceHeight))
       throw Error('Area referensi wajah H3 tidak valid.');
@@ -271,9 +282,9 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     'Picture 1 supplies the whole appearance and environment; Picture 2 supplies additional facial identity only. '+
     'It must not change the guide camera, pose or framing.\nThe aligned motion guide supplies');
   if(tara)prompt=prompt.replace('The aligned motion guide supplies','<Video 1> supplies');
-  add(40,'KSamplerSelect',{sampler_name:'euler'});
-  const samplingModel=tara?'9':profile==='guide-sol-focus'?'10':'8';
-  add(41,'BasicScheduler',{model:[samplingModel,0],scheduler:'simple',steps:8,denoise:1});
+  add(40,'KSamplerSelect',{sampler_name:sampling.sampler});
+  const samplingModel=tara?'9':focused?'10':'8';
+  add(41,'BasicScheduler',{model:[samplingModel,0],scheduler:sampling.scheduler,steps:sampling.steps,denoise:1});
   const exports=[];let previous=null;
   for(let i=0;i<segments.length;i++){
     const seg=segments[i],b=1000+i*30;

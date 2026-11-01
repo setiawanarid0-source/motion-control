@@ -8,7 +8,7 @@ import FormData from 'form-data';
 import os from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
-import { extractTaskFailure } from './task-failure.js';
+import { extractTaskFailure,auditFailedH3Tasks } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
 import {canGenerateWithAccount,rankGenerationAccounts} from './runninghub-account-priority.js';
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
@@ -28,6 +28,7 @@ import {H3_DEFAULT_PROFILE,prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
 import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h3-safe-benchmark.js';
+import {longH3Profile,longH3Result,longH3ModelChoices,runLongH3Deployment} from './h3-long-benchmark.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -207,7 +208,7 @@ function writeTaskState(taskId,result){
   if(stored&&stored.status!==previous?.status&&['success','failed'].includes(stored.status))
     console.info('RunningHub task timing',JSON.stringify(taskTimingReport(stored,stored.providerRuntimeSeconds??null)));
   if(stored&&stored.status!==previous?.status&&['success','failed'].includes(stored.status)){
-    const benchmark=safeH3Result(stored,generationQueue);
+    const benchmark=safeH3Result(stored,generationQueue)||longH3Result(stored,generationQueue);
     if(benchmark)console.info('H3 safe benchmark result',JSON.stringify(benchmark));
   }
   if(stored?.status==='success')scheduleResultMirror(stored);
@@ -275,6 +276,11 @@ async function monitorRegisteredTasks(){
       },
       update:(id,patch)=>taskRegistry.update(id,patch),
       log:report=>console.info('H3 provider timing audit',JSON.stringify(report))});
+    await auditFailedH3Tasks({tasks:taskRegistry.publicList(),query:task=>{
+      const original=taskRegistry.get(task.taskId);
+      if(!original?.key)throw Error('Task credential unavailable');
+      return rhJson('/task/openapi/outputs',original.key,{apiKey:original.key,taskId:task.taskId},30000);
+    },update:taskRegistry.update,log:report=>console.info('H3 terminal audit',JSON.stringify(report))});
     taskRegistry.purgeExpired();
   }catch(err){console.warn('Task lifecycle monitor',err.message);}
   finally{monitorBusy=false;}
@@ -533,6 +539,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
     if(validation){
+      if(h3Source?.inferenceProfile==='guide-dmad4-focus')
+        console.info('H3 long model validation',JSON.stringify(longH3ModelChoices(data)));
       if(workflowKey==='rife60')validation.message=validation.message.replace('workflow H3','workflow RIFE');
       throw validation;
     }
@@ -871,7 +879,7 @@ async function runQueuedGeneration(job,report){
     headers:{'x-vanta-device':job.deviceId},
     cookies:{},query:{},body:job.body,
     files:{...(job.image?{referenceImage:[job.image]}:{}),videoReference:[job.video]},
-    progress:report,submissionAttempted:false,h3BenchmarkProfile:safeH3Profile(job),
+    progress:report,submissionAttempted:false,h3BenchmarkProfile:safeH3Profile(job)||longH3Profile(job),
     h3SafeFaceFocus:safeH3FaceFocus(job),h3SafeConditioning:safeH3Conditioning(job)
   };
   let result=null,httpStatus=200;
@@ -880,6 +888,9 @@ async function runQueuedGeneration(job,report){
     json(data){result=data;return this;}
   };
   await handleGeneration(req,response);
+  if(longH3Profile(job))console.info('H3 long benchmark submission',JSON.stringify({
+    jobId:job.jobId,accepted:result?.ok===true,taskId:/^\d{10,25}$/.test(String(result?.taskId||''))?String(result.taskId):null,
+    submissionUnconfirmed:req.submissionAttempted&&result?.ok!==true}));
   if(result?.ok&&result.taskId){
     generationQueue.update(job.jobId,{
       stage:'accepted',message:'Task diterima RunningHub',
@@ -1215,6 +1226,9 @@ console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legac
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
 generationQueue.resume();
+void runLongH3Deployment({queue:generationQueue,rootDir:DATA_DIR,token:process.env.VANTA_H3_LONG_BENCHMARK||''})
+  .then(job=>{if(job)console.info('H3 long benchmark staged',JSON.stringify({jobId:job.jobId,stage:job.stage,reused:job.reused||false}));})
+  .catch(()=>console.warn('H3 long benchmark staging failed before submission'));
 setInterval(()=>generationQueue.purge(),60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
 void motionResults.prune().catch(e=>console.warn('Result archive cleanup',e.message));

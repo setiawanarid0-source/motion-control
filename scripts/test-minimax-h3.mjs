@@ -99,6 +99,19 @@ assert.equal(focused['1004'].inputs.width,1088);assert.equal(focused['1013'].inp
 const fewerSinks=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:faceFocus,sparseConditioningMode:'off'}});
 const expectedFewer=structuredClone(focused);expectedFewer['10'].inputs.sink_conditioning='off';
 assert.deepEqual(fewerSinks,expectedFewer,'The additional performance comparison changes only the conditioning sink policy');
+const longDmadSource={...source,totalFrames:360,inferenceProfile:'guide-dmad4-focus',referenceFace:faceFocus};
+const dmad=h3GraphForInputs(manifest,{...args,source:longDmadSource});
+assert.equal(dmad['6'].inputs.lora_name,H3_MODELS.turboDmad4);
+assert.equal(dmad['40'].inputs.sampler_name,'lcm','DMAD uses its trained re-noise rule');
+assert.equal(dmad['41'].inputs.steps,4);
+assert.equal(dmad['8'].inputs.shift_video,12);assert.equal(dmad['8'].inputs.shift_audio,2);
+assert.equal(dmad['10'].inputs.sink_conditioning,'exact_kv_and_rows','Do not discard exact reference attention to make the trial faster');
+assert.equal(dmad['1004'].inputs.ref_image_size,'max');
+assert.equal(h3ExecutionPlan(longDmadSource).samplerCount,3);
+assert.equal(h3ExecutionPlan(longDmadSource).sampling.steps,4);
+assert.equal(Object.values(dmad).filter(n=>n.class_type==='SamplerCustomAdvanced').length,3);
+assert.ok(!Object.values(dmad).some(n=>/Resize|Upscale|Refine|Composite/.test(n.class_type)));
+for(let i=0;i<3;i++)assert.deepEqual(dmad[1009+i*30].inputs.model,['10',0]);
 for(const invalid of [{...faceFocus,x:-1},{...faceFocus,width:31},{...faceFocus,x:4000},
   {x:0,y:0,width:1024,height:1408}])
   assert.throws(()=>h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:invalid}}),/Area referensi/);
@@ -243,6 +256,8 @@ assert.ok(!server.includes('minimaxH3Review'),'Head-only prototype is not a live
 assert.match(server,/inferenceProfile:req\.h3BenchmarkProfile\|\|H3_DEFAULT_PROFILE/,
   'Normal HTTP/queue submissions must select the production inference profile');
 assert.ok(!server.includes('stageSafeH3Benchmark('),'A production restart cannot create another paid fixture render');
+assert.match(server,/runLongH3Deployment\(\{queue:generationQueue,rootDir:DATA_DIR,token:process\.env\.VANTA_H3_LONG_BENCHMARK\|\|''\}\)/,
+  'A new long trial requires the deployment-only gate and permanent checkpoint');
 assert.ok(!server.includes('stopSupersededSafeBenchmark('),'Remove the one-off fixture cancellation hook after testing');
 const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
 assert.ok(html.includes('MiniMax H3 · Motion Control'));assert.ok(!html.includes('h3-review.html'));

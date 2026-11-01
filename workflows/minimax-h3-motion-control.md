@@ -101,8 +101,43 @@ The matching TARA alternative was rejected by RunningHub for a missing native
 node. It is not used in production. The incorrectly ordered sparse comparison
 was stopped only after explicit provider cancellation acknowledgment.
 One-off benchmark staging and cancellation startup hooks have been removed, so
-redeployment cannot create another paid test. The isolated fixture helper remains
+redeployment cannot repeat those paid tests. The isolated fixture helper remains
 available for local regression checks with no credentials or inference calls.
+
+### Fifteen-second DMAD validation (private until measured)
+
+The selected production eight-step recipe remains unchanged during this test.
+The separate `guide-dmad4-focus` profile uses the Kijai-converted DMAD four-step
+student (`minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors`),
+LCM/simple re-noise sampling, CFG 1 and video/audio shifts 12/2, following the
+DMAD checkpoint author's sampling contract. This is not a shortened schedule
+using the old eight-step DMD adapter. The Motion Transfer task, native canvas,
+whole-photo reference, exact reference attention and original audio export stay
+the same. Fifteen seconds still uses three native windows, now twelve rather
+than twenty-four total sampling steps. Runtime and visual fidelity must be
+measured before promotion.
+
+The reviewed reference is a native 1600×2850 crop of NASA/Robert Markowitz's
+public-domain 2013 Samantha Cristoforetti portrait. The generated benchmark is
+an artificial motion-transfer test, not a recording or endorsement by the
+person depicted. Its padded reference contains 4.608 million pixels, compared
+with approximately 4.588 million whole-photo-plus-face reference pixels in the
+slow production task. Both use the same 1088×1952 model canvas. The fully clothed
+public guide is looped to exactly 360 frames/15 seconds. No reference/output
+resizing, post-generation interpolation or refiner is used.
+
+Both source files have pinned hashes. Starting this trial requires the exact
+deployment-only `VANTA_H3_LONG_BENCHMARK` opt-in on `/data`; a permanent exclusive
+checkpoint prevents another paid submission even after queue retention expires.
+No route, owner login or private upload is used. Unknown acceptance, rejection
+and download failure cannot auto-retry. Normal requests cannot select the
+private profile from a browser body. The opt-in is cleared after staging.
+
+A bounded once-only metadata audit classifies failed H3 tasks as runtime limit,
+cancelled, memory exhaustion or unclassified, using their retained credentials
+without exporting them. It never changes terminal timestamps, submits or
+cancels a render. This distinguishes a provider time limit from a user stop;
+ending around forty minutes alone is not proof of either cause.
 
 ## Verification and observations
 
@@ -159,3 +194,6 @@ unresolved without a controlled comparison; the budget fix does not claim it.
 - [Sigma threshold semantics](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/model_sampling.py)
 - [VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
 - [Bundled YuNet source and license](../models/h3-identity/README.md)
+- [DMAD sampling and checkpoint documentation](https://github.com/Yzmblog/DMAD/blob/main/README.md)
+- [Henge supported turbo filenames](https://github.com/alisson-anjos/Henge/blob/main/config/model-repos.example.json)
+- [NASA public-domain portrait and original file](https://commons.wikimedia.org/wiki/File:Samantha_Cristoforetti_official_portrait.jpg)

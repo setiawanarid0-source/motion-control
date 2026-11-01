@@ -11,7 +11,7 @@ export function h3NodeClass(node,plan){
   if(!/^motion-transfer-native-1080-v[1234]$/.test(String(plan?.revision)))return null;
   if(String(node)==='9'&&plan.inferenceProfile==='tara-native')return 'BFSMiniMaxH3NativeTemporal';
   if(String(node)==='9'&&plan.inferenceProfile==='guide-kitchen')return 'ModelAttentionBackend';
-  if(plan.inferenceProfile==='guide-sol-focus'){
+  if(['guide-sol-focus','guide-dmad4-focus'].includes(plan.inferenceProfile)){
     if(String(node)==='9')return 'ModelAttentionBackend';
     if(String(node)==='10')return 'BlockSparseAttention';
     if(String(node)==='32')return 'ImageCrop';
