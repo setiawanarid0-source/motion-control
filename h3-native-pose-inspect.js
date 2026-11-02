@@ -64,7 +64,7 @@ export function nativePoseValidationGraph(phase='catalog'){
         // MathExpression is itself an output node. The otherwise-unused c
         // dependency makes its separate output require the invalid patch too.
         add(27,'MathExpression|pysssss',{a:['26',2],b:['26',0],c:['5',0],expression:'256/((a==22)*(b==256))'});
-        add(28,'ImageScale',{image:['25',0],upscale_method:'lanczos',width:['27',0],height:256,crop:'disabled'});
+        add(28,'ImageScale',{image:['25',0],upscale_method:'nearest-exact',width:['27',0],height:256,crop:'disabled'});
         g['8'].inputs['ref_videos.ref_video_1']=['28',0];
       }
     }

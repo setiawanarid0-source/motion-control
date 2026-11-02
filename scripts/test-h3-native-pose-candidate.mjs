@@ -119,6 +119,7 @@ for(let i=0;i<4;i++){
  assert.deepEqual(guarded[1009+i*30].inputs.prompt,face[1009+i*30].inputs.prompt);
 }
 assert.equal(guarded['82'].inputs.height,256);assert.deepEqual(guarded['82'].inputs.width,['81',0]);
+assert.equal(guarded['82'].inputs.upscale_method,'nearest-exact','The assertion pass must not quantize/interpolate valid facial crops');
 assert.equal(h3ExecutionPlan(guardedSource).faceCropValidation,'exact_source_frame_count_and_256_square');
 for(const [id,node] of Object.entries(guarded))assert.equal(h3NodeClass(id,h3ExecutionPlan(guardedSource)),node.class_type,'Guarded face timing node '+id);
 assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption');

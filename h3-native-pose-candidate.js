@@ -114,7 +114,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
           add(81,'MathExpression|pysssss',{a:['80',2],b:['80',0],c:['80',1],
             expression:`256/((a==${source.totalFrames})*(b==256)*(c==256))`},
             'Stop before sampling if face detection drops frames or falls back to a full RGB frame');
-          facialSequence=add(82,'ImageScale',{image:facialSequence,upscale_method:'lanczos',width:['81',0],height:256,crop:'disabled'},
+          facialSequence=add(82,'ImageScale',{image:facialSequence,upscale_method:'nearest-exact',width:['81',0],height:256,crop:'disabled'},
             '256-to-256 identity pass after frame-count assertion; guide input only');
         }
         add(494,'VHS_VideoCombine',{images:facialSequence,frame_rate:24,loop_count:0,filename_prefix:'VANTA-FACE-PERFORMANCE-QA',
