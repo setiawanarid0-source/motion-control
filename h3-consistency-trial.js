@@ -66,7 +66,10 @@ const TRIALS=Object.freeze({
     imageName:'h3-consistency-reference.png',imageType:'image/png',media:{
       image:'d28ac156ed7f71730a9b98acbd917b3a90b8ac8b1ec2b2d81606b0bd758711b8',
       video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}},
-  'native-global8-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa026',profile:'native-fun-global8-face-attributes'}
+  'native-global8-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa026',profile:'native-fun-global8-face-attributes'},
+  'native-inventory-photo-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa027',profile:'native-photo-inventory-check',media:{
+    image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+    video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}}
 });
 const MEDIA=Object.freeze({
   image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
@@ -127,7 +130,7 @@ export function consistencyModelChoices(response){
       errors:(node.errors||[]).slice(0,5).map(e=>({type:String(e.type||'').slice(0,80),
         message:String(e.message||'').slice(0,160),details:String(e.details||'').slice(0,500)}))}))};
 }
-export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancelTask,diagnoseTask,getDiagnosticOutputs,hash,expires}){
+export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancelTask,diagnoseTask,getDiagnosticOutputs,getDiagnosticText,hash,expires}){
   // Registered before owner login solely for this separate expiring credential.
   // With no deployment gate, these routes do not exist.
   if(!/^[a-f0-9]{64}$/.test(String(hash||''))||!Number.isFinite(Date.parse(expires)))return;
@@ -158,10 +161,12 @@ export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancel
     let failure=null;
     if(task?.status==='failed'&&diagnoseTask)try{failure=await diagnoseTask(task.taskId);}catch{}
     let qaOutputs=[];
-    if(task?.status==='success'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes'].includes(trial.profile)&&
+    if(task?.status==='success'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-photo-inventory-check'].includes(trial.profile)&&
       consistencyH3Profile(job)===trial.profile&&getDiagnosticOutputs)
       try{qaOutputs=await getDiagnosticOutputs(task);}catch{}
-    res.json({jobId:trial.jobId,stage:job?.stage||'not_staged',error:job?.error||null,
+    const caption=trial.profile==='native-photo-inventory-check'&&consistencyH3Profile(job)===trial.profile&&task&&getDiagnosticText?
+      getDiagnosticText(task.taskId)||null:null;
+    res.json({jobId:trial.jobId,stage:job?.stage||'not_staged',error:job?.error||null,...(caption?{caption}:{}),
       failure,qaOutputs,
       task:task?{taskId:task.taskId,status:task.status,providerRuntimeSeconds:task.providerRuntimeSeconds??null,
         resultUrl:task.resultUrl||null,error:task.error||null}:null});

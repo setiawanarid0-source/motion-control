@@ -139,7 +139,7 @@ assert.deepEqual(global['1009'].inputs.prompt,['87',0]);
 assert.equal(global['1021'].inputs.amount,1);assert.equal(global['1025'].inputs.amount,1);
 const globalPlan=h3ExecutionPlan(globalSource);
 const ordinaryGraph=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:{...globalSource,diagnosticOutputs:false}});
-for(const id of ['69','70','71','72','73','75','76','77','492','493','494'])assert.equal(ordinaryGraph[id],undefined,'Private diagnostic output absent from normal requests: '+id);
+for(const id of ['69','70','71','72','73','75','76','77','492','493','494','495'])assert.equal(ordinaryGraph[id],undefined,'Private diagnostic output absent from normal requests: '+id);
 for(const id of Object.keys(ordinaryGraph))assert.deepEqual(ordinaryGraph[id],global[id],'The normal graph retains the tested inference path: '+id);
 assert.equal(ordinaryGraph['490'].class_type,'VHS_VideoCombine');
 assert.equal(globalPlan.samplerCount,1);assert.equal(globalPlan.nativeWindowFrames,362);
@@ -156,6 +156,12 @@ for(const id of Object.keys(global).filter(id=>!['6','9','40','1010'].includes(i
  'Four/eight-step comparison retains the same input, pose, face, attributes, continuation and export: '+id);
 assert.equal(h3ExecutionPlan(global8Source).sampling.steps,8);
 for(const [id,node] of Object.entries(global8))assert.equal(h3NodeClass(id,h3ExecutionPlan(global8Source)),node.class_type,'Global DMD timing node '+id);
+const inventorySource={...globalSource,inferenceProfile:'native-photo-inventory-check'};
+const inventory=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:inventorySource});
+assert.deepEqual(Object.keys(inventory).sort(),['30','85','86','495'].sort());
+for(const id of Object.keys(inventory))assert.deepEqual(inventory[id],global[id],'Inspect the same inventory settings used by the real recipe');
+assert.equal(h3ExecutionPlan(inventorySource).samplerCount,0);assert.equal(h3ExecutionPlan(inventorySource).diagnosticOnly,true);
+assert.throws(()=>h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:{...inventorySource,diagnosticOutputs:false}}),/private diagnostic/);
 for(let n=6;n<=1440;n++){
  const parts=h3Segments(n,[],22,362);let cursor=0;
  for(const p of parts){assert.equal(p.start,cursor);assert.ok(p.modelFrames<=362);cursor+=p.length;}

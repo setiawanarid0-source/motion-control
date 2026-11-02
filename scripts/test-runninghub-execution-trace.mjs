@@ -97,3 +97,17 @@ assert.equal(observeRegisteredH3Progress({taskId:task.taskId,url,registry,
   monitor:{observe(){throw Error('optional diagnostics unavailable');}}}),false,
   'Observer failure cannot fail an accepted paid submission');
 console.log('PASS: read-only H3 node timing, partial-stream timestamps, binary/privacy guards, trusted WSS destinations and terminal cleanup; no task submission');
+
+// Only the fixed private inventory profile may return its text outside the log.
+const captured=[],privateLog=[];
+const captionTrace=createExecutionTrace({taskId:'2113333333333333333',plan:{revision:'motion-transfer-native-1080-v6',inferenceProfile:'native-photo-inventory-check'},emit:e=>privateLog.push(e),diagnosticText:e=>captured.push(e)});
+const captionEvent=(node,text)=>JSON.stringify({type:'executed',data:{node,output:{text}}});
+captionTrace.message(captionEvent('86',['private photo inventory']));
+captionTrace.message(captionEvent('495',[{secret:'reject'}]));
+captionTrace.message(captionEvent('495',['x'.repeat(8001)]));
+assert.equal(captured.length,0);
+captionTrace.message(captionEvent('495',['private photo inventory']));
+assert.deepEqual(captured,[{taskId:'2113333333333333333',text:'private photo inventory'}]);
+assert.ok(!JSON.stringify(privateLog).includes('private photo inventory'));
+const ordinaryTrace=createExecutionTrace({taskId:'2113333333333333334',plan:{revision:'motion-transfer-native-1080-v6',inferenceProfile:'native-fun-global4-face-attributes'},emit:e=>privateLog.push(e),diagnosticText:e=>captured.push(e)});
+ordinaryTrace.message(captionEvent('495',['must not be captured']));assert.equal(captured.length,1);

@@ -9,6 +9,7 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
   if(!/^motion-transfer-native-1080-v[123456]$/.test(String(plan?.revision)))return null;
+  if(plan.inferenceProfile==='native-photo-inventory-check')return ({30:'LoadImage',85:'CLIPLoader',86:'TextGenerate',495:'SaveText'})[node]||null;
   if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes'].includes(plan.inferenceProfile)){
     const globals={1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',6:'LoraLoaderModelOnly',13:'ModelPatchLoader',
       8:'MiniMaxH3SigmaShift',9:'ModelAttentionBackend',10:'BlockSparseAttention',16:'CheckpointLoaderSimple',17:'UNETLoader',30:'LoadImage',31:'ImagePadForOutpaint',40:'KSamplerSelect',
@@ -18,7 +19,7 @@ export function h3NodeClass(node,plan){
       75:'ImageFromBatch',76:'RTDETR_detect',77:'SDPoseKeypointExtractor',
       78:'SDPoseFaceBBoxes',79:'CropByBBoxes',492:'SaveImage',493:'SaveImage',494:'VHS_VideoCombine',
       80:'GetImageSize',81:'MathExpression|pysssss',82:'ImageScale',
-      85:'CLIPLoader',86:'TextGenerate',87:'StringConcatenate',490:'VHS_VideoCombine'};
+      85:'CLIPLoader',86:'TextGenerate',87:'StringConcatenate',490:'VHS_VideoCombine',495:'SaveText'};
     if(String(node)==='68'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes'].includes(plan.inferenceProfile))return 'BodyRatioMapperSDPoseRender';
     if(globals[node])return globals[node];
     const n=Number(node),index=Math.floor((n-1000)/30),offset=(n-1000)%30;
@@ -70,7 +71,7 @@ export function observeRegisteredH3Progress({taskId,url,registry,monitor}){
       inputDiagnostics:task.inputDiagnostics},url);
   }catch{return false;}
 }
-export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit}){
+export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit,diagnosticText}){
   let current=null,startedAt=0,partial=true,lastValue=null,finished=false;
   const send=(event,fields={})=>emit({taskId:String(taskId),event,...fields});
   const nodeId=v=>(typeof v==='string'||typeof v==='number')&&/^\d{1,7}$/.test(String(v))?String(v):null;
@@ -89,7 +90,12 @@ export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit}){
     let message;try{message=JSON.parse(raw);}catch{return;}
     if(!message||typeof message!=='object'||Array.isArray(message))return;
     const data=message.data&&typeof message.data==='object'&&!Array.isArray(message.data)?message.data:{};
-    if(message.type==='executing'){
+    if(message.type==='executed'&&plan?.inferenceProfile==='native-photo-inventory-check'&&String(data.node)==='495'&&diagnosticText){
+      const text=data.output?.text;
+      if(Array.isArray(text)&&text.length===1&&typeof text[0]==='string'&&text[0].length>0&&text[0].length<=8000){
+        try{diagnosticText({taskId:String(taskId),text:text[0]});}catch{}
+      }
+    }else if(message.type==='executing'){
       if(data.node===null){finishNode();return;}
       const node=nodeId(data.node);if(node)select(node,false);
     }else if(message.type==='progress'){
@@ -116,7 +122,7 @@ export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit}){
     }
   },close(){finishNode();finished=true;},get finished(){return finished;}};
 }
-export function createH3ExecutionMonitor({WebSocketImpl=globalThis.WebSocket,log=()=>{},now=()=>Date.now() }={}){
+export function createH3ExecutionMonitor({WebSocketImpl=globalThis.WebSocket,log=()=>{},now=()=>Date.now(),diagnosticText }={}){
   const connections=new Map(),attempts=new Map();
   function close(id){
     const c=connections.get(id);if(!c)return;
@@ -131,7 +137,7 @@ export function createH3ExecutionMonitor({WebSocketImpl=globalThis.WebSocket,log
     if(previous.count>=3||now()-previous.at<30000&&previous.count)return false;
     attempts.set(id,{count:previous.count+1,at:now()});
     let socket;try{socket=new WebSocketImpl(url);}catch{log({taskId:id,event:'stream_unavailable'});return false;}
-    const trace=createExecutionTrace({taskId:id,plan:task.inputDiagnostics,now,emit:log});
+    const trace=createExecutionTrace({taskId:id,plan:task.inputDiagnostics,now,emit:log,diagnosticText});
     const timeout=setTimeout(()=>close(id),2*60*60*1000);timeout.unref?.();
     const connection={socket,trace,timeout};connections.set(id,connection);
     socket.addEventListener('open',()=>log({taskId:id,event:'stream_open'}));

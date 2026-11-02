@@ -90,6 +90,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       'they must not remove gloves or change the reference outfit. The following inventory describes <Picture 1> only, '+
       'while its native pixels continue to define all body proportions and facial geometry.';
     appearancePrompt=add(87,'StringConcatenate',{string_a:fixed,string_b:['86',0],delimiter:'\nReference photo inventory: '});
+    if(diagnostics)add(495,'SaveText',{text:['86',0],filename_prefix:'VANTA-PHOTO-INVENTORY-QA',format:'txt'});
   }
   add(40,'KSamplerSelect',{sampler_name:dmd8?'euler':'res_multistep'});
   let facialSequence=null;

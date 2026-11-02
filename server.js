@@ -224,8 +224,19 @@ function writeTaskState(taskId,result){
   if(stored?.status==='success')scheduleResultMirror(stored);
   return stored;
 }
+// One checksum-locked, private caption diagnostic. Text never enters logs or
+// ordinary responses; the expiring trial route can read its own result only.
+const h3InventoryCaptions=new Map();
 const h3ExecutionMonitor=createH3ExecutionMonitor({
-  log:report=>console.info('H3 execution trace',JSON.stringify(report))});
+  diagnosticText:({taskId,text})=>{
+    if(taskRegistry.get(taskId)?.inputDiagnostics?.inferenceProfile==='native-photo-inventory-check')h3InventoryCaptions.set(taskId,text);
+  },
+  log:report=>{
+    console.info('H3 execution trace',JSON.stringify(report));
+    if(report.event==='execution_success'&&h3InventoryCaptions.has(report.taskId)&&
+      taskRegistry.get(report.taskId)?.inputDiagnostics?.inferenceProfile==='native-photo-inventory-check')
+      writeTaskState(report.taskId,{state:'success',outputs:[]});
+  }});
 const observeH3Progress=(taskId,url)=>observeRegisteredH3Progress({
   taskId,url,registry:taskRegistry,monitor:h3ExecutionMonitor});
 async function runningHubTaskState(taskId,account,accountId){
@@ -587,10 +598,11 @@ installNativePoseInspection({app,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(i
     if(Number(response?.code)!==0)throw Error('Validation task cancellation unconfirmed');
   }});
 installConsistencyTrial({app,upload,queue:generationQueue,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),
+  getDiagnosticText:id=>h3InventoryCaptions.get(String(id)),
   getDiagnosticOutputs:async task=>{
     const response=await rhJson('/task/openapi/outputs',task.key,{apiKey:task.key,taskId:task.taskId},30000);
     return (Array.isArray(response?.data)?response.data:[])
-      .filter(x=>['492','493','494'].includes(String(x.nodeId))&&typeof x.fileUrl==='string'&&/^https:\/\//.test(x.fileUrl))
+      .filter(x=>['492','493','494','495'].includes(String(x.nodeId))&&typeof x.fileUrl==='string'&&/^https:\/\//.test(x.fileUrl))
       .slice(0,5).map(x=>({nodeId:String(x.nodeId),fileUrl:x.fileUrl,fileType:x.fileType}));
   },
   diagnoseTask:async id=>{

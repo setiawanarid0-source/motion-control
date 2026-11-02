@@ -166,7 +166,27 @@ face crops at frames 0 and 47 were checked against the second photo to confirm
 the glasses. These screens justify a full-duration trial, not production
 promotion or a guarantee of exact 3D body volume, every facial microexpression,
 lighting or texture across longer clips. Full task `2117280220814069761` uses
-the original 15-second driving asset and the 1143×2048 photo; it is pending.
+the original 15-second driving asset and the 1143×2048 photo.
+
+That full task finished at native 1080×1936 / 24 FPS / 361 frames. Provider
+execution was 972 s; submission to ready was 991.224 s (16m31.224s), including
+19.224 s not isolated between queue, allocation, API and delivery. The exact
+source photo from the owner's failed 1536×2752 run is unavailable; this timing
+belongs to the 1143×2048 fixture only.
+
+**Rejected for promotion.** Independently sampled joins are gone: across all
+361 frames the largest adjacent ceiling-ROI change is 0.8316 gray levels,
+compared with 8.2128 in the owner's failed result. The ROI starts at 39.9959 and
+ends at 46.0103, so gradual illumination drift is not claimed eliminated. Native
+inspection of frame 48 / 2 s finds an unrequested silver watch/band on the
+left wrist. The photo does not show that accessory. Fine shirt detail is also
+re-synthesised. A working full shot and an improved jump metric do not establish
+complete appearance fidelity.
+
+All 361 source face crops were inspected: fingers overlap the mouth in some,
+but no silver watch is visible in that input. It is therefore not established
+that this accessory came from the cropped performance. Reproduce and inspect
+the photo inventory before assigning its cause to RGB leakage or pose control.
 
 Private pose/crop exports can be disabled independently of inference. Normal
 preflight disables those diagnostic files. The retained inference nodes are
@@ -181,6 +201,18 @@ of two matched inference recipes, not a claim that changing only the numeric
 step count isolates every effect. Native-size short crops still re-synthesise
 the shirt's fine detail, so the eight-step screen checks whether the matched
 recipe materially improves that detail before any additional full render.
+
+Eight-step short task `2117283756327129089` completed 48 native 1080×1936
+frames in 224 provider seconds. Its native-size shirt detail does not establish
+a sufficient material improvement. No full eight-step task follows from this
+screen. Both recipes remain private.
+
+The checksum-locked `native-photo-inventory-check` is a separate text-only
+diagnostic: it executes only LoadImage, the same caption CLIPLoader and
+TextGenerate settings, and SaveText. It has zero video samplers. The private
+expiring route can read its own text; ordinary task text and raw provider
+payloads never enter the timing log. This reproduces the inventory with the
+same input/settings; it does not recover an unrecorded historical output.
 
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap

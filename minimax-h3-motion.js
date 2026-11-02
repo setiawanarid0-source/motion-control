@@ -10,13 +10,13 @@ const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
 export const H3_REVISION='motion-transfer-native-1080-v6';
-// Promoted after the original 361-frame clip and a changed-reference trial.
-// Keep the tested graph: one native photo, one shared photo-derived caption,
-// four-step character model and five aligned generated continuation frames.
+// The owner's v6 retest failed. Retain its profile until a replacement passes
+// the current-photo, changed-reference and complete-duration visual checks;
+// application tests or short screens alone cannot approve a replacement.
 export const H3_DEFAULT_PROFILE='guide-dmad4-character-caption';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
-const nativeGlobalProfile=profile=>['native-fun-global4-face-attributes','native-fun-global8-face-attributes'].includes(profile);
+const nativeGlobalProfile=profile=>['native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-photo-inventory-check'].includes(profile);
 const nativeFaceProfile=profile=>['native-fun-retarget4-face-performance','native-fun-retarget4-face-guard'].includes(profile)||nativeGlobalProfile(profile);
 const nativeVisualProfile=profile=>profile==='native-fun-retarget4-visual'||nativeFaceProfile(profile);
 const nativePoseProfile=profile=>['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption'].includes(profile)||nativeVisualProfile(profile);
@@ -217,6 +217,10 @@ export async function prepareH3Reference(file,outputPath){
 
 export function h3ExecutionPlan(source){
   const segments=validateSource(source);
+  if(source.inferenceProfile==='native-photo-inventory-check')return {revision:H3_REVISION,
+    inferenceProfile:source.inferenceProfile,diagnosticOnly:true,sampling:null,samplerCount:0,
+    appearanceCaptionModel:NATIVE_POSE_MODELS.caption,referenceColor:source.referenceColor||null,
+    output:null,postDecodeResize:false,postRefinement:false};
   return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
     inferenceProfile:source.inferenceProfile||H3_DEFAULT_PROFILE,
     sampling:h3SamplingPlan(source),
@@ -274,11 +278,18 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
-  if(nativePoseProfile(profile))return nativePoseCandidateGraph({imageName,videoName,source,segments,
+  if(nativePoseProfile(profile)){
+    const graph=nativePoseCandidateGraph({imageName,videoName,source,segments,
     recipe:['native-fun-pose8-caption','native-fun-global8-face-attributes'].includes(profile)?'dmd8':'native4',
     retarget:profile==='native-fun-retarget4-caption'||nativeVisualProfile(profile),visualDetails:nativeVisualProfile(profile),
     facePerformance:nativeFaceProfile(profile),faceGuard:profile==='native-fun-retarget4-face-guard'||nativeGlobalProfile(profile),
     attributes:nativeGlobalProfile(profile),globalAttention:nativeGlobalProfile(profile),diagnostics:source.diagnosticOutputs===true});
+    if(profile==='native-photo-inventory-check'){
+      if(source.diagnosticOutputs!==true)throw Error('Photo inventory is a private diagnostic only.');
+      return Object.fromEntries(['30','85','86','495'].map(id=>[id,graph[id]]));
+    }
+    return graph;
+  }
   if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const ffp=['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(profile);
