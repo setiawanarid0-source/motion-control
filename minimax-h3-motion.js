@@ -16,7 +16,7 @@ export const H3_REVISION='motion-transfer-native-1080-v6';
 export const H3_DEFAULT_PROFILE='guide-dmad4-character-caption';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
-const nativeGlobalProfile=profile=>['native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-photo-inventory-check'].includes(profile);
+const nativeGlobalProfile=profile=>['native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo','native-photo-inventory-check'].includes(profile);
 const nativeFaceProfile=profile=>['native-fun-retarget4-face-performance','native-fun-retarget4-face-guard'].includes(profile)||nativeGlobalProfile(profile);
 const nativeVisualProfile=profile=>profile==='native-fun-retarget4-visual'||nativeFaceProfile(profile);
 const nativePoseProfile=profile=>['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption'].includes(profile)||nativeVisualProfile(profile);
@@ -228,7 +228,8 @@ export function h3ExecutionPlan(source){
     ...(source.inferenceProfile==='native-fun-retarget4-face-guard'||nativeGlobalProfile(source.inferenceProfile)?{faceCropValidation:'exact_source_frame_count_and_256_square'}:{}),
     ...(nativeGlobalProfile(source.inferenceProfile)?{nativeWindowFrames:362,appearanceCaptionScope:'visible_hair_outfit_accessories_scene_only_no_body_description'}:{}),
     referenceFace:source.referenceFace||null,
-    attentionConditioning:nativeGlobalProfile(source.inferenceProfile)?'sol_all_steps_exact_reference_kv_dense_blocks_0_1':
+    attentionConditioning:source.inferenceProfile==='native-fun-global4-warm-photo'?'sol_after_20pct_exact_reference_kv_dense_blocks_0_1':
+      nativeGlobalProfile(source.inferenceProfile)?'sol_all_steps_exact_reference_kv_dense_blocks_0_1':
       nativePoseProfile(source.inferenceProfile)?'native_full_attention':h3AttentionConditioning(source),
     guidePhotoCopyResized:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE),
     guideAppearance:nativeFaceProfile(source.inferenceProfile)?'pose_and_face_performance_with_generated_continuation':
@@ -283,7 +284,8 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     recipe:['native-fun-pose8-caption','native-fun-global8-face-attributes'].includes(profile)?'dmd8':'native4',
     retarget:profile==='native-fun-retarget4-caption'||nativeVisualProfile(profile),visualDetails:nativeVisualProfile(profile),
     facePerformance:nativeFaceProfile(profile),faceGuard:profile==='native-fun-retarget4-face-guard'||nativeGlobalProfile(profile),
-    attributes:nativeGlobalProfile(profile),globalAttention:nativeGlobalProfile(profile),diagnostics:source.diagnosticOutputs===true});
+    attributes:nativeGlobalProfile(profile),globalAttention:nativeGlobalProfile(profile),diagnostics:source.diagnosticOutputs===true,
+    warmStart:profile==='native-fun-global4-warm-photo'?.2:0});
     if(profile==='native-photo-inventory-check'){
       if(source.diagnosticOutputs!==true)throw Error('Photo inventory is a private diagnostic only.');
       return Object.fromEntries(['30','85','86','495'].map(id=>[id,graph[id]]));

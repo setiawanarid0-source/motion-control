@@ -214,6 +214,23 @@ expiring route can read its own text; ordinary task text and raw provider
 payloads never enter the timing log. This reproduces the inventory with the
 same input/settings; it does not recover an unrecorded historical output.
 
+Inventory task `2117287686293516290` executed without video samplers and
+returned its text both through the private execution callback and SaveText.
+It explicitly describes no jewelry on the fingers or wrists, and a thin gold
+necklace. This reproduction does not explain the silver wrist accessory and
+does not justify blaming the caption. The descriptor incorrectly calls the
+partly visible setting an office, so scene categories remain untrusted labels;
+the native image, rather than the generated description, is the scene reference.
+
+The next private comparison, `native-fun-global4-warm-photo`, changes only the
+sparse start fraction from 0 to 0.2. This restores a dense opening evaluation,
+as recommended in the native attention documentation, before the accelerated
+evaluations. The base/student, sampler, pose fit, face input, caption, seed and
+export are held constant. This is not yet evidence of appearance fidelity or
+acceptable full-duration timing. A new 0–3.5 s fixture specifically includes
+the early frames where the unrequested watch first appeared; both that fixture
+and a changed-photo fixture must be checked before its full-duration admission.
+
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
 v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,

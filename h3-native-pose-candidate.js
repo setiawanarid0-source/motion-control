@@ -13,13 +13,14 @@ export const NATIVE_POSE_MODELS=Object.freeze({
 });
 const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
   !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
-export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false,attributes=false,globalAttention=false,diagnostics=true}){
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false,attributes=false,globalAttention=false,diagnostics=true,warmStart=0}){
   if(!['native4','dmd8'].includes(recipe))throw Error('Invalid pose sampling recipe');
   if(visualDetails&&!retarget)throw Error('Detailed pose needs whole-sequence retargeting');
   if(facePerformance&&!visualDetails)throw Error('Face performance needs the detailed pose candidate');
   if(faceGuard&&!facePerformance)throw Error('Face guard needs the facial performance candidate');
   if(attributes&&!faceGuard)throw Error('Attribute inventory needs guarded face performance');
   if(globalAttention&&!attributes)throw Error('Global native shot needs the guarded attribute recipe');
+  if(![0,.2].includes(warmStart)||warmStart&&!globalAttention)throw Error('Invalid sparse attention warmup');
   const dmd8=recipe==='dmd8';
   if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
   for(const key of Object.keys(NATIVE_POSE_MODELS))if(!fileName(models[key])||!models[key].endsWith('.safetensors'))
@@ -43,7 +44,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
   if(dmd8)add(8,'MiniMaxH3SigmaShift',{model:['6',0],shift_video:12,shift_audio:3});
   if(globalAttention){
     add(9,'ModelAttentionBackend',{model:[dmd8?'8':'6',0],attention:'comfy kitchen attention'});
-    add(10,'BlockSparseAttention',{model:['9',0],selection:'sol-attn','selection.tau':1,start_percent:0,end_percent:1,
+    add(10,'BlockSparseAttention',{model:['9',0],selection:'sol-attn','selection.tau':1,start_percent:warmStart,end_percent:1,
       dense_blocks:'0,1',min_tokens:12288,extra_tokens:256,sink_conditioning:'exact_kv',verbose:true},
       'Experimental full-shot acceleration; exact reference KV, dense first two blocks; visual QA required');
   }

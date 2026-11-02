@@ -69,7 +69,15 @@ const TRIALS=Object.freeze({
   'native-global8-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa026',profile:'native-fun-global8-face-attributes'},
   'native-inventory-photo-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa027',profile:'native-photo-inventory-check',media:{
     image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
-    video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}}
+    video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}},
+  'native-warm4-accessory3-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa028',profile:'native-fun-global4-warm-photo',media:{
+    image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+    video:'5cfd3532a75987f0a72416cde44bd452403bb0ab5bfe3d0f216d28ebda4d4ded'}},
+  'native-warm4-reference3-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa029',profile:'native-fun-global4-warm-photo',
+    imageName:'h3-consistency-reference.png',imageType:'image/png',media:{
+      image:'d28ac156ed7f71730a9b98acbd917b3a90b8ac8b1ec2b2d81606b0bd758711b8',
+      video:'5cfd3532a75987f0a72416cde44bd452403bb0ab5bfe3d0f216d28ebda4d4ded'}},
+  'native-warm4-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa030',profile:'native-fun-global4-warm-photo'}
 });
 const MEDIA=Object.freeze({
   image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
@@ -161,7 +169,7 @@ export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancel
     let failure=null;
     if(task?.status==='failed'&&diagnoseTask)try{failure=await diagnoseTask(task.taskId);}catch{}
     let qaOutputs=[];
-    if(task?.status==='success'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-photo-inventory-check'].includes(trial.profile)&&
+    if(task?.status==='success'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo','native-photo-inventory-check'].includes(trial.profile)&&
       consistencyH3Profile(job)===trial.profile&&getDiagnosticOutputs)
       try{qaOutputs=await getDiagnosticOutputs(task);}catch{}
     const caption=trial.profile==='native-photo-inventory-check'&&consistencyH3Profile(job)===trial.profile&&task&&getDiagnosticText?

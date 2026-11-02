@@ -162,6 +162,12 @@ assert.deepEqual(Object.keys(inventory).sort(),['30','85','86','495'].sort());
 for(const id of Object.keys(inventory))assert.deepEqual(inventory[id],global[id],'Inspect the same inventory settings used by the real recipe');
 assert.equal(h3ExecutionPlan(inventorySource).samplerCount,0);assert.equal(h3ExecutionPlan(inventorySource).diagnosticOnly,true);
 assert.throws(()=>h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:{...inventorySource,diagnosticOutputs:false}}),/private diagnostic/);
+const warmSource={...globalSource,inferenceProfile:'native-fun-global4-warm-photo'};
+const warm=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:warmSource});
+const expectedWarm=structuredClone(global);expectedWarm['10'].inputs.start_percent=.2;
+assert.deepEqual(warm,expectedWarm,'Warmup comparison changes only the sparse schedule, preserving every input, caption, pose, seed and model');
+assert.equal(h3ExecutionPlan(warmSource).attentionConditioning,'sol_after_20pct_exact_reference_kv_dense_blocks_0_1');
+for(const [id,node] of Object.entries(warm))assert.equal(h3NodeClass(id,h3ExecutionPlan(warmSource)),node.class_type,'Warm native timing node '+id);
 for(let n=6;n<=1440;n++){
  const parts=h3Segments(n,[],22,362);let cursor=0;
  for(const p of parts){assert.equal(p.start,cursor);assert.ok(p.modelFrames<=362);cursor+=p.length;}
