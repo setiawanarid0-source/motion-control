@@ -26,6 +26,7 @@ import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-vide
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {H3_DEFAULT_PROFILE,prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
+import {selectFinalVideoOutput} from './runninghub-output.js';
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
 import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h3-safe-benchmark.js';
 import {longH3Profile,longH3Result,longH3ModelChoices,runLongH3Deployment} from './h3-long-benchmark.js';
@@ -196,7 +197,7 @@ function writeTaskState(taskId,result){
     deliveryNote:result.deliveryNote||null};
   if(result.state==='success'){
     const outputs=Array.isArray(result.outputs)?result.outputs:[];
-    const video=outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
+    const video=selectFinalVideoOutput(outputs);
     const mask=outputs.find(x=>String(x.nodeId)==='394');
     patch.resultUrl=video?.fileUrl||null;
     patch.referenceMaskUrl=mask?.fileUrl||null;
@@ -238,8 +239,7 @@ async function runningHubTaskState(taskId,account,accountId){
     const outputs=data.data.map(x=>({fileUrl:x.fileUrl,fileType:x.fileType,nodeId:x.nodeId??null})).filter(x=>x.fileUrl);
     // RunningHub generates native 40 FPS frames within Current / R4 Full workflows.
     // The website never runs an additional post-generation FPS conversion.
-    const video=outputs.find(x=>String(x.nodeId)==='490')
-      ||outputs.find(x=>/video/i.test(String(x.fileType||''))||/\.mp4(?:\?|$)/i.test(String(x.fileUrl||'')));
+    const video=selectFinalVideoOutput(outputs);
     if(video){
       const qa=await cameraStatus(taskId,video.fileUrl,accountId);
       if(qa)return {...qa,rawCode:code,providerRuntimeSeconds:providerExecutionSeconds(data)};
@@ -554,7 +554,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
     if(validation){
-      if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual'].includes(h3Source?.inferenceProfile))
+      if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance'].includes(h3Source?.inferenceProfile))
         console.info('H3 native pose model validation',JSON.stringify(poseValidationSummary(data)));
       if(['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-character-caption'].includes(h3Source?.inferenceProfile))
         console.info('H3 consistency model validation',JSON.stringify(consistencyModelChoices(data)));
@@ -590,8 +590,8 @@ installConsistencyTrial({app,upload,queue:generationQueue,rootDir:DATA_DIR,getTa
   getDiagnosticOutputs:async task=>{
     const response=await rhJson('/task/openapi/outputs',task.key,{apiKey:task.key,taskId:task.taskId},30000);
     return (Array.isArray(response?.data)?response.data:[])
-      .filter(x=>['492','493'].includes(String(x.nodeId))&&typeof x.fileUrl==='string'&&/^https:\/\//.test(x.fileUrl))
-      .slice(0,4).map(x=>({nodeId:String(x.nodeId),fileUrl:x.fileUrl}));
+      .filter(x=>['492','493','494'].includes(String(x.nodeId))&&typeof x.fileUrl==='string'&&/^https:\/\//.test(x.fileUrl))
+      .slice(0,5).map(x=>({nodeId:String(x.nodeId),fileUrl:x.fileUrl,fileType:x.fileType}));
   },
   diagnoseTask:async id=>{
     const task=taskRegistry.get(id);
@@ -1013,10 +1013,7 @@ async function resolveTaskVideoUrl(account, taskId) {
     err.statusCode = 409;
     throw err;
   }
-  const output = data.data.find(x => String(x.nodeId) === '490')
-    ||data.data.find(x => String(x.nodeId) === '393')
-    ||data.data.find(x => String(x.fileType||'').toLowerCase().includes('video') || /\.mp4(?:\?|$)/i.test(String(x.fileUrl || '')))
-    ||data.data[0];
+  const output = selectFinalVideoOutput(data.data)||data.data[0];
   const fileUrl = String(output?.fileUrl || '');
   if (!/^https?:\/\//i.test(fileUrl)) {
     const err = new Error('URL hasil video tidak valid.');

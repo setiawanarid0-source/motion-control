@@ -1,6 +1,7 @@
 // Candidate for controlled GPU screening; not the ordinary generation default.
-// Source RGB reaches only pose extraction. Appearance comes from the current
-// native photo; continuation guides contain generated frames, never source RGB.
+// Full source RGB reaches pose analysis only. An optional, private face-crop
+// reference tests facial acting; it is never a full-frame appearance guide.
+// Continuation guides contain generated frames, never source RGB.
 export const NATIVE_POSE_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   clip:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
@@ -12,9 +13,10 @@ export const NATIVE_POSE_MODELS=Object.freeze({
 });
 const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
   !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
-export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false}){
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false}){
   if(!['native4','dmd8'].includes(recipe))throw Error('Invalid pose sampling recipe');
   if(visualDetails&&!retarget)throw Error('Detailed pose needs whole-sequence retargeting');
+  if(facePerformance&&!visualDetails)throw Error('Face performance needs the detailed pose candidate');
   const dmd8=recipe==='dmd8';
   if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
   for(const key of Object.keys(NATIVE_POSE_MODELS))if(!fileName(models[key])||!models[key].endsWith('.safetensors'))
@@ -53,7 +55,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       'Keep the camera behaviour and performance timing of the pose sequence. Add no accessories or objects, no smoothing, beauty changes or invented wardrobe. '+
       'Output only the caption using actual visible image attributes, no Markdown or prefatory explanation.'});
   }
-  const appearancePrompt=visualDetails?
+  let appearancePrompt=visualDetails?
     'Animate the same person and complete scene in <Picture 1>, following the aligned pose sequence at the same times. '+
     '<Picture 1> alone defines the face, facial geometry, hair, unaltered body proportions, outfit, fabric weave, skin detail, '+
     'accessories, background, colours and lighting. Retain these visible photographic attributes. '+
@@ -61,6 +63,10 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
     'Preserve the intensity and timing of the facial acting; do not hold the still photo\'s neutral expression. '+
     'Do not reshape, beautify, smooth or restyle the person. Add no objects or accessories. '+
     'Keep exposure, colour temperature, garment material and scene illumination continuous throughout.': ['86',0];
+  if(facePerformance)appearancePrompt+=' <Video 1> is a tightly cropped facial performance at the matching times. '+
+    'Transfer its mouth movement, eye movements, gaze and facial expression to the person in <Picture 1>. '+
+    'The facial performance is not an appearance reference: retain <Picture 1>\'s face, hair, skin, makeup and lighting. '+
+    'Preserve the performance\'s mouth opening and expression changes instead of keeping the still photo\'s neutral expression.';
   add(40,'KSamplerSelect',{sampler_name:dmd8?'euler':'res_multistep'});
   if(retarget){
     // One whole-sequence fit prevents a different body-ratio solve at every join.
@@ -83,10 +89,10 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       print_detailed_logs:false,anchor_output_mode:'single_frame_multi_person'},
       'Fit photo bone proportions once; retain source head, hand and root motion without stabilization');
     if(visualDetails){
-      const draw=(id,keypoints)=>add(id,'BodyRatioMapperSDPoseRender',{pose_keypoint:keypoints,resolution_x:source.canvasWidth,
-        score_threshold:.3,scale_for_xinsir:false,stick_width:4,face_point_size:2,draw_face:true,draw_mouth:true,
+      const draw=(id,keypoints,drawFace=true)=>add(id,'BodyRatioMapperSDPoseRender',{pose_keypoint:keypoints,resolution_x:source.canvasWidth,
+        score_threshold:.3,scale_for_xinsir:false,stick_width:4,face_point_size:2,draw_face:drawFace,draw_mouth:drawFace,
         draw_hands:true,draw_feet:true,draw_thigh:true,draw_calf:true});
-      draw(68,['67',0]);draw(73,['66',0]);
+      draw(68,['67',0],!facePerformance);draw(73,['66',0]);
       const first=add(75,'ImageFromBatch',{image:['61',0],batch_index:0,length:1});
       const firstBoxes=add(76,'RTDETR_detect',{model:['17',0],image:first,threshold:.5,class_name:'person',max_detections:1});
       add(77,'SDPoseKeypointExtractor',{model:['16',0],vae:['16',2],image:first,bboxes:firstBoxes,batch_size:1});
@@ -96,6 +102,13 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       add(72,'ImageBatch',{image1:raw,image2:mapped});
       add(492,'SaveImage',{images:['72',0],filename_prefix:'VANTA-NATIVE-POSE-QA-raw-mapped'});
       add(493,'SaveImage',{images:['73',0],filename_prefix:'VANTA-NATIVE-POSE-QA-photo'});
+      if(facePerformance){
+        add(78,'SDPoseFaceBBoxes',{keypoints:['63',0],scale:1,force_square:false});
+        add(79,'CropByBBoxes',{image:['61',0],bboxes:['78',0],output_width:256,output_height:256,padding:0,keep_aspect:'pad'},
+          'Private candidate: verify crop excludes accessories and retains every source frame before any promotion');
+        add(494,'VHS_VideoCombine',{images:['79',0],frame_rate:24,loop_count:0,filename_prefix:'VANTA-FACE-PERFORMANCE-QA',
+          format:'video/h264-mp4',pix_fmt:'yuv420p',crf:16,save_metadata:false,trim_to_audio:false,pingpong:false,save_output:true,no_preview:false});
+      }
     }else add(68,'SDPoseDrawKeypoints',{keypoints:['67',0],draw_body:true,draw_hands:true,draw_face:true,
       draw_feet:true,stick_width:4,face_point_size:2,score_threshold:.5,draw_head:true});
   }
@@ -127,9 +140,18 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
     }
     const model=add(b+8,'MiniMaxH3FunControlNetApply',{model:[dmd8?'8':'6',0],model_patch:['13',0],vae:['3',0],
       strength:1,start_percent:0,end_percent:1,control_video:pose},'Trained native pose control; no source RGB or inpaint source');
+    let faceClip=null;
+    if(facePerformance){
+      faceClip=add(b+23,'ImageFromBatch',{image:['79',0],batch_index:s.loadStart,length:s.inputFrames});
+      if(s.modelFrames>s.inputFrames){
+        const last=add(b+24,'ImageFromBatch',{image:faceClip,batch_index:s.inputFrames-1,length:1});
+        const pad=add(b+25,'RepeatImageBatch',{image:last,amount:s.modelFrames-s.inputFrames});
+        faceClip=add(b+26,'ImageBatch',{image1:faceClip,image2:pad});
+      }
+    }
     let positive=add(b+9,'MiniMaxH3ReferenceToVideo',{clip:['2',0],vae:['3',0],audio_vae:['4',0],
       prompt:appearancePrompt,width:source.canvasWidth,height:source.canvasHeight,length:s.modelFrames,ref_image_size:'max',
-      'ref_images.ref_image_1':['31',0]});
+      'ref_images.ref_image_1':['31',0],...(facePerformance?{'ref_videos.ref_video_1':faceClip}:{})});
     const schedule=add(b+10,'BasicScheduler',{model,scheduler:'simple',steps:dmd8?8:4,denoise:1});
     if(previous){
       const context=add(b+11,'ImageFromBatch',{image:previous.image,batch_index:previous.lastFrame-s.contextFrames+1,length:s.contextFrames});

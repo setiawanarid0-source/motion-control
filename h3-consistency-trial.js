@@ -42,7 +42,11 @@ const TRIALS=Object.freeze({
   'native-visual4-screen2-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa016',profile:'native-fun-retarget4-visual',media:{
     image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
     video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}},
-  'native-visual4-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa017',profile:'native-fun-retarget4-visual'}
+  'native-visual4-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa017',profile:'native-fun-retarget4-visual'},
+  'native-face4-screen2-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa018',profile:'native-fun-retarget4-face-performance',media:{
+    image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+    video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}},
+  'native-face4-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa019',profile:'native-fun-retarget4-face-performance'}
 });
 const MEDIA=Object.freeze({
   image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
@@ -134,7 +138,7 @@ export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancel
     let failure=null;
     if(task?.status==='failed'&&diagnoseTask)try{failure=await diagnoseTask(task.taskId);}catch{}
     let qaOutputs=[];
-    if(task?.status==='success'&&trial.profile==='native-fun-retarget4-visual'&&
+    if(task?.status==='success'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance'].includes(trial.profile)&&
       consistencyH3Profile(job)===trial.profile&&getDiagnosticOutputs)
       try{qaOutputs=await getDiagnosticOutputs(task);}catch{}
     res.json({jobId:trial.jobId,stage:job?.stage||'not_staged',error:job?.error||null,

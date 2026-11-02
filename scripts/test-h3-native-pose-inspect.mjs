@@ -30,6 +30,10 @@ const visualGraph=nativePoseValidationGraph('visual');
 assert.equal(visualGraph['5'].inputs.name,POSE_PROBE_MARKER);
 assert.equal(visualGraph['20'].class_type,'BodyRatioMapperSDPoseRender');
 assert.deepEqual(visualGraph['20'].inputs.pose_keypoint,['23',0]);
+const faceGraph=nativePoseValidationGraph('face');
+assert.equal(faceGraph['5'].inputs.name,POSE_PROBE_MARKER);
+assert.equal(faceGraph['24'].class_type,'SDPoseFaceBBoxes');assert.equal(faceGraph['25'].class_type,'CropByBBoxes');
+assert.deepEqual(faceGraph['8'].inputs['ref_videos.ref_video_1'],['25',0]);
 assert.throws(()=>nativePoseValidationGraph('render'));
 assert.equal(poseValidationSummary({code:0,data:{taskId:'2117000000000000001'}}).status,'unexpected_acceptance');
 const reject={code:1,msg:JSON.stringify({result:false,error:{type:'prompt_outputs_failed_validation'},node_errors:{5:{
@@ -66,11 +70,14 @@ try{
  await fetch(url+'/validate-retarget',{method:'POST',headers});assert.equal(calls,3);
  const visualReport=await (await fetch(url+'/validate-visual',{method:'POST',headers})).json();
  assert.equal(visualReport.status,'rejected_before_execution');assert.equal(calls,4);
+ const faceReport=await (await fetch(url+'/validate-face',{method:'POST',headers})).json();
+ assert.equal(faceReport.status,'rejected_before_execution');assert.equal(calls,5);
+ await fetch(url+'/validate-face',{method:'POST',headers});assert.equal(calls,5);
  // A new process with the same durable checkpoint must not send another request.
  await new Promise(r=>server.close(r));const app2=express();installNativePoseInspection({...options,app:app2});
  server=app2.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  await fetch('http://127.0.0.1:'+server.address().port+'/api/internal/h3-native-pose-inspect/validate',{method:'POST',headers});
- assert.equal(calls,4);
+ assert.equal(calls,5);
  const disabled=express();installNativePoseInspection({...options,app:disabled,hash:''});
  console.log('PASS: native pose-only validation graph, required invalid patch, private task scope, no credential leakage and durable once-only provider check');
 }finally{if(server)await new Promise(r=>server.close(r));await fs.rm(dir,{recursive:true,force:true});}

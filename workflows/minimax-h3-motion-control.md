@@ -78,6 +78,23 @@ For longer clips its generated continuation is 22 frames and is discarded only
 as overlap, exporting every requested frame once. Full-duration continuity and
 actual visual quality remain unvalidated; this is not the ordinary default.
 
+The detailed visual screen `2117235194000134145` completed 48 native
+1080×1936 frames in 168 provider seconds. The saved raw/mapped skeletons differ,
+confirming that retargeting ran on this fixture. It remains rejected: facial
+acting is weak and an invented prolonged blink appears in the short output.
+The native photo-only prompt and pose path have not validated full-duration
+lighting, material fidelity or the speed target. No full-duration task was started.
+
+The next private `native-fun-retarget4-face-performance` candidate supplies a
+tightly bounded, tracked facial crop in native Ref2VA's video slot. Pose still
+controls the body, while the current photo alone defines complete appearance.
+It omits low-confidence facial dots from the pose raster to avoid conflicting
+facial controls. This is a test of expression transfer, not a guarantee that
+face appearance cannot leak. Before any full run, inspect every crop frame for
+accessories, verify exact count/FPS, and check generated facial identity and
+acting. `CropByBBoxes` can skip missing detections; this private candidate must
+not become a general default without a frame-preserving missing-face policy.
+
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
 v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,

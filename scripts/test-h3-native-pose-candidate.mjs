@@ -90,5 +90,23 @@ assert.equal(visualFrames,361);assert.equal(Object.values(visual).filter(n=>n.cl
 const visualPlan=h3ExecutionPlan(visualSource);
 assert.equal(visualPlan.appearanceCaptionModel,null);assert.equal(visualPlan.sampling.steps,4);
 for(const [id,node] of Object.entries(visual))assert.equal(h3NodeClass(id,visualPlan),node.class_type,'Detailed pose timing node '+id);
+const faceSource={...full,inferenceProfile:'native-fun-retarget4-face-performance'};
+const face=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:faceSource});
+assert.deepEqual(face['79'].inputs.image,['61',0]);assert.equal(face['78'].inputs.scale,1);
+assert.equal(face['79'].inputs.padding,0);assert.equal(face['79'].inputs.keep_aspect,'pad');
+assert.equal(face['68'].inputs.draw_face,false,'Low-confidence facial dots must not compete with the facial performance');
+assert.deepEqual(face['494'].inputs.images,['79',0]);
+for(const [i,s] of h3Segments(361,[],22).entries()){
+ const b=1000+30*i;
+ assert.deepEqual(face[b+23].inputs,{image:['79',0],batch_index:s.loadStart,length:s.inputFrames});
+ assert.deepEqual(face[b+9].inputs['ref_videos.ref_video_1'],[String(b+(s.modelFrames>s.inputFrames?26:23)),0]);
+ assert.equal(face[b+9].inputs.prompt.includes('<Video 1>'),true);
+ if(s.modelFrames>s.inputFrames)assert.equal(face[b+25].inputs.amount,s.modelFrames-s.inputFrames,
+   'Pad face/control to the same native grid so the encoder does not discard the final performance frames');
+ assert.deepEqual(face[b+8].inputs.control_video,visual[b+8].inputs.control_video);
+}
+const facePlan=h3ExecutionPlan(faceSource);
+assert.equal(facePlan.guideAppearance,'pose_and_face_performance_with_generated_continuation');
+for(const [id,node] of Object.entries(face))assert.equal(h3NodeClass(id,facePlan),node.class_type,'Face performance timing node '+id);
 assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption');
 console.log('PASS: pose-only source conditioning, current native photo, shared caption, matched model paths, generated-only continuation, exact frames/audio and no output resize/refinement; GPU quality remains unvalidated');
