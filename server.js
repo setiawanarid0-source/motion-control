@@ -573,6 +573,10 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 installConsistencyTrial({app,upload,queue:generationQueue,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),
+  diagnoseTask:async id=>{
+    const task=taskRegistry.get(id);
+    return extractTaskFailure(await rhJson('/task/openapi/outputs',task.key,{apiKey:task.key,taskId:id},30000));
+  },
   cancelTask:async id=>{
     const task=taskRegistry.get(id);
     const result=await rhJson('/task/openapi/cancel',task.key,{apiKey:task.key,taskId:id},30000);

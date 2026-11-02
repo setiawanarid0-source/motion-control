@@ -71,7 +71,7 @@ export function consistencyModelChoices(response){
       errors:(node.errors||[]).slice(0,5).map(e=>({type:String(e.type||'').slice(0,80),
         message:String(e.message||'').slice(0,160),details:String(e.details||'').slice(0,500)}))}))};
 }
-export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancelTask,hash,expires}){
+export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancelTask,diagnoseTask,hash,expires}){
   // Registered before owner login solely for this separate expiring credential.
   // With no deployment gate, these routes do not exist.
   if(!/^[a-f0-9]{64}$/.test(String(hash||''))||!Number.isFinite(Date.parse(expires)))return;
@@ -96,10 +96,13 @@ export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancel
     catch(error){res.status(400).json({error:error.message});}
     finally{for(const file of [image,video])if(file?.path)await fs.rm(file.path,{force:true}).catch(()=>{});}
   });
-  app.get(route,authorized,(req,res)=>{
+  app.get(route,authorized,async(req,res)=>{
     const trial=TRIALS[req.params.caseName],job=queue.read(trial.jobId);
     const task=job?.task?.taskId?getTask(String(job.task.taskId)):null;
+    let failure=null;
+    if(task?.status==='failed'&&diagnoseTask)try{failure=await diagnoseTask(task.taskId);}catch{}
     res.json({jobId:trial.jobId,stage:job?.stage||'not_staged',error:job?.error||null,
+      failure,
       task:task?{taskId:task.taskId,status:task.status,providerRuntimeSeconds:task.providerRuntimeSeconds??null,
         resultUrl:task.resultUrl||null,error:task.error||null}:null});
   });
