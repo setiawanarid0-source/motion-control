@@ -508,6 +508,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   if(workflowKey==='minimaxH3'&&!h3Source?.file)
     throw Error('Metadata video sumber H3 belum tervalidasi.');
   if(workflowKey==='minimaxH3'&&mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus.');
+  if(workflowKey==='minimaxH3')h3Source={...h3Source,inferenceProfile:h3Source.inferenceProfile||H3_DEFAULT_PROFILE};
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey,
     workflowKey==='minimaxH3'?(h3Source.referenceFile||imageFile):imageFile);
   const videoName = await uploadToRunningHub(apiKey, workflowKey==='minimaxH3'?h3Source.file:videoFile);

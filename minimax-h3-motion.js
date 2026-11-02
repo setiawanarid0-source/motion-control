@@ -8,8 +8,8 @@ import {validUploadedH3Lora} from './h3-appearance-model.js';
 const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
-export const H3_REVISION='motion-transfer-native-1080-v5';
-export const H3_DEFAULT_PROFILE='guide-dmad4-focus';
+export const H3_REVISION='motion-transfer-native-1080-v6';
+export const H3_DEFAULT_PROFILE='guide-dmad4-character-caption';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
 const continuityProfile=profile=>photoGuideProfile(profile)||profile==='guide-dmad4-character-caption';
@@ -206,16 +206,16 @@ export async function prepareH3Reference(file,outputPath){
 }
 
 export function h3ExecutionPlan(source){
-  const segments=validateSource(source);
+  const segments=validateSource(source),profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
   return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
-    inferenceProfile:source.inferenceProfile||H3_DEFAULT_PROFILE,
+    inferenceProfile:profile,
     sampling:h3SamplingPlan(source),
     referenceFace:source.referenceFace||null,
     attentionConditioning:h3AttentionConditioning(source),
-    guidePhotoCopyResized:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE),
-    guideAppearance:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?'photo_first_frame_then_generated_overlap':
-      source.inferenceProfile==='guide-dmad4-character-caption'?'source_rgb_then_generated_overlap':'source_rgb_with_generated_keyframe',
-    appearanceCaptionModel:source.inferenceProfile==='guide-dmad4-character-caption'?'qwen3.5_9b_w4a8_gptq.safetensors':null,
+    guidePhotoCopyResized:photoGuideProfile(profile),
+    guideAppearance:photoGuideProfile(profile)?'photo_first_frame_then_generated_overlap':
+      profile==='guide-dmad4-character-caption'?'source_rgb_then_generated_overlap':'source_rgb_with_generated_keyframe',
+    appearanceCaptionModel:profile==='guide-dmad4-character-caption'?'qwen3.5_9b_w4a8_gptq.safetensors':null,
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames,contextFrames:s.contextFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
@@ -269,7 +269,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   add(6,'LoraLoaderModelOnly',{model:[profile==='legacy-training-adapter'?'5':'1',0],lora_name:sampling.turbo,strength_model:1});
   if(character&&!source.appearanceLoraFile)throw Error('File model karakter H3 tidak valid.');
   if((ffp||character)&&source.appearanceLoraFile){
-    if(!validUploadedH3Lora(source.appearanceLoraFile))throw Error('File model H3 FFP tidak valid.');
+    if(!validUploadedH3Lora(source.appearanceLoraFile))throw Error('File model tampilan H3 tidak valid.');
     add(7,'RHLoraLoader',{model:['6',0],clip:['2',0],lora_name:'',file_name:source.appearanceLoraFile,
       strength_model:1,strength_clip:0},character?'SHA-verified native Character v1.1':'SHA-verified native Motion Transfer FFP v1.0');
   }else add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:ffp?H3_MODELS.motionFfp:H3_MODELS.motion,strength_model:1},ffp?'Motion Transfer FFP v1.0':'Motion Transfer v1.0');

@@ -63,22 +63,43 @@ candidateWithBackend['8'].inputs.model=['9',0];
 assert.deepEqual(kitchen,candidateWithBackend,'Attention comparison changes only the model backend branch');
 const faceFocus={x:192,y:224,width:160,height:192};
 const focused=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:faceFocus}});
-assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-focus');
-const {inferenceProfile:_legacy,...normalSource}=source;
+assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption');
+const appearanceLoraFile='api-lora-usa/'+'a'.repeat(32)+'.safetensors';
+const {inferenceProfile:_legacy,...normalBase}=source;
+const normalSource={...normalBase,appearanceLoraFile};
 const normal=h3GraphForInputs(manifest,{...args,source:{...normalSource,referenceFace:faceFocus}});
-assert.deepEqual(normal,h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:H3_DEFAULT_PROFILE,referenceFace:faceFocus}}),
+assert.deepEqual(normal,h3GraphForInputs(manifest,{...args,source:{...normalSource,inferenceProfile:H3_DEFAULT_PROFILE,referenceFace:faceFocus}}),
   'Production must use the selected recipe, not just a private benchmark');
 assert.equal(h3ExecutionPlan(normalSource).inferenceProfile,H3_DEFAULT_PROFILE);
+assert.equal(h3ExecutionPlan(normalSource).appearanceCaptionModel,'qwen3.5_9b_w4a8_gptq.safetensors');
+assert.equal(h3ExecutionPlan(normalSource).guideAppearance,'source_rgb_then_generated_overlap');
+assert.equal(h3ExecutionPlan(normalSource).guidePhotoCopyResized,false);
+assert.equal(normal['7'].class_type,'RHLoraLoader');assert.equal(normal['7'].inputs.file_name,appearanceLoraFile);
+assert.equal(normal['85'].inputs.clip_name,'qwen3.5_9b_w4a8_gptq.safetensors');
+assert.deepEqual(normal['86'].inputs.image,['30',0]);
+assert.equal(Object.values(normal).filter(n=>n.class_type==='TextGenerate').length,1,'Describe the current photo once, then share it');
+assert.ok(!normal['32'],'Do not add a competing separate face reference');
+assert.ok(!Object.values(normal).some(n=>/ImageScale|Upscale|Refine|Composite|Swap|Mask/.test(n.class_type)));
+assert.throws(()=>h3GraphForInputs(manifest,{...args,source:normalBase}),/model karakter/,'Missing character weights must fail before creating a paid task');
 assert.ok(!normal['5'],'Production inference must not retain the training-only adapter');
 assert.equal(normal['41'].inputs.steps,4,'Use the matched DMAD four-step student');
 assert.equal(normal['6'].inputs.lora_name,H3_MODELS.turboDmad4);
 assert.equal(normal['40'].inputs.sampler_name,'lcm');
 assert.equal(normal['10'].inputs.sink_conditioning,'exact_kv');
-for(let i=0;i<h3Segments(source.totalFrames).length;i++){
+for(let i=0;i<h3ExecutionPlan(normalSource).samplerCount;i++){
   const b=1000+30*i;
   assert.deepEqual(normal[b+9].inputs.model,['10',0],'Every production window must use the optimized model');
-  assert.deepEqual(normal[b+4].inputs['ref_images.ref_image_2'],['32',0],'The same current identity reference reaches every window');
+  assert.deepEqual(normal[b+4].inputs['ref_images.ref_image_1'],['31',0]);
+  assert.equal(normal[b+4].inputs['ref_images.ref_image_2'],undefined);
+  assert.deepEqual(normal[b+4].inputs.prompt,['86',0],'The same current-photo description reaches every window');
 }
+const fifteenPlan=h3ExecutionPlan({...normalSource,totalFrames:361});
+assert.equal(fifteenPlan.samplerCount,3);assert.equal(fifteenPlan.sampling.steps*fifteenPlan.samplerCount,12);
+assert.deepEqual(fifteenPlan.segments.map(s=>s.contextFrames),[0,5,5]);
+const newPhoto=h3GraphForInputs(manifest,{...names,imageName:'api/replaced-photo.png',source:normalSource});
+assert.equal(newPhoto['30'].inputs.image,'api/replaced-photo.png');
+assert.deepEqual(newPhoto['86'].inputs.image,['30',0],'A changed photo must change caption input');
+assert.ok(!/gray T-shirt|black shorts|pink hair/i.test(newPhoto['86'].inputs.prompt),'No fixture outfit can be hardcoded for all photos');
 assert.equal(focused['10'].class_type,'BlockSparseAttention');
 assert.equal(focused['10'].inputs.selection,'sol-attn');
 assert.equal(focused['10'].inputs.sink_conditioning,'exact_kv_and_rows','Image/reference keys must stay exact');
@@ -189,8 +210,8 @@ for(let i=0;i<segs.length;i++){
 }
 // Interpret the actual built graph's frame operations. Check guide padding and
 // export on short cuts/non-grid tails rather than just rechecking the planner.
-for(const [frames,cuts] of [[6,[]],[107,[]],[121,[1,2,55]],[1440,[106,107,555]]]){
-  const g=h3GraphForInputs(manifest,{...names,source:{...source,totalFrames:frames,sceneCuts:cuts}}),cache=new Map();
+for(const profile of ['legacy-training-adapter',H3_DEFAULT_PROFILE])for(const [frames,cuts] of [[6,[]],[107,[]],[121,[1,2,55]],[361,[]],[1440,[106,107,555]]]){
+  const g=h3GraphForInputs(manifest,{...names,source:{...source,totalFrames:frames,sceneCuts:cuts,inferenceProfile:profile,appearanceLoraFile}}),cache=new Map();
   const values=link=>{
     const id=String(link[0]);if(cache.has(id))return cache.get(id);
     const {class_type:t,inputs:n}=g[id];let v;
@@ -204,7 +225,7 @@ for(const [frames,cuts] of [[6,[]],[107,[]],[121,[1,2,55]],[1440,[106,107,555]]]
       const sampler=g[n.samples[0]],condition=g[sampler.inputs.latent_image[0]],b=Number(sampler.inputs.latent_image[0])-4;
       v=values(g[b+5].inputs.image);
       assert.equal(v.length,condition.inputs.length,'Every guide frame survives native Add Guide');
-      const segment=h3Segments(frames,cuts).find(s=>s.loadStart===g[b].inputs.skip_first_frames);
+      const segment=h3Segments(frames,cuts,profile===H3_DEFAULT_PROFILE?5:1).find(s=>s.loadStart===g[b].inputs.skip_first_frames);
       assert.ok(v.every(x=>x<segment.start+segment.length),'Padding must not leak a frame from next model window');
     }else throw Error('Unexpected frame operation '+t);
     cache.set(id,v);return v;
@@ -227,6 +248,7 @@ const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
 const calls=[],uploads=[];let response={code:0,data:{taskId:'2113333333333333333',taskStatus:'RUNNING'}};
 const context={workflowGraphs:{minimaxH3:manifest,current:{unchanged:true}},h3GraphForInputs,
+  H3_DEFAULT_PROFILE,
   uploadToRunningHub:async(key,file)=>{uploads.push(file);return 'api/'+file.originalname;},
   runningHubInstanceType,explicitQueueMaxed,queueCapacityError,graphValidationError,
   rhJson:async(url,key,payload)=>{calls.push({url,payload});return response;}};
