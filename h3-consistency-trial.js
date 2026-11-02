@@ -9,7 +9,11 @@ const DEVICE='h3-consistency-20261102';
 const TRIALS=Object.freeze({
   'ffp-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa001',profile:'guide-dmad4-ffp'},
   'ffp-upload-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa002',profile:'guide-dmad4-ffp'},
-  'ffp-anchor-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa003',profile:'guide-dmad4-ffp'}
+  'ffp-anchor-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa003',profile:'guide-dmad4-ffp'},
+  'ffp-regression-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa004',profile:'guide-dmad4-ffp',
+    imageName:'h3-consistency-reference.png',imageType:'image/png',media:{
+      image:'d8e8e38022b6d670f0827fdb000d29f0cc793f7bbcb4d9d2a57c94e5d76d6d0f',
+      video:'bb2d5ce87ea240bff1dbd3600e58681c00a2c89bee6630f574e6bec6f9e80fc1'}}
 });
 const MEDIA=Object.freeze({
   image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
@@ -17,7 +21,7 @@ const MEDIA=Object.freeze({
 });
 export function consistencyH3Profile(job){
   const trial=Object.values(TRIALS).find(t=>t.jobId===job?.jobId);
-  return trial&&job.deviceId===DEVICE&&job.image?.originalname==='h3-consistency-reference.jpg'&&
+  return trial&&job.deviceId===DEVICE&&job.image?.originalname===(trial.imageName||'h3-consistency-reference.jpg')&&
     job.video?.originalname==='h3-consistency-driving.mp4'?trial.profile:null;
 }
 export function consistencyTrialAuthorized(token,hash,expires,now=Date.now()){
@@ -25,12 +29,13 @@ export function consistencyTrialAuthorized(token,hash,expires,now=Date.now()){
     !Number.isFinite(Date.parse(expires))||now>=Date.parse(expires))return false;
   return timingSafeEqual(createHash('sha256').update(token).digest(),Buffer.from(hash,'hex'));
 }
-export async function verifyConsistencyMedia({image,video}){
-  if(!image?.path||!video?.path||image.mimetype!=='image/jpeg'||video.mimetype!=='video/mp4')
+export async function verifyConsistencyMedia({image,video,caseName='ffp-anchor-v1'}){
+  const trial=TRIALS[caseName];
+  if(!trial||!image?.path||!video?.path||image.mimetype!==(trial.imageType||'image/jpeg')||video.mimetype!=='video/mp4')
     throw Error('Berkas uji tidak sesuai.');
   for(const [name,file] of Object.entries({image,video})){
     const bytes=await fs.readFile(file.path);
-    if(createHash('sha256').update(bytes).digest('hex')!==MEDIA[name])throw Error('Checksum berkas uji tidak sesuai.');
+    if(createHash('sha256').update(bytes).digest('hex')!==(trial.media||MEDIA)[name])throw Error('Checksum berkas uji tidak sesuai.');
   }
 }
 export async function stageConsistencyTrial({queue,rootDir,caseName,image,video,verify=verifyConsistencyMedia,
@@ -39,13 +44,13 @@ export async function stageConsistencyTrial({queue,rootDir,caseName,image,video,
   if(!trial||rootDir!=='/data')throw Error('Kasus uji tidak tersedia.');
   const old=queue.read(trial.jobId);
   if(old)return {jobId:trial.jobId,stage:old.stage,reused:true};
-  await verify({image,video});
+  await verify({image,video,caseName});
   await fs.mkdir(checkpointDir,{recursive:true,mode:0o700});
   try{await fs.writeFile(path.join(checkpointDir,trial.jobId+'.json'),
     JSON.stringify({jobId:trial.jobId,startedAt:new Date().toISOString()}),{flag:'wx',mode:0o600});}
   catch(error){if(error.code==='EEXIST')return {jobId:trial.jobId,stage:'checkpointed',reused:true};throw error;}
   return queue.stage({jobId:trial.jobId,deviceId:DEVICE,body:{workflow:'minimaxH3',mode:'plus',accountId:'auto'},
-    image:{...image,originalname:'h3-consistency-reference.jpg'},
+    image:{...image,originalname:trial.imageName||'h3-consistency-reference.jpg'},
     video:{...video,originalname:'h3-consistency-driving.mp4'}});
 }
 export function consistencyModelChoices(response){
