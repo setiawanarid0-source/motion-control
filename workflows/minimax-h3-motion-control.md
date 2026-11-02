@@ -41,6 +41,17 @@ loader-name check or treat the cancelled diagnostic as a quality render.
 
 ## Existing v6 recipe
 
+The first actual native-pose screen, task `2117225982289334273`, completed
+48 native 1080×1936 frames (2.000 s, 24 FPS) in 197 provider seconds. The source
+wrist scrunchie was absent in inspected frames, but torso proportions and fabric
+shading remained insufficiently faithful. This is a rejected visual screen,
+not a reason to promote the new candidate or start its full-duration run.
+
+One separate private `native-fun-pose8-caption` comparison uses the same exact
+photo, two-second guide and seed with the matched DMD eight-step adapter,
+Euler/simple and shifts 12/3. It tests a compatible alternative sampling recipe;
+its actual appearance and runtime remain pending. Ordinary generation is unchanged.
+
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
 v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,

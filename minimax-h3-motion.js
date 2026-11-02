@@ -16,7 +16,7 @@ export const H3_REVISION='motion-transfer-native-1080-v6';
 export const H3_DEFAULT_PROFILE='guide-dmad4-character-caption';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
-const nativePoseProfile=profile=>profile==='native-fun-pose4-caption';
+const nativePoseProfile=profile=>['native-fun-pose4-caption','native-fun-pose8-caption'].includes(profile);
 const continuityProfile=profile=>photoGuideProfile(profile)||profile==='guide-dmad4-character-caption'||nativePoseProfile(profile);
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
@@ -236,6 +236,7 @@ function h3AttentionConditioning(source){
 }
 
 export function h3SamplingPlan(source){
+  if(source.inferenceProfile==='native-fun-pose8-caption')return {steps:8,sampler:'euler',scheduler:'simple',turbo:H3_MODELS.turbo,audioShift:3};
   if(nativePoseProfile(source.inferenceProfile))return {steps:4,sampler:'res_multistep',scheduler:'simple',turbo:NATIVE_POSE_MODELS.turbo,audioShift:null};
   const dmad=['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
   // DMAD's four-step student uses re-noise sampling (LCM/simple), not an
@@ -261,7 +262,8 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
-  if(nativePoseProfile(profile))return nativePoseCandidateGraph({imageName,videoName,source,segments});
+  if(nativePoseProfile(profile))return nativePoseCandidateGraph({imageName,videoName,source,segments,
+    recipe:profile==='native-fun-pose8-caption'?'dmd8':'native4'});
   if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const ffp=['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(profile);

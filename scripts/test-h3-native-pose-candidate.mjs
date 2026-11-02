@@ -40,4 +40,15 @@ assert.equal(plan.guideAppearance,'drawn_pose_only_with_generated_continuation')
 assert.equal(plan.sampling.turbo,NATIVE_POSE_MODELS.turbo);
 assert.equal(plan.attentionConditioning,'native_full_attention');assert.equal(plan.postDecodeResize,false);
 for(const [id,node] of Object.entries(integrated))assert.equal(h3NodeClass(id,plan),node.class_type,'Accurate timing node '+id);
+const eightSource={...full,inferenceProfile:'native-fun-pose8-caption'};
+const eight=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:eightSource});
+assert.equal(eight['6'].inputs.lora_name,'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors');
+assert.deepEqual(eight['8'].inputs,{model:['6',0],shift_video:12,shift_audio:3});
+assert.equal(eight['40'].inputs.sampler_name,'euler');
+for(let i=0;i<3;i++){
+ assert.equal(eight[1010+i*30].inputs.steps,8);
+ assert.deepEqual(eight[1008+i*30].inputs.model,['8',0]);
+}
+assert.equal(h3ExecutionPlan(eightSource).sampling.steps,8);
+assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption');
 console.log('PASS: pose-only source conditioning, current native photo, shared caption, matched model paths, generated-only continuation, exact frames/audio and no output resize/refinement; GPU quality remains unvalidated');

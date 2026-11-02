@@ -12,7 +12,9 @@ export const NATIVE_POSE_MODELS=Object.freeze({
 });
 const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
   !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
-export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS}){
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4'}){
+  if(!['native4','dmd8'].includes(recipe))throw Error('Invalid pose sampling recipe');
+  const dmd8=recipe==='dmd8';
   if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
   for(const key of Object.keys(NATIVE_POSE_MODELS))if(!fileName(models[key])||!models[key].endsWith('.safetensors'))
     throw Error('Missing or invalid native pose model: '+key);
@@ -31,7 +33,8 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
   add(1,'UNETLoader',{unet_name:models.unet,weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:models.clip,type:'minimax',device:'default'});
   add(3,'VAELoader',{vae_name:models.videoVae});add(4,'VAELoader',{vae_name:models.audioVae});
-  add(6,'LoraLoaderModelOnly',{model:['1',0],lora_name:models.turbo,strength_model:1});
+  add(6,'LoraLoaderModelOnly',{model:['1',0],lora_name:dmd8?'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors':models.turbo,strength_model:1});
+  if(dmd8)add(8,'MiniMaxH3SigmaShift',{model:['6',0],shift_video:12,shift_audio:3});
   add(13,'ModelPatchLoader',{name:models.patch});
   add(16,'CheckpointLoaderSimple',{ckpt_name:models.pose});
   add(17,'UNETLoader',{unet_name:models.detector,weight_dtype:'default'});
@@ -47,7 +50,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       'Preserve the reference body proportions, clothing, fabric texture, skin detail and lighting through that motion. '+
       'Keep the camera behaviour and performance timing of the pose sequence. Add no accessories or objects, no smoothing, beauty changes or invented wardrobe. '+
       'Output only the caption using actual visible image attributes, no Markdown or prefatory explanation.'});
-  add(40,'KSamplerSelect',{sampler_name:'res_multistep'});
+  add(40,'KSamplerSelect',{sampler_name:dmd8?'euler':'res_multistep'});
   let previous=null;const exports=[];
   for(const [i,s] of segments.entries()){
     const b=1000+i*30;
@@ -64,12 +67,12 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
     const points=add(b+6,'SDPoseKeypointExtractor',{model:['16',0],vae:['16',2],image:analysis,bboxes:boxes,batch_size:4});
     const pose=add(b+7,'SDPoseDrawKeypoints',{keypoints:points,draw_body:true,draw_hands:true,draw_face:true,
       draw_feet:true,stick_width:4,face_point_size:2,score_threshold:.5,draw_head:true});
-    const model=add(b+8,'MiniMaxH3FunControlNetApply',{model:['6',0],model_patch:['13',0],vae:['3',0],
+    const model=add(b+8,'MiniMaxH3FunControlNetApply',{model:[dmd8?'8':'6',0],model_patch:['13',0],vae:['3',0],
       strength:1,start_percent:0,end_percent:1,control_video:pose},'Trained native pose control; no source RGB or inpaint source');
     let positive=add(b+9,'MiniMaxH3ReferenceToVideo',{clip:['2',0],vae:['3',0],audio_vae:['4',0],
       prompt:['86',0],width:source.canvasWidth,height:source.canvasHeight,length:s.modelFrames,ref_image_size:'max',
       'ref_images.ref_image_1':['31',0]});
-    const schedule=add(b+10,'BasicScheduler',{model,scheduler:'simple',steps:4,denoise:1});
+    const schedule=add(b+10,'BasicScheduler',{model,scheduler:'simple',steps:dmd8?8:4,denoise:1});
     if(previous){
       const context=add(b+11,'ImageFromBatch',{image:previous.image,batch_index:previous.lastFrame-s.contextFrames+1,length:s.contextFrames});
       positive=add(b+12,'MiniMaxH3AddGuide',{positive,latent:[String(b+9),1],vae:['3',0],image:context,frame_idx:0},
