@@ -13,7 +13,10 @@ const TRIALS=Object.freeze({
   'ffp-regression-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa004',profile:'guide-dmad4-ffp',
     imageName:'h3-consistency-reference.png',imageType:'image/png',media:{
       image:'d8e8e38022b6d670f0827fdb000d29f0cc793f7bbcb4d9d2a57c94e5d76d6d0f',
-      video:'bb2d5ce87ea240bff1dbd3600e58681c00a2c89bee6630f574e6bec6f9e80fc1'}}
+      video:'bb2d5ce87ea240bff1dbd3600e58681c00a2c89bee6630f574e6bec6f9e80fc1'}},
+  'ffp-private5-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa005',profile:'guide-dmad4-ffp',media:{
+    image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+    video:'1bb15f1d4d1dee8d7d28757b742f8764a0a18cc9725e603bcee938c4eb3f316a'}}
 });
 const MEDIA=Object.freeze({
   image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',

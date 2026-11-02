@@ -518,11 +518,9 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   const payload = {
     apiKey,
     workflowId,
-    // RunningHub rewrites every seed unless explicitly listed here.
-    // Pin only the isolated consistency experiment; normal requests stay unchanged.
-    nodeInfoList: workflowKey==='minimaxH3' ? (h3Source.inferenceProfile==='guide-dmad4-ffp'?
-      Object.entries(selectedGraph).filter(([,n])=>n.class_type==='RandomNoise')
-        .map(([nodeId,n])=>({nodeId,fieldName:'noise_seed',fieldValue:n.inputs.noise_seed})):[]) : [
+    // Keep RandomNoise values typed in workflow JSON. RunningHub's explicit
+    // noise_seed override arrived as str at the final sampler (task 2117100444870602753).
+    nodeInfoList: workflowKey==='minimaxH3' ? [] : [
       ...(workflowKey==='rife60'
         ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName },
            { nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps },
