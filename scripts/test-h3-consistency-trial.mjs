@@ -48,6 +48,10 @@ try{
   assert.equal(motion['7'].class_type,'LoraLoaderModelOnly');assert.match(motion['7'].inputs.lora_name,/motion_transfer_v1/);
   assert.equal(motion['41'].inputs.steps,4);assert.deepEqual(motion['1015'].inputs.image1,['34',0]);
   assert.deepEqual(motion['1045'].inputs.image1,['1036',0]);assert.deepEqual(motion['1004'].inputs['ref_images.ref_image_2'],['32',0]);
+  const ffpFace=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo.jpg',videoName:'guide.mp4',
+    source:{...source,inferenceProfile:'guide-dmad4-ffp-focus',appearanceLoraFile:file,referenceFace:{x:192,y:224,width:160,height:192}}});
+  assert.equal(ffpFace['7'].class_type,'RHLoraLoader');assert.deepEqual(ffpFace['1004'].inputs['ref_images.ref_image_2'],['32',0]);
+  assert.match(ffpFace['1004'].inputs.prompt,/^vfx_edit:/);assert.match(ffpFace['1004'].inputs.prompt,/<Picture 2> is a close-up/);
   assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-focus','Experimental path cannot change normal users before render validation');
   for(let n=6;n<=1440;n++){
     const parts=h3Segments(n,[],5);

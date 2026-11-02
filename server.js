@@ -510,7 +510,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     workflowKey==='minimaxH3'?(h3Source.referenceFile||imageFile):imageFile);
   const videoName = await uploadToRunningHub(apiKey, workflowKey==='minimaxH3'?h3Source.file:videoFile);
   if(workflowKey==='minimaxH3'){
-    if(h3Source.inferenceProfile==='guide-dmad4-ffp')
+    if(['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(h3Source.inferenceProfile))
       h3Source.appearanceLoraFile=await h3AppearanceModel.ensure(apiKey);
     selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
   }
@@ -549,7 +549,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
     if(validation){
-      if(h3Source?.inferenceProfile==='guide-dmad4-ffp')
+      if(['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(h3Source?.inferenceProfile))
         console.info('H3 consistency model validation',JSON.stringify(consistencyModelChoices(data)));
       if(h3Source?.inferenceProfile==='guide-dmad4-focus')
         console.info('H3 long model validation',JSON.stringify(longH3ModelChoices(data)));

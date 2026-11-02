@@ -11,7 +11,7 @@ export const H3_MAX_SECONDS=60;
 export const H3_REVISION='motion-transfer-native-1080-v5';
 export const H3_DEFAULT_PROFILE='guide-dmad4-focus';
 export const H3_WINDOW_FRAMES=124;
-const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(profile);
+const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   clip:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
@@ -143,7 +143,7 @@ export function h3Segments(totalFrames,sceneCuts=[],continuationFrames=1){
 }
 
 export async function prepareH3Input(file,mode,imageFile,{
-  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor'].includes(inferenceProfile)
+  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor','guide-dmad4-ffp-focus'].includes(inferenceProfile)
 }={}){
   const source=await probeH3Input(file,mode);
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-motion-'));
@@ -223,11 +223,11 @@ function h3AttentionConditioning(source){
   // Native exact_kv keeps every query's access to the reference exact. The
   // extra dense target-audio query rows are unnecessary for source-audio export.
   return source.sparseConditioningMode||
-    (['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE)?'exact_kv':'exact_kv_and_rows');
+    (['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE)?'exact_kv':'exact_kv_and_rows');
 }
 
 export function h3SamplingPlan(source){
-  const dmad=['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
+  const dmad=['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
   // DMAD's four-step student uses re-noise sampling (LCM/simple), not an
   // eight-step DMD adapter with its scheduler shortened arbitrarily.
   return {steps:dmad?4:8,sampler:dmad?'lcm':'euler',scheduler:'simple',
@@ -251,11 +251,11 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
-  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
+  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
-  const ffp=profile==='guide-dmad4-ffp';
+  const ffp=['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(profile);
   const anchored=photoGuideProfile(profile);
-  const focused=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(profile),sampling=h3SamplingPlan(source);
+  const focused=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile),sampling=h3SamplingPlan(source);
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:H3_MODELS.clip,type:'minimax',device:'default'});
@@ -298,7 +298,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       bottom:source.canvasHeight-source.outputHeight-source.padTop,feathering:0});
   }
   let face=null;
-  if(focused&&!ffp&&source.referenceFace){
+  if(focused&&(!ffp||profile==='guide-dmad4-ffp-focus')&&source.referenceFace){
     const f=source.referenceFace;
     if(!validIdentityCrop(f,source.referenceWidth,source.referenceHeight))
       throw Error('Area referensi wajah H3 tidak valid.');
@@ -317,11 +317,13 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     'while keeping the original guide body and hand motion, facial expression changes, timing, camera movement and framing. '+
     'Keep the outfit unchanged through turns and occlusions; do not restore the original performer or clothing. '+
     'Keep the natural texture and facial geometry of the picture.';
-  if(face)prompt=prompt.replace('The aligned motion guide supplies',
-    '<Picture 2> is a close-up cropped from <Picture 1>, depicting the SAME <Subject 1>, not another person. '+
+  if(face){
+    const role='<Picture 2> is a close-up cropped from <Picture 1>, depicting the SAME <Subject 1>, not another person. '+
     'Preserve its visible eyes, nose, lips, jaw and facial proportions throughout the performance. '+
     'Picture 1 supplies the whole appearance and environment; Picture 2 supplies additional facial identity only. '+
-    'It must not change the guide camera, pose or framing.\nThe aligned motion guide supplies');
+    'It must not change the guide camera, pose or framing.';
+    prompt=ffp?prompt+' '+role:prompt.replace('The aligned motion guide supplies',role+'\nThe aligned motion guide supplies');
+  }
   if(tara)prompt=prompt.replace('The aligned motion guide supplies','<Video 1> supplies');
   add(40,'KSamplerSelect',{sampler_name:sampling.sampler});
   const samplingModel=tara?'9':focused?'10':'8';

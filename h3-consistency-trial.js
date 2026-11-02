@@ -19,6 +19,9 @@ const TRIALS=Object.freeze({
     video:'1bb15f1d4d1dee8d7d28757b742f8764a0a18cc9725e603bcee938c4eb3f316a'}},
   'motion-private5-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa006',profile:'guide-dmad4-motion-anchor',media:{
     image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+    video:'1bb15f1d4d1dee8d7d28757b742f8764a0a18cc9725e603bcee938c4eb3f316a'}},
+  'ffpfocus-private5-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa007',profile:'guide-dmad4-ffp-focus',media:{
+    image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
     video:'1bb15f1d4d1dee8d7d28757b742f8764a0a18cc9725e603bcee938c4eb3f316a'}}
 });
 const MEDIA=Object.freeze({
