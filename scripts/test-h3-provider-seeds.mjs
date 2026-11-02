@@ -28,4 +28,12 @@ const character=JSON.parse(payload.workflow);assert.equal(payload.nodeInfoList.l
 assert.equal(character['7'].inputs.file_name,file);assert.equal(character['30'].inputs.image,'api/new-reference.png');
 assert.deepEqual(character['86'].inputs.image,['30',0]);assert.deepEqual(character['1004'].inputs.prompt,['86',0]);
 assert.deepEqual(provisioned,['ffp','character'],'The production default provisions the character model rather than reusing the previous task model');
+await context.createTask({apiKey:'fixture-only',workflowId:'owner-workflow',workflowKey:'minimaxH3',mode:'plus',
+  imageFile:{originalname:'native-photo.jpg'},h3Source:{...h3PhotoPlan(1143,2048),fps:24,totalFrames:361,
+    hasAudio:true,sceneCuts:[],inferenceProfile:'native-fun-pose4-caption',file:{originalname:'guide.mp4'}}});
+const pose=JSON.parse(payload.workflow);assert.equal(payload.nodeInfoList.length,0);
+assert.equal(pose['13'].class_type,'ModelPatchLoader');assert.deepEqual(pose['1008'].inputs.control_video,['1007',0]);
+assert.deepEqual(provisioned,['ffp','character'],'Native ControlNet is not a character/FFP LoRA upload');
+assert.equal(Object.values(pose).filter(n=>n.class_type==='SamplerCustomAdvanced').length,3);
+for(const node of Object.values(pose).filter(n=>n.class_type==='RandomNoise'))assert.equal(typeof node.inputs.noise_seed,'number');
 console.log('PASS: actual FFP provider payload, three numeric RandomNoise seeds, no type-coercing API overrides, and server-only LoRA provisioning');

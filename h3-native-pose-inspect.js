@@ -36,13 +36,19 @@ export function nativePoseValidationGraph(phase='catalog'){
   add(490,'VHS_VideoCombine',{images:['14',0],frame_rate:24,loop_count:0,filename_prefix:'VANTA-VALIDATION-NO-RENDER',
     format:'video/h264-mp4',pix_fmt:'yuv420p',crf:16,save_metadata:false,trim_to_audio:false,pingpong:false,save_output:true,no_preview:true});
   if(phase==='checkpoint'){
-    g['1'].inputs.unet_name=POSE_PROBE_MARKER;
     g['5'].inputs.name='minimax_h3_fun_controlnet_union_pruned_int8_convrot.safetensors';
+    // RunningHub accepts arbitrary UNETLoader names until runtime. Only the
+    // ModelPatchLoader guard was confirmed to reject at graph validation.
+    add(21,'ModelPatchLoader',{name:POSE_PROBE_MARKER});
+    add(22,'MiniMaxH3FunControlNetApply',{model:['7',0],model_patch:['21',0],vae:['3',0],
+      strength:1,start_percent:0,end_percent:1,control_video:['20',0]});
+    g['9'].inputs.model=['22',0];g['11'].inputs.model=['22',0];
   }
   return g;
 }
 export function poseValidationSummary(response){
-  if(response?.taskId||response?.data?.taskId)return {status:'unexpected_acceptance'};
+  if(response?.taskId||response?.data?.taskId)return {status:'unexpected_acceptance',
+    taskId:String(response?.data?.taskId||response?.taskId)};
   const rejected=findValidationRejection(response);
   if(!rejected)return {status:'unconfirmed',providerCode:Number.isFinite(Number(response?.code))?Number(response.code):null};
   const strings=v=>typeof v==='string'?[v]:Array.isArray(v)?v.flatMap(strings):

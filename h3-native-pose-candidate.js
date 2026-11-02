@@ -1,0 +1,93 @@
+// Candidate for controlled GPU screening; not the ordinary generation default.
+// Source RGB reaches only pose extraction. Appearance comes from the current
+// native photo; continuation guides contain generated frames, never source RGB.
+export const NATIVE_POSE_MODELS=Object.freeze({
+  unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
+  clip:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
+  videoVae:'minimax_h3_video_vae_fp16.safetensors',audioVae:'minimax_h3_audio_vae_fp32.safetensors',
+  turbo:'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors',
+  patch:'minimax_h3_fun_controlnet_union_pruned_int8_convrot.safetensors',
+  pose:'sdpose_wholebody_fp16.safetensors',detector:'rt_detr_v4-x-hgnet_fp16.safetensors',
+  caption:'qwen3.5_9b_w4a8_gptq.safetensors'
+});
+const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
+  !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS}){
+  if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
+  for(const key of Object.keys(NATIVE_POSE_MODELS))if(!fileName(models[key])||!models[key].endsWith('.safetensors'))
+    throw Error('Missing or invalid native pose model: '+key);
+  if(!source||source.fps!==24||typeof source.hasAudio!=='boolean'||!Array.isArray(segments)||!segments.length||
+    ![source.canvasWidth,source.canvasHeight].every(n=>Number.isSafeInteger(n)&&n>=1080&&n%32===0)||
+    Math.min(source.outputWidth,source.outputHeight)!==1080)throw Error('Invalid native output plan');
+  let next=0;
+  for(const [i,s] of segments.entries()){
+    if(s.start!==next||s.contextFrames!==(i?5:0)||s.loadStart+s.contextFrames!==s.start||
+      s.modelFrames%17!==5||s.modelFrames>124||s.inputFrames>s.modelFrames||s.inputFrames!==s.length+s.contextFrames)
+      throw Error('Invalid pose window timeline');
+    next+=s.length;
+  }
+  if(next!==source.totalFrames)throw Error('Incomplete pose timeline');
+  const g={},add=(id,class_type,inputs,title)=>{const key=String(id);g[key]={class_type,inputs,...(title?{_meta:{title}}:{})};return [key,0];};
+  add(1,'UNETLoader',{unet_name:models.unet,weight_dtype:'default'});
+  add(2,'CLIPLoader',{clip_name:models.clip,type:'minimax',device:'default'});
+  add(3,'VAELoader',{vae_name:models.videoVae});add(4,'VAELoader',{vae_name:models.audioVae});
+  add(6,'LoraLoaderModelOnly',{model:['1',0],lora_name:models.turbo,strength_model:1});
+  add(13,'ModelPatchLoader',{name:models.patch});
+  add(16,'CheckpointLoaderSimple',{ckpt_name:models.pose});
+  add(17,'UNETLoader',{unet_name:models.detector,weight_dtype:'default'});
+  add(30,'LoadImage',{image:imageName});
+  add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,right:source.referencePadRight,bottom:source.referencePadBottom,feathering:0},
+    'Native reference pixels; only grid padding');
+  add(85,'CLIPLoader',{clip_name:models.caption,type:'minimax',device:'default'});
+  add(86,'TextGenerate',{clip:['85',0],image:['30',0],max_length:768,sampling_mode:'off',thinking:false,use_default_template:true,
+    prompt:'Describe only the current reference photo in one detailed English video-generation caption. '+
+      'Describe the visible face, hair, unexaggerated body build and proportions, exact outfit and accessories, garment material and surface detail, '+
+      'the complete setting and the actual lighting direction, contrast and colours. Omit unseen or uncertain details. '+
+      'Picture 1 defines the entire appearance of the generated person and scene. Animate it using the aligned pose control, including the hands, head and facial expression. '+
+      'Preserve the reference body proportions, clothing, fabric texture, skin detail and lighting through that motion. '+
+      'Keep the camera behaviour and performance timing of the pose sequence. Add no accessories or objects, no smoothing, beauty changes or invented wardrobe. '+
+      'Output only the caption using actual visible image attributes, no Markdown or prefatory explanation.'});
+  add(40,'KSamplerSelect',{sampler_name:'res_multistep'});
+  let previous=null;const exports=[];
+  for(const [i,s] of segments.entries()){
+    const b=1000+i*30;
+    let raw=add(b,'VHS_LoadVideo',{video:videoName,force_rate:24,force_size:'Disabled',custom_width:0,custom_height:0,
+      frame_load_cap:s.inputFrames,skip_first_frames:s.loadStart,select_every_nth:1,format:'None'});
+    if(s.modelFrames>s.inputFrames){
+      const last=add(b+1,'ImageFromBatch',{image:raw,batch_index:s.inputFrames-1,length:1});
+      const pad=add(b+2,'RepeatImageBatch',{image:last,amount:s.modelFrames-s.inputFrames});
+      raw=add(b+3,'ImageBatch',{image1:raw,image2:pad});
+    }
+    const analysis=add(b+4,'ResizeImageMaskNode',{input:raw,resize_type:'scale longer dimension',
+      'resize_type.longer_size':1024,scale_method:'lanczos'},'Resize only motion-analysis frames; preserve reference and generated pixels');
+    const boxes=add(b+5,'RTDETR_detect',{model:['17',0],image:analysis,threshold:.5,class_name:'person',max_detections:1});
+    const points=add(b+6,'SDPoseKeypointExtractor',{model:['16',0],vae:['16',2],image:analysis,bboxes:boxes,batch_size:4});
+    const pose=add(b+7,'SDPoseDrawKeypoints',{keypoints:points,draw_body:true,draw_hands:true,draw_face:true,
+      draw_feet:true,stick_width:4,face_point_size:2,score_threshold:.5,draw_head:true});
+    const model=add(b+8,'MiniMaxH3FunControlNetApply',{model:['6',0],model_patch:['13',0],vae:['3',0],
+      strength:1,start_percent:0,end_percent:1,control_video:pose},'Trained native pose control; no source RGB or inpaint source');
+    let positive=add(b+9,'MiniMaxH3ReferenceToVideo',{clip:['2',0],vae:['3',0],audio_vae:['4',0],
+      prompt:['86',0],width:source.canvasWidth,height:source.canvasHeight,length:s.modelFrames,ref_image_size:'max',
+      'ref_images.ref_image_1':['31',0]});
+    const schedule=add(b+10,'BasicScheduler',{model,scheduler:'simple',steps:4,denoise:1});
+    if(previous){
+      const context=add(b+11,'ImageFromBatch',{image:previous.image,batch_index:previous.lastFrame-s.contextFrames+1,length:s.contextFrames});
+      positive=add(b+12,'MiniMaxH3AddGuide',{positive,latent:[String(b+9),1],vae:['3',0],image:context,frame_idx:0},
+        'Generated appearance continuation only; never RGB from the driving video');
+    }
+    const noise=add(b+13,'RandomNoise',{noise_seed:42+i});
+    const guider=add(b+14,'BasicGuider',{model,conditioning:positive});
+    const sample=add(b+15,'SamplerCustomAdvanced',{noise,guider,sampler:['40',0],sigmas:schedule,latent_image:[String(b+9),1]});
+    const decoded=add(b+16,'VAEDecode',{samples:sample,vae:['3',0]});
+    previous={image:decoded,lastFrame:s.contextFrames+s.length-1};
+    const trim=add(b+17,'ImageFromBatch',{image:decoded,batch_index:s.contextFrames,length:s.length});
+    exports.push(add(b+18,'ImageCrop',{image:trim,x:source.padLeft,y:source.padTop,width:source.outputWidth,height:source.outputHeight},
+      'Remove grid border only; no output resizing or refinement'));
+  }
+  const images=exports.length===1?exports[0]:add(49,'ImageBatchMulti',{inputcount:exports.length,
+    ...Object.fromEntries(exports.map((value,i)=>['image_'+(i+1),value]))});
+  const audio=source.hasAudio?add(50,'VHS_LoadAudioUpload',{audio:videoName,start_time:0,duration:source.totalFrames/24}):null;
+  add(490,'VHS_VideoCombine',{images,...(audio?{audio}:{}),frame_rate:24,loop_count:0,filename_prefix:'VANTA-H3-NATIVE-POSE-CANDIDATE',
+    format:'video/h264-mp4',pix_fmt:'yuv420p',crf:16,save_metadata:true,trim_to_audio:false,pingpong:false,save_output:true,no_preview:false});
+  return g;
+}

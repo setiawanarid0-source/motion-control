@@ -9,6 +9,17 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
   if(!/^motion-transfer-native-1080-v[123456]$/.test(String(plan?.revision)))return null;
+  if(plan.inferenceProfile==='native-fun-pose4-caption'){
+    const globals={1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',6:'LoraLoaderModelOnly',13:'ModelPatchLoader',
+      16:'CheckpointLoaderSimple',17:'UNETLoader',30:'LoadImage',31:'ImagePadForOutpaint',40:'KSamplerSelect',
+      49:'ImageBatchMulti',50:'VHS_LoadAudioUpload',85:'CLIPLoader',86:'TextGenerate',490:'VHS_VideoCombine'};
+    if(globals[node])return globals[node];
+    const n=Number(node),index=Math.floor((n-1000)/30),offset=(n-1000)%30;
+    const types=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBatch','ResizeImageMaskNode','RTDETR_detect',
+      'SDPoseKeypointExtractor','SDPoseDrawKeypoints','MiniMaxH3FunControlNetApply','MiniMaxH3ReferenceToVideo','BasicScheduler',
+      'ImageFromBatch','MiniMaxH3AddGuide','RandomNoise','BasicGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
+    return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<types.length?types[offset]:null;
+  }
   const character=plan.inferenceProfile==='guide-dmad4-character-caption';
   if(character){
     if(String(node)==='7')return 'RHLoraLoader';

@@ -15,6 +15,32 @@ approve this recipe. Read [the regression audit](H3_VISUAL_REGRESSION_2026-11-02
 before using the earlier trial results as evidence of quality. Successful
 execution and improved facial consistency do not establish overall acceptance.
 
+## Private native-pose candidate (not promoted)
+
+`native-fun-pose4-caption` uses the official native Fun ControlNet route and its
+matching optional four-step turbo with `res_multistep`. Source frames go through
+SDPose body/hand/face extraction and drawing before reaching the control branch.
+No source RGB enters Add Guide or a native reference-video slot. The current
+whole native photo and one photo-derived caption define appearance. Only
+previously generated frames can enter Add Guide for continuation; output frames
+remain native 1080p with border/overlap trimming, original audio and no refiner.
+
+The two-second clothed screen covers source time 2.25–4.25 s, where the wrist
+accessory appears. It and the complete original fifteen-second case have distinct
+checksum-locked, permanent once-only admissions. Neither starts on deployment.
+Node/graph validation is separate from model execution and visual acceptance.
+The ordinary default remains v6 pending actual checks; no success is claimed for
+face, body proportions, lighting, texture, camera fidelity or runtime yet.
+
+The provider accepted the exact control-patch name during a diagnostic graph
+check but deferred an invalid UNET filename until execution. That unexpected
+diagnostic acceptance was immediately cancelled. The inspection guard now uses
+only a mandatory invalid ModelPatchLoader input, which was observed to reject
+before execution. Do not infer runnable model availability from a generic
+loader-name check or treat the cancelled diagnostic as a quality render.
+
+## Existing v6 recipe
+
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
 v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,

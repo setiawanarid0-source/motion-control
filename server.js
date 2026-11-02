@@ -31,7 +31,7 @@ import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h
 import {longH3Profile,longH3Result,longH3ModelChoices,runLongH3Deployment} from './h3-long-benchmark.js';
 import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} from './h3-consistency-trial.js';
 import {createH3AppearanceModel,CHARACTER_ASSET} from './h3-appearance-model.js';
-import {installNativePoseInspection} from './h3-native-pose-inspect.js';
+import {installNativePoseInspection,poseValidationSummary} from './h3-native-pose-inspect.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -554,6 +554,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
     if(validation){
+      if(h3Source?.inferenceProfile==='native-fun-pose4-caption')
+        console.info('H3 native pose model validation',JSON.stringify(poseValidationSummary(data)));
       if(['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-character-caption'].includes(h3Source?.inferenceProfile))
         console.info('H3 consistency model validation',JSON.stringify(consistencyModelChoices(data)));
       if(h3Source?.inferenceProfile==='guide-dmad4-focus')

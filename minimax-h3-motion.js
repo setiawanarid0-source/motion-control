@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {detectIdentityFocus,validIdentityCrop} from './h3-identity-focus.js';
 import {validUploadedH3Lora} from './h3-appearance-model.js';
+import {nativePoseCandidateGraph,NATIVE_POSE_MODELS} from './h3-native-pose-candidate.js';
 const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
@@ -15,7 +16,8 @@ export const H3_REVISION='motion-transfer-native-1080-v6';
 export const H3_DEFAULT_PROFILE='guide-dmad4-character-caption';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
-const continuityProfile=profile=>photoGuideProfile(profile)||profile==='guide-dmad4-character-caption';
+const nativePoseProfile=profile=>profile==='native-fun-pose4-caption';
+const continuityProfile=profile=>photoGuideProfile(profile)||profile==='guide-dmad4-character-caption'||nativePoseProfile(profile);
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   clip:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
@@ -214,11 +216,12 @@ export function h3ExecutionPlan(source){
     inferenceProfile:source.inferenceProfile||H3_DEFAULT_PROFILE,
     sampling:h3SamplingPlan(source),
     referenceFace:source.referenceFace||null,
-    attentionConditioning:h3AttentionConditioning(source),
+    attentionConditioning:nativePoseProfile(source.inferenceProfile)?'native_full_attention':h3AttentionConditioning(source),
     guidePhotoCopyResized:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE),
-    guideAppearance:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?'photo_first_frame_then_generated_overlap':
+    guideAppearance:nativePoseProfile(source.inferenceProfile)?'drawn_pose_only_with_generated_continuation':
+      photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?'photo_first_frame_then_generated_overlap':
       source.inferenceProfile==='guide-dmad4-character-caption'?'source_rgb_then_generated_overlap':'source_rgb_with_generated_keyframe',
-    appearanceCaptionModel:source.inferenceProfile==='guide-dmad4-character-caption'?'qwen3.5_9b_w4a8_gptq.safetensors':null,
+    appearanceCaptionModel:source.inferenceProfile==='guide-dmad4-character-caption'||nativePoseProfile(source.inferenceProfile)?'qwen3.5_9b_w4a8_gptq.safetensors':null,
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames,contextFrames:s.contextFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
@@ -233,6 +236,7 @@ function h3AttentionConditioning(source){
 }
 
 export function h3SamplingPlan(source){
+  if(nativePoseProfile(source.inferenceProfile))return {steps:4,sampler:'res_multistep',scheduler:'simple',turbo:NATIVE_POSE_MODELS.turbo,audioShift:null};
   const dmad=['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
   // DMAD's four-step student uses re-noise sampling (LCM/simple), not an
   // eight-step DMD adapter with its scheduler shortened arbitrarily.
@@ -257,6 +261,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
+  if(nativePoseProfile(profile))return nativePoseCandidateGraph({imageName,videoName,source,segments});
   if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const ffp=['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(profile);
