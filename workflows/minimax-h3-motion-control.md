@@ -64,6 +64,20 @@ This node's author supplies a RunningHub workflow, but availability and actual
 quality in this deployment must still be checked. Ordinary generation is unchanged.
 Source: https://github.com/wuwukaka/ComfyUI-BodyRatioMapper
 
+The retarget-only two-second screen, task `2117232095663583234`, finished in
+189 provider seconds. It was not promoted: garment detail and facial acting
+still need improvement. No full-duration task was started from this screen.
+
+The subsequent private `native-fun-retarget4-visual` screen removes generated
+appearance descriptions and explicitly binds appearance to native `<Picture 1>`.
+It draws body, hands, face and mouth at the model canvas resolution, rather
+than enlarging an analysis-sized landmark raster. Saved raw/mapped/photo pose
+previews allow checking that retargeting actually changes the skeleton. Motion
+analysis loads at half canvas dimensions; the native photo/output stay intact.
+For longer clips its generated continuation is 22 frames and is discarded only
+as overlap, exporting every requested frame once. Full-duration continuity and
+actual visual quality remain unvalidated; this is not the ordinary default.
+
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
 v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,

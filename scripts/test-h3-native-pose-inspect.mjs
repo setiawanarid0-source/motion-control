@@ -26,6 +26,10 @@ const retargetGraph=nativePoseValidationGraph('retarget');
 assert.equal(retargetGraph['5'].inputs.name,POSE_PROBE_MARKER);
 assert.equal(retargetGraph['23'].class_type,'BodyRatioMapperProportionTransfer');
 assert.deepEqual(retargetGraph['20'].inputs.keypoints,['23',0]);
+const visualGraph=nativePoseValidationGraph('visual');
+assert.equal(visualGraph['5'].inputs.name,POSE_PROBE_MARKER);
+assert.equal(visualGraph['20'].class_type,'BodyRatioMapperSDPoseRender');
+assert.deepEqual(visualGraph['20'].inputs.pose_keypoint,['23',0]);
 assert.throws(()=>nativePoseValidationGraph('render'));
 assert.equal(poseValidationSummary({code:0,data:{taskId:'2117000000000000001'}}).status,'unexpected_acceptance');
 const reject={code:1,msg:JSON.stringify({result:false,error:{type:'prompt_outputs_failed_validation'},node_errors:{5:{
@@ -60,11 +64,13 @@ try{
  const retargetReport=await (await fetch(url+'/validate-retarget',{method:'POST',headers})).json();
  assert.equal(retargetReport.status,'rejected_before_execution');assert.equal(calls,3);
  await fetch(url+'/validate-retarget',{method:'POST',headers});assert.equal(calls,3);
+ const visualReport=await (await fetch(url+'/validate-visual',{method:'POST',headers})).json();
+ assert.equal(visualReport.status,'rejected_before_execution');assert.equal(calls,4);
  // A new process with the same durable checkpoint must not send another request.
  await new Promise(r=>server.close(r));const app2=express();installNativePoseInspection({...options,app:app2});
  server=app2.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  await fetch('http://127.0.0.1:'+server.address().port+'/api/internal/h3-native-pose-inspect/validate',{method:'POST',headers});
- assert.equal(calls,3);
+ assert.equal(calls,4);
  const disabled=express();installNativePoseInspection({...options,app:disabled,hash:''});
  console.log('PASS: native pose-only validation graph, required invalid patch, private task scope, no credential leakage and durable once-only provider check');
 }finally{if(server)await new Promise(r=>server.close(r));await fs.rm(dir,{recursive:true,force:true});}

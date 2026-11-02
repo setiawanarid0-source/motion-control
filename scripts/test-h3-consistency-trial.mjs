@@ -60,7 +60,7 @@ try{
   for(let i=0;i<3;i++)assert.deepEqual(character[1004+i*30].inputs.prompt,['86',0],'Each window uses the same description of the current photo');
   assert.ok(!character['33'],'The published character path uses a native photo reference, not an edited first-frame copy');
   assert.deepEqual(character['1045'].inputs.image1,['1036',0]);assert.ok(!character['1037']);
-  assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption','Normal generation must use the recipe validated by the full-duration and changed-reference renders');
+  assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption','Ordinary generation remains unchanged while the repair is screened');
   for(let n=6;n<=1440;n++){
     const parts=h3Segments(n,[],5);
     assert.equal(parts.reduce((s,p)=>s+p.length,0),n);
@@ -69,8 +69,9 @@ try{
     for(const p of parts){assert.equal(p.start,start);assert.equal(p.loadStart,start-p.contextFrames);start+=p.length;}
   }
   assert.equal(consistencyModelChoices({data:{taskId:'paid'}}),null);
-  let currentTask=null,cancelled=0;
+  let currentTask=null,cancelled=0,qaReads=0;
   const app=express();installConsistencyTrial({app,upload:multer({dest:dir}),queue,rootDir:'/data',getTask:()=>currentTask,
+    getDiagnosticOutputs:async task=>{qaReads++;assert.equal(task.key,'private-credential');return [{nodeId:'492',fileUrl:'https://example.test/pose.png'}];},
     cancelTask:async id=>{cancelled++;return {taskId:id,status:'cancelled'};},hash,expires:expiry});
   server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   const base='http://127.0.0.1:'+server.address().port+'/api/internal/h3-consistency/';
@@ -84,5 +85,10 @@ try{
   assert.equal((await cancel()).status,404);assert.equal(cancelled,0,'Never cancel a normal user task');
   currentTask.video='h3-consistency-driving.mp4';assert.equal((await cancel()).status,200);assert.equal(cancelled,1);
   currentTask.status='success';assert.equal((await cancel()).status,200);assert.equal(cancelled,1,'Completed tasks cannot be cancelled');
+  queue.read=()=>({...stagedJob,jobId:'b3e714a1-f769-4aec-a919-447f953fa016',task:{taskId:currentTask.taskId}});
+  currentTask.key='private-credential';
+  assert.equal((await fetch(base+'native-visual4-screen2-v1')).status,404);assert.equal(qaReads,0);
+  const qa=await (await fetch(base+'native-visual4-screen2-v1',{headers:{'X-Vanta-H3-Trial':token}})).text();
+  assert.equal(qaReads,1);assert.ok(qa.includes('pose.png'));assert.ok(!qa.includes(currentTask.key));
   console.log('PASS: private case admission, expired/wrong credentials, checksums, permanent once-only guard, native FFP graph and aligned five-frame continuation');
 }finally{if(server)await new Promise(r=>server.close(r));await fs.rm(dir,{recursive:true,force:true});}

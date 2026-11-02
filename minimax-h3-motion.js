@@ -16,8 +16,9 @@ export const H3_REVISION='motion-transfer-native-1080-v6';
 export const H3_DEFAULT_PROFILE='guide-dmad4-character-caption';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
-const nativePoseProfile=profile=>['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption'].includes(profile);
+const nativePoseProfile=profile=>['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual'].includes(profile);
 const continuityProfile=profile=>photoGuideProfile(profile)||profile==='guide-dmad4-character-caption'||nativePoseProfile(profile);
+const continuationFrames=profile=>profile==='native-fun-retarget4-visual'?22:continuityProfile(profile)?5:1;
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   clip:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
@@ -215,14 +216,15 @@ export function h3ExecutionPlan(source){
   return {revision:H3_REVISION,frames:source.totalFrames,fps:H3_FPS,
     inferenceProfile:source.inferenceProfile||H3_DEFAULT_PROFILE,
     sampling:h3SamplingPlan(source),
-    ...(source.inferenceProfile==='native-fun-retarget4-caption'?{poseRetargeting:'photo_proportions_once_for_whole_sequence'}:{}),
+    ...(['native-fun-retarget4-caption','native-fun-retarget4-visual'].includes(source.inferenceProfile)?{poseRetargeting:'photo_proportions_once_for_whole_sequence'}:{}),
     referenceFace:source.referenceFace||null,
     attentionConditioning:nativePoseProfile(source.inferenceProfile)?'native_full_attention':h3AttentionConditioning(source),
     guidePhotoCopyResized:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE),
     guideAppearance:nativePoseProfile(source.inferenceProfile)?'drawn_pose_only_with_generated_continuation':
       photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?'photo_first_frame_then_generated_overlap':
       source.inferenceProfile==='guide-dmad4-character-caption'?'source_rgb_then_generated_overlap':'source_rgb_with_generated_keyframe',
-    appearanceCaptionModel:source.inferenceProfile==='guide-dmad4-character-caption'||nativePoseProfile(source.inferenceProfile)?'qwen3.5_9b_w4a8_gptq.safetensors':null,
+    appearanceCaptionModel:source.inferenceProfile!=='native-fun-retarget4-visual'&&
+      (source.inferenceProfile==='guide-dmad4-character-caption'||nativePoseProfile(source.inferenceProfile))?'qwen3.5_9b_w4a8_gptq.safetensors':null,
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames,contextFrames:s.contextFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
@@ -256,7 +258,7 @@ function validateSource(source){
   let expected;
   try{expected=h3PhotoPlan(source.referenceWidth,source.referenceHeight);}catch{throw Error('Metadata foto H3 belum tervalidasi.');}
   if(Object.entries(expected).some(([key,value])=>source[key]!==value))throw Error('Metadata canvas H3 belum tervalidasi.');
-  return h3Segments(source.totalFrames,source.sceneCuts,continuityProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?5:1);
+  return h3Segments(source.totalFrames,source.sceneCuts,continuationFrames(source.inferenceProfile||H3_DEFAULT_PROFILE));
 }
 export function h3GraphForInputs(base,{imageName,videoName,source}){
   inputName(imageName);inputName(videoName);
@@ -264,7 +266,8 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
   if(nativePoseProfile(profile))return nativePoseCandidateGraph({imageName,videoName,source,segments,
-    recipe:profile==='native-fun-pose8-caption'?'dmd8':'native4',retarget:profile==='native-fun-retarget4-caption'});
+    recipe:profile==='native-fun-pose8-caption'?'dmd8':'native4',
+    retarget:['native-fun-retarget4-caption','native-fun-retarget4-visual'].includes(profile),visualDetails:profile==='native-fun-retarget4-visual'});
   if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const ffp=['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(profile);

@@ -38,7 +38,11 @@ const TRIALS=Object.freeze({
   'native-retarget4-screen2-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa014',profile:'native-fun-retarget4-caption',media:{
     image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
     video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}},
-  'native-retarget4-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa015',profile:'native-fun-retarget4-caption'}
+  'native-retarget4-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa015',profile:'native-fun-retarget4-caption'},
+  'native-visual4-screen2-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa016',profile:'native-fun-retarget4-visual',media:{
+    image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+    video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}},
+  'native-visual4-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa017',profile:'native-fun-retarget4-visual'}
 });
 const MEDIA=Object.freeze({
   image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
@@ -99,7 +103,7 @@ export function consistencyModelChoices(response){
       errors:(node.errors||[]).slice(0,5).map(e=>({type:String(e.type||'').slice(0,80),
         message:String(e.message||'').slice(0,160),details:String(e.details||'').slice(0,500)}))}))};
 }
-export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancelTask,diagnoseTask,hash,expires}){
+export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancelTask,diagnoseTask,getDiagnosticOutputs,hash,expires}){
   // Registered before owner login solely for this separate expiring credential.
   // With no deployment gate, these routes do not exist.
   if(!/^[a-f0-9]{64}$/.test(String(hash||''))||!Number.isFinite(Date.parse(expires)))return;
@@ -129,8 +133,12 @@ export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancel
     const task=job?.task?.taskId?getTask(String(job.task.taskId)):null;
     let failure=null;
     if(task?.status==='failed'&&diagnoseTask)try{failure=await diagnoseTask(task.taskId);}catch{}
+    let qaOutputs=[];
+    if(task?.status==='success'&&trial.profile==='native-fun-retarget4-visual'&&
+      consistencyH3Profile(job)===trial.profile&&getDiagnosticOutputs)
+      try{qaOutputs=await getDiagnosticOutputs(task);}catch{}
     res.json({jobId:trial.jobId,stage:job?.stage||'not_staged',error:job?.error||null,
-      failure,
+      failure,qaOutputs,
       task:task?{taskId:task.taskId,status:task.status,providerRuntimeSeconds:task.providerRuntimeSeconds??null,
         resultUrl:task.resultUrl||null,error:task.error||null}:null});
   });

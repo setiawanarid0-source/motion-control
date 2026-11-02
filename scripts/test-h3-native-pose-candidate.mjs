@@ -71,5 +71,24 @@ for(const [i,s] of h3Segments(361,[],5).entries()){
 const retargetPlan=h3ExecutionPlan(retargetSource);
 assert.equal(retargetPlan.poseRetargeting,'photo_proportions_once_for_whole_sequence');
 for(const [id,node] of Object.entries(retarget))assert.equal(h3NodeClass(id,retargetPlan),node.class_type,'Retarget timing node '+id);
+const visualSource={...full,inferenceProfile:'native-fun-retarget4-visual'};
+const visual=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:visualSource});
+assert.equal(visual['85'],undefined);assert.equal(visual['86'],undefined,'No generated body description');
+assert.equal(visual['68'].class_type,'BodyRatioMapperSDPoseRender');
+assert.equal(visual['68'].inputs.draw_mouth,true);assert.equal(visual['68'].inputs.resolution_x,1088);
+assert.equal(visual['60'].inputs.custom_width,544);assert.equal(visual['60'].inputs.custom_height,976);
+assert.deepEqual(visual['31'].inputs.image,['30',0],'Only the analysis branch may resize the photo');
+let visualFrames=0;
+for(const [i,s] of h3Segments(361,[],22).entries()){
+ const b=1000+30*i;
+ assert.equal(visual[b+9].inputs.prompt.includes('<Picture 1>'),true);
+ assert.equal(visual[b+17].inputs.length,s.length);visualFrames+=s.length;
+ if(i){assert.equal(visual[b+11].inputs.length,22);assert.equal(visual[b+17].inputs.batch_index,22);}
+ assert.equal(visual[b+18].inputs.width,1080);assert.equal(visual[b+18].inputs.height,1936);
+}
+assert.equal(visualFrames,361);assert.equal(Object.values(visual).filter(n=>n.class_type==='SamplerCustomAdvanced').length,4);
+const visualPlan=h3ExecutionPlan(visualSource);
+assert.equal(visualPlan.appearanceCaptionModel,null);assert.equal(visualPlan.sampling.steps,4);
+for(const [id,node] of Object.entries(visual))assert.equal(h3NodeClass(id,visualPlan),node.class_type,'Detailed pose timing node '+id);
 assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption');
 console.log('PASS: pose-only source conditioning, current native photo, shared caption, matched model paths, generated-only continuation, exact frames/audio and no output resize/refinement; GPU quality remains unvalidated');

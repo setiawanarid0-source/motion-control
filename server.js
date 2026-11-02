@@ -554,7 +554,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
     if(validation){
-      if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption'].includes(h3Source?.inferenceProfile))
+      if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual'].includes(h3Source?.inferenceProfile))
         console.info('H3 native pose model validation',JSON.stringify(poseValidationSummary(data)));
       if(['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-character-caption'].includes(h3Source?.inferenceProfile))
         console.info('H3 consistency model validation',JSON.stringify(consistencyModelChoices(data)));
@@ -587,6 +587,12 @@ installNativePoseInspection({app,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(i
     if(Number(response?.code)!==0)throw Error('Validation task cancellation unconfirmed');
   }});
 installConsistencyTrial({app,upload,queue:generationQueue,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),
+  getDiagnosticOutputs:async task=>{
+    const response=await rhJson('/task/openapi/outputs',task.key,{apiKey:task.key,taskId:task.taskId},30000);
+    return (Array.isArray(response?.data)?response.data:[])
+      .filter(x=>['492','493'].includes(String(x.nodeId))&&typeof x.fileUrl==='string'&&/^https:\/\//.test(x.fileUrl))
+      .slice(0,4).map(x=>({nodeId:String(x.nodeId),fileUrl:x.fileUrl}));
+  },
   diagnoseTask:async id=>{
     const task=taskRegistry.get(id);
     return extractTaskFailure(await rhJson('/task/openapi/outputs',task.key,{apiKey:task.key,taskId:id},30000));
