@@ -34,6 +34,11 @@ try{
   assert.match(graph['1004'].inputs.prompt,/^vfx_edit:/);
   assert.equal(graph['1036'].inputs.length,5);assert.equal(graph['1066'].inputs.length,5);
   assert.equal(graph['1037'].class_type,'MiniMaxH3AddGuide');
+  const file='api-lora-usa/'+'a'.repeat(32)+'.safetensors';
+  const uploaded=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo.jpg',videoName:'guide.mp4',source:{...source,appearanceLoraFile:file}});
+  assert.equal(uploaded['7'].class_type,'RHLoraLoader');assert.equal(uploaded['7'].inputs.file_name,file);
+  assert.equal(uploaded['7'].inputs.strength_clip,0);
+  assert.throws(()=>h3GraphForInputs({revision:H3_REVISION},{imageName:'photo.jpg',videoName:'guide.mp4',source:{...source,appearanceLoraFile:'../weights'}}),/File model/);
   assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-focus','Experimental path cannot change normal users before render validation');
   for(let n=6;n<=1440;n++){
     const parts=h3Segments(n,[],5);

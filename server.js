@@ -30,6 +30,7 @@ import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub
 import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h3-safe-benchmark.js';
 import {longH3Profile,longH3Result,longH3ModelChoices,runLongH3Deployment} from './h3-long-benchmark.js';
 import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} from './h3-consistency-trial.js';
+import {createH3AppearanceModel} from './h3-appearance-model.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -165,6 +166,10 @@ function scheduleAccountResultArchiving(accountId){
   }
 }
 const generationQueue=createGenerationQueue({dir:DATA_DIR,maxConcurrent:1});
+// The account volume is 256 MB. Keep the public 230 MB weights ephemeral; only
+// the tiny successful upload receipt persists across deploys.
+const h3AppearanceModel=createH3AppearanceModel({dir:path.join(os.tmpdir(),'vanta-h3-model-cache'),
+  registryFile:path.join(DATA_DIR,'h3-appearance-loras.json'),request:rhJson});
 function registeredAccount(taskId,accountId=''){
   const item=taskRegistry.get(String(taskId));
   if(!item)return null;
@@ -505,13 +510,19 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     workflowKey==='minimaxH3'?(h3Source.referenceFile||imageFile):imageFile);
   const videoName = await uploadToRunningHub(apiKey, workflowKey==='minimaxH3'?h3Source.file:videoFile);
   if(workflowKey==='minimaxH3'){
+    if(h3Source.inferenceProfile==='guide-dmad4-ffp')
+      h3Source.appearanceLoraFile=await h3AppearanceModel.ensure(apiKey);
     selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
   }
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
   const payload = {
     apiKey,
     workflowId,
-    nodeInfoList: workflowKey==='minimaxH3' ? [] : [
+    // RunningHub rewrites every seed unless explicitly listed here.
+    // Pin only the isolated consistency experiment; normal requests stay unchanged.
+    nodeInfoList: workflowKey==='minimaxH3' ? (h3Source.inferenceProfile==='guide-dmad4-ffp'?
+      Object.entries(selectedGraph).filter(([,n])=>n.class_type==='RandomNoise')
+        .map(([nodeId,n])=>({nodeId,fieldName:'noise_seed',fieldValue:n.inputs.noise_seed})):[]) : [
       ...(workflowKey==='rife60'
         ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName },
            { nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps },

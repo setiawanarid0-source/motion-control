@@ -7,7 +7,8 @@ import {findValidationRejection} from './runninghub-graph-validation.js';
 
 const DEVICE='h3-consistency-20261102';
 const TRIALS=Object.freeze({
-  'ffp-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa001',profile:'guide-dmad4-ffp'}
+  'ffp-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa001',profile:'guide-dmad4-ffp'},
+  'ffp-upload-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa002',profile:'guide-dmad4-ffp'}
 });
 const MEDIA=Object.freeze({
   image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
@@ -59,7 +60,10 @@ export function consistencyModelChoices(response){
           /^[A-Za-z0-9_./ ()-]+\.safetensors$/.test(name)&&/minimax.*(motion_transfer|character_swap|DMAD)/i.test(name))options.push(name);
     }
   }
-  return {type:rejected.error?.type,options:[...new Set(options)].slice(0,30)};
+  return {type:rejected.error?.type,options:[...new Set(options)].slice(0,30),
+    errors:Object.entries(rejected.node_errors||{}).slice(0,3).map(([id,node])=>({id,class:node.class_type,
+      errors:(node.errors||[]).slice(0,5).map(e=>({type:String(e.type||'').slice(0,80),
+        message:String(e.message||'').slice(0,160),details:String(e.details||'').slice(0,500)}))}))};
 }
 export function installConsistencyTrial({app,upload,queue,rootDir,getTask,hash,expires}){
   // Registered before owner login solely for this separate expiring credential.

@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {detectIdentityFocus,validIdentityCrop} from './h3-identity-focus.js';
+import {validUploadedH3Lora} from './h3-appearance-model.js';
 const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
@@ -258,7 +259,11 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(profile==='legacy-training-adapter')
     add(5,'LoraLoaderModelOnly',{model:['1',0],lora_name:H3_MODELS.adapter,strength_model:1});
   add(6,'LoraLoaderModelOnly',{model:[profile==='legacy-training-adapter'?'5':'1',0],lora_name:sampling.turbo,strength_model:1});
-  add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:ffp?H3_MODELS.motionFfp:H3_MODELS.motion,strength_model:1},ffp?'Motion Transfer FFP v1.0':'Motion Transfer v1.0');
+  if(ffp&&source.appearanceLoraFile){
+    if(!validUploadedH3Lora(source.appearanceLoraFile))throw Error('File model H3 FFP tidak valid.');
+    add(7,'RHLoraLoader',{model:['6',0],clip:['2',0],lora_name:'',file_name:source.appearanceLoraFile,
+      strength_model:1,strength_clip:0},'SHA-verified native Motion Transfer FFP v1.0');
+  }else add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:ffp?H3_MODELS.motionFfp:H3_MODELS.motion,strength_model:1},ffp?'Motion Transfer FFP v1.0':'Motion Transfer v1.0');
   add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:sampling.audioShift});
   if(profile==='guide-kitchen'||focused){
     add(9,'ModelAttentionBackend',{model:['7',0],attention:'comfy kitchen attention'});
@@ -327,7 +332,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:[String(b+4),1],vae:['3',0],image:tail,frame_idx:0},
         'Previous generated frames at matching source overlap');
     }
-    const noise=add(b+8,'RandomNoise',{noise_seed:42+i});
+    const noise=add(b+8,'RandomNoise',{noise_seed:ffp?42:42+i});
     const guider=add(b+9,'CFGGuider',{model:[samplingModel,0],positive,negative:positive,cfg:1});
     const samples=add(b+10,'SamplerCustomAdvanced',{noise,guider,sampler:['40',0],sigmas:['41',0],latent_image:[String(b+4),1]});
     // The H3 VAE handles its own spatial/temporal tiling.
