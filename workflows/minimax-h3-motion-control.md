@@ -7,6 +7,14 @@ result retention are unchanged. No extra login, review form or head-swap UI.
 
 ## Production v6: photo-derived character appearance
 
+**Visual acceptance failed after the owner's retest on 2 November 2026.**
+Task `2117176682029084674` exposes lighting discontinuities at both window
+boundaries, a source wrist accessory, changing torso appearance and unstable
+fabric shading. The earlier short/full-duration inspection was insufficient to
+approve this recipe. Read [the regression audit](H3_VISUAL_REGRESSION_2026-11-02.md)
+before using the earlier trial results as evidence of quality. Successful
+execution and improved facial consistency do not establish overall acceptance.
+
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
 v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,
