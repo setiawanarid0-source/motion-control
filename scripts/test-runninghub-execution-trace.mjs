@@ -13,6 +13,12 @@ assert.equal(h3NodeClass('10',{...plan,inferenceProfile:'guide-sol-focus'}),'Blo
 assert.equal(h3NodeClass('32',{...plan,inferenceProfile:'guide-sol-focus'}),'ImageCrop');
 assert.equal(h3NodeClass('1010',{...plan,revision:'motion-transfer-native-1080-v4'}),'SamplerCustomAdvanced');
 assert.equal(h3NodeClass('1010',{...plan,revision:'motion-transfer-native-1080-v5'}),'SamplerCustomAdvanced');
+const characterPlan={revision:'motion-transfer-native-1080-v6',samplerCount:3,inferenceProfile:'guide-dmad4-character-caption'};
+for(const [id,type] of Object.entries({7:'RHLoraLoader',9:'ModelAttentionBackend',10:'BlockSparseAttention',
+  85:'CLIPLoader',86:'TextGenerate',1044:'ImageFromBatch',1045:'ImageBatch',1070:'SamplerCustomAdvanced'}))
+  assert.equal(h3NodeClass(id,characterPlan),type);
+assert.equal(h3NodeClass('1014',characterPlan),null,'The first character guide has no photo-frame replacement');
+assert.equal(h3NodeClass('32',characterPlan),null,'The character recipe uses one complete photo');
 for(const url of ['wss://www.runninghub.ai/ws?token=private','wss://worker.runninghub.cn/ws'])assert.ok(allowedProgressUrl(url));
 for(const url of ['ws://www.runninghub.ai/ws','wss://127.0.0.1/ws','wss://runninghub.ai.attacker.invalid/ws',
   'wss://user:secret@www.runninghub.ai/ws','wss://www.runninghub.ai:8080/ws'])assert.ok(!allowedProgressUrl(url));
