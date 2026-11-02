@@ -122,5 +122,29 @@ assert.equal(guarded['82'].inputs.height,256);assert.deepEqual(guarded['82'].inp
 assert.equal(guarded['82'].inputs.upscale_method,'nearest-exact','The assertion pass must not quantize/interpolate valid facial crops');
 assert.equal(h3ExecutionPlan(guardedSource).faceCropValidation,'exact_source_frame_count_and_256_square');
 for(const [id,node] of Object.entries(guarded))assert.equal(h3NodeClass(id,h3ExecutionPlan(guardedSource)),node.class_type,'Guarded face timing node '+id);
+const globalSource={...full,inferenceProfile:'native-fun-global4-face-attributes'};
+const global=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:globalSource});
+assert.equal(Object.values(global).filter(n=>n.class_type==='SamplerCustomAdvanced').length,1,
+ 'A 15-second clip must share one denoising trajectory with no independently sampled joins');
+assert.equal(global['1009'].inputs.length,362);assert.equal(global['1017'].inputs.length,361);
+assert.equal(global['1017'].inputs.batch_index,0);assert.equal(global['49'],undefined);
+assert.equal(global['1008'].inputs.model[0],'10');assert.equal(global['10'].inputs.start_percent,0);
+assert.equal(global['10'].inputs.sink_conditioning,'exact_kv');assert.equal(global['10'].inputs.dense_blocks,'0,1');
+assert.equal(global['86'].inputs.image[0],'30');assert.equal(global['86'].inputs.max_length,384);
+assert.ok(global['86'].inputs.prompt.includes('Do not describe body shape'));
+assert.ok(global['86'].inputs.prompt.includes('hand coverings'));
+assert.equal(global['87'].class_type,'StringConcatenate');
+assert.ok(global['87'].inputs.string_a.includes('<Picture 1>'));assert.ok(global['87'].inputs.string_a.includes('<Video 1>'));
+assert.deepEqual(global['1009'].inputs.prompt,['87',0]);
+assert.equal(global['1021'].inputs.amount,1);assert.equal(global['1025'].inputs.amount,1);
+const globalPlan=h3ExecutionPlan(globalSource);
+assert.equal(globalPlan.samplerCount,1);assert.equal(globalPlan.nativeWindowFrames,362);
+assert.equal(globalPlan.appearanceCaptionModel,NATIVE_POSE_MODELS.caption);
+for(const [id,node] of Object.entries(global))assert.equal(h3NodeClass(id,globalPlan),node.class_type,'Global native timing node '+id);
+for(let n=6;n<=1440;n++){
+ const parts=h3Segments(n,[],22,362);let cursor=0;
+ for(const p of parts){assert.equal(p.start,cursor);assert.ok(p.modelFrames<=362);cursor+=p.length;}
+ assert.equal(cursor,n);if(n<=362)assert.equal(parts.length,1);
+}
 assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption');
 console.log('PASS: pose-only source conditioning, current native photo, shared caption, matched model paths, generated-only continuation, exact frames/audio and no output resize/refinement; GPU quality remains unvalidated');

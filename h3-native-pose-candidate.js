@@ -13,11 +13,13 @@ export const NATIVE_POSE_MODELS=Object.freeze({
 });
 const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
   !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
-export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false}){
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false,attributes=false,globalAttention=false}){
   if(!['native4','dmd8'].includes(recipe))throw Error('Invalid pose sampling recipe');
   if(visualDetails&&!retarget)throw Error('Detailed pose needs whole-sequence retargeting');
   if(facePerformance&&!visualDetails)throw Error('Face performance needs the detailed pose candidate');
   if(faceGuard&&!facePerformance)throw Error('Face guard needs the facial performance candidate');
+  if(attributes&&!faceGuard)throw Error('Attribute inventory needs guarded face performance');
+  if(globalAttention&&(!attributes||recipe!=='native4'))throw Error('Global native shot needs the matched four-step attribute recipe');
   const dmd8=recipe==='dmd8';
   if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
   for(const key of Object.keys(NATIVE_POSE_MODELS))if(!fileName(models[key])||!models[key].endsWith('.safetensors'))
@@ -28,7 +30,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
   let next=0;
   for(const [i,s] of segments.entries()){
     if(s.start!==next||s.contextFrames!==(i?(visualDetails?22:5):0)||s.loadStart+s.contextFrames!==s.start||
-      s.modelFrames%17!==5||s.modelFrames>124||s.inputFrames>s.modelFrames||s.inputFrames!==s.length+s.contextFrames)
+      s.modelFrames%17!==5||s.modelFrames>(globalAttention?362:124)||s.inputFrames>s.modelFrames||s.inputFrames!==s.length+s.contextFrames)
       throw Error('Invalid pose window timeline');
     next+=s.length;
   }
@@ -39,6 +41,12 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
   add(3,'VAELoader',{vae_name:models.videoVae});add(4,'VAELoader',{vae_name:models.audioVae});
   add(6,'LoraLoaderModelOnly',{model:['1',0],lora_name:dmd8?'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors':models.turbo,strength_model:1});
   if(dmd8)add(8,'MiniMaxH3SigmaShift',{model:['6',0],shift_video:12,shift_audio:3});
+  if(globalAttention){
+    add(9,'ModelAttentionBackend',{model:['6',0],attention:'comfy kitchen attention'});
+    add(10,'BlockSparseAttention',{model:['9',0],selection:'sol-attn','selection.tau':1,start_percent:0,end_percent:1,
+      dense_blocks:'0,1',min_tokens:12288,extra_tokens:256,sink_conditioning:'exact_kv',verbose:true},
+      'Experimental full-shot acceleration; exact reference KV, dense first two blocks; visual QA required');
+  }
   add(13,'ModelPatchLoader',{name:models.patch});
   add(16,'CheckpointLoaderSimple',{ckpt_name:models.pose});
   add(17,'UNETLoader',{unet_name:models.detector,weight_dtype:'default'});
@@ -68,6 +76,21 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
     'Transfer its mouth movement, eye movements, gaze and facial expression to the person in <Picture 1>. '+
     'The facial performance is not an appearance reference: retain <Picture 1>\'s face, hair, skin, makeup and lighting. '+
     'Preserve the performance\'s mouth opening and expression changes instead of keeping the still photo\'s neutral expression.';
+  if(attributes){
+    add(85,'CLIPLoader',{clip_name:models.caption,type:'minimax',device:'default'});
+    add(86,'TextGenerate',{clip:['85',0],image:['30',0],max_length:384,sampling_mode:'off',thinking:false,use_default_template:true,
+      prompt:'Inspect only this current reference photo. Write a concise factual English inventory of its visible appearance. '+
+        'Describe actual hair colour, length and style; every visible clothing piece, its colour, material, sleeve and hem coverage; '+
+        'hand coverings including any gloves, belts, jewellery and other visible accessories; the setting and actual lighting. '+
+        'Check both hands and wrists carefully. State only visible facts and visible coverage; do not infer items hidden out of frame. '+
+        'Do not describe body shape, body measurements, attractiveness, age, pose or performance. Do not beautify or reinterpret the outfit. '+
+        'Output a single plain paragraph of at most 140 words, no Markdown and no generation instructions.'});
+    const fixed=appearancePrompt+' Preserve the complete garment coverage and every visible accessory in <Picture 1>, '+
+      'including hand coverings. Any bare fingers or skin seen in the performance clip supply action only; '+
+      'they must not remove gloves or change the reference outfit. The following inventory describes <Picture 1> only, '+
+      'while its native pixels continue to define all body proportions and facial geometry.';
+    appearancePrompt=add(87,'StringConcatenate',{string_a:fixed,string_b:['86',0],delimiter:'\nReference photo inventory: '});
+  }
   add(40,'KSamplerSelect',{sampler_name:dmd8?'euler':'res_multistep'});
   let facialSequence=null;
   if(retarget){
@@ -149,7 +172,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
     pose=add(b+7,'SDPoseDrawKeypoints',{keypoints:points,draw_body:true,draw_hands:true,draw_face:true,
       draw_feet:true,stick_width:4,face_point_size:2,score_threshold:.5,draw_head:true});
     }
-    const model=add(b+8,'MiniMaxH3FunControlNetApply',{model:[dmd8?'8':'6',0],model_patch:['13',0],vae:['3',0],
+    const model=add(b+8,'MiniMaxH3FunControlNetApply',{model:[dmd8?'8':globalAttention?'10':'6',0],model_patch:['13',0],vae:['3',0],
       strength:1,start_percent:0,end_percent:1,control_video:pose},'Trained native pose control; no source RGB or inpaint source');
     let faceClip=null;
     if(facePerformance){

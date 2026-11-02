@@ -122,6 +122,36 @@ tests actual independent hair/outfit/scene binding rather than reusing a driver
 whose scene already matches the reference. The photo is 1080×1842, SHA-256
 `d28ac156ed7f71730a9b98acbd917b3a90b8ac8b1ec2b2d81606b0bd758711b8`.
 
+**Both later trials remain rejected.** Full task `2117267691572387841`
+completed 361 native 1080×1936 frames in 1407 provider seconds and 1616.450 s
+overall (26m56.450s). Ceiling jumps remain at all three joins: -3.2283,
+-2.9576 and -1.7025 gray levels at frames 107, 192 and 277. Longer continuation
+did not enforce a continuous exposure; material/necklace detail also drifts.
+The reference-change task `2117272674728497153` completes in 198 provider seconds
+and retains pink hair, the main outfit and outdoor background, but removes the
+reference's black gloves. Its actual GetImageSize/MathExpression execution and
+48-frame facial crop verify helper availability and the frame-count guard.
+The preceding invalid-loader probe was capacity-rejected (421 / TASK_QUEUE_MAXED)
+on the inspection account; it was not an accepted render and was not retried.
+
+The next private `native-fun-global4-face-attributes` candidate uses the model's
+native 362-frame window: the 361 requested frames plus one explicit terminal
+padding frame, trimmed after decode. It has one sampler for this full 15-second
+fixture, removing independently sampled joins and recursive generated-RGB
+continuation from that clip. It keeps the matched native four-step student.
+To test runtime feasibility it uses INT8 dense Kitchen attention and Sol sparse
+attention from the first step, dense blocks 0/1 and exact conditioning KV. These
+are approximate acceleration methods and require fresh visual and GPU checks;
+no speed or appearance claim follows from constructing the graph.
+
+A deterministic current-photo inventory names only visible hair, clothes,
+coverage, hand coverings/accessories, scene and lighting. It excludes body/beauty
+descriptions and is appended to fixed Picture/Video role assignments. Native
+photo pixels remain the body/identity reference. The changed-reference screen
+must retain its gloves before this candidate can progress. Longer inputs keep
+all requested frames in bounded native windows; their joins are not validated
+by a successful single-shot 15-second fixture.
+
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
 v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,
