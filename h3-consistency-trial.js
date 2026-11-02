@@ -16,6 +16,9 @@ const TRIALS=Object.freeze({
       video:'bb2d5ce87ea240bff1dbd3600e58681c00a2c89bee6630f574e6bec6f9e80fc1'}},
   'ffp-private5-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa005',profile:'guide-dmad4-ffp',media:{
     image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+    video:'1bb15f1d4d1dee8d7d28757b742f8764a0a18cc9725e603bcee938c4eb3f316a'}},
+  'motion-private5-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa006',profile:'guide-dmad4-motion-anchor',media:{
+    image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
     video:'1bb15f1d4d1dee8d7d28757b742f8764a0a18cc9725e603bcee938c4eb3f316a'}}
 });
 const MEDIA=Object.freeze({
@@ -89,7 +92,7 @@ export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancel
     const job=queue.read(TRIALS[req.params.caseName].jobId);
     const task=job?.task?.taskId?getTask(String(job.task.taskId)):null;
     if(!consistencyH3Profile(job)||!task||task.video!=='h3-consistency-driving.mp4'||
-      task.inputDiagnostics?.inferenceProfile!=='guide-dmad4-ffp'||!cancelTask)return res.sendStatus(404);
+      task.inputDiagnostics?.inferenceProfile!==consistencyH3Profile(job)||!cancelTask)return res.sendStatus(404);
     if(['success','failed'].includes(task.status))return res.json({taskId:task.taskId,status:task.status});
     try{res.json(await cancelTask(task.taskId));}catch{res.status(502).json({error:'Penghentian uji belum terkonfirmasi.'});}
   });

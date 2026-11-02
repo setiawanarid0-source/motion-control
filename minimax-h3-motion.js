@@ -11,6 +11,7 @@ export const H3_MAX_SECONDS=60;
 export const H3_REVISION='motion-transfer-native-1080-v5';
 export const H3_DEFAULT_PROFILE='guide-dmad4-focus';
 export const H3_WINDOW_FRAMES=124;
+const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(profile);
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   clip:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
@@ -142,7 +143,7 @@ export function h3Segments(totalFrames,sceneCuts=[],continuationFrames=1){
 }
 
 export async function prepareH3Input(file,mode,imageFile,{
-  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus'].includes(inferenceProfile)
+  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor'].includes(inferenceProfile)
 }={}){
   const source=await probeH3Input(file,mode);
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-motion-'));
@@ -210,8 +211,8 @@ export function h3ExecutionPlan(source){
     sampling:h3SamplingPlan(source),
     referenceFace:source.referenceFace||null,
     attentionConditioning:h3AttentionConditioning(source),
-    guidePhotoCopyResized:source.inferenceProfile==='guide-dmad4-ffp',
-    guideAppearance:source.inferenceProfile==='guide-dmad4-ffp'?'photo_first_frame_then_generated_overlap':'source_rgb_with_generated_keyframe',
+    guidePhotoCopyResized:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE),
+    guideAppearance:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?'photo_first_frame_then_generated_overlap':'source_rgb_with_generated_keyframe',
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames,contextFrames:s.contextFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
@@ -222,11 +223,11 @@ function h3AttentionConditioning(source){
   // Native exact_kv keeps every query's access to the reference exact. The
   // extra dense target-audio query rows are unnecessary for source-audio export.
   return source.sparseConditioningMode||
-    (['guide-dmad4-focus','guide-dmad4-ffp'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE)?'exact_kv':'exact_kv_and_rows');
+    (['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE)?'exact_kv':'exact_kv_and_rows');
 }
 
 export function h3SamplingPlan(source){
-  const dmad=['guide-dmad4-focus','guide-dmad4-ffp'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
+  const dmad=['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
   // DMAD's four-step student uses re-noise sampling (LCM/simple), not an
   // eight-step DMD adapter with its scheduler shortened arbitrarily.
   return {steps:dmad?4:8,sampler:dmad?'lcm':'euler',scheduler:'simple',
@@ -243,17 +244,18 @@ function validateSource(source){
   let expected;
   try{expected=h3PhotoPlan(source.referenceWidth,source.referenceHeight);}catch{throw Error('Metadata foto H3 belum tervalidasi.');}
   if(Object.entries(expected).some(([key,value])=>source[key]!==value))throw Error('Metadata canvas H3 belum tervalidasi.');
-  return h3Segments(source.totalFrames,source.sceneCuts,source.inferenceProfile==='guide-dmad4-ffp'?5:1);
+  return h3Segments(source.totalFrames,source.sceneCuts,photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?5:1);
 }
 export function h3GraphForInputs(base,{imageName,videoName,source}){
   inputName(imageName);inputName(videoName);
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
-  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
+  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const ffp=profile==='guide-dmad4-ffp';
-  const focused=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp'].includes(profile),sampling=h3SamplingPlan(source);
+  const anchored=photoGuideProfile(profile);
+  const focused=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-motion-anchor'].includes(profile),sampling=h3SamplingPlan(source);
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:H3_MODELS.clip,type:'minimax',device:'default'});
@@ -285,7 +287,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   const reference=add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,
     right:source.referencePadRight,bottom:source.referencePadBottom,feathering:0},'Original photo pixels; grid padding only');
   let firstFrame=null;
-  if(ffp){
+  if(anchored){
     // The FFP model reads the edited appearance at frame 0 of its aligned guide,
     // not only as a detached reference picture. Fit a CONDITIONING COPY; node 31
     // still supplies every original photo pixel and decoded output is not resized.
@@ -304,6 +306,9 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       'Additional native-pixel identity reference from the same photo; no output face editing');
   }
   let prompt=H3_PROMPT;
+  if(anchored&&!ffp)prompt=prompt.replace('The aligned motion guide supplies',
+    '<Picture 1> also defines the edited starting frame of the aligned guide. '+
+    'Propagate this complete appearance through every subsequent frame while retaining the guide performance and camera.\nThe aligned motion guide supplies');
   // FFP is trained to propagate a complete edited appearance, with one native
   // picture. Do not feed competing whole-photo/face references or guide CLIP.
   if(ffp)prompt='vfx_edit: Propagate the complete appearance in <Picture 1> through the entire video: '+
@@ -342,7 +347,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       continuation=add(b+6,'ImageFromBatch',{image:previous.image,
         batch_index:previous.lastFrame-seg.contextFrames+1,length:seg.contextFrames});
     }
-    if(ffp){
+    if(anchored){
       const count=continuation?seg.contextFrames:1;
       const rest=add(b+14,'ImageFromBatch',{image:guide,batch_index:count,length:seg.modelFrames-count});
       // Replace the conflicting source prefix; do not append a second guide
@@ -352,7 +357,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     }
     let positive=tara?[String(b+4),0]:add(b+5,'MiniMaxH3AddGuide',{positive:[String(b+4),0],latent:[String(b+4),1],vae:['3',0],
       image:guide,frame_idx:0},'All aligned motion frames; no native reference-video duplicate');
-    if(continuation&&!ffp){
+    if(continuation&&!anchored){
       positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:[String(b+4),1],vae:['3',0],image:continuation,frame_idx:0},
         'Previous generated frames at matching source overlap');
     }
