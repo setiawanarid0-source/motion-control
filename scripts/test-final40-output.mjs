@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {readLegacyFinal40} from '../legacy-final40-cache.js';
+import {selectFinalVideoOutput} from '../runninghub-output.js';
 
 const graph=file=>JSON.parse(fs.readFileSync(new URL('../workflows/'+file,import.meta.url),'utf8'));
 const current=graph('current-api.json');
@@ -43,7 +44,10 @@ assert.ok(!server.includes('pruneFinal40('),'Server must not maintain FFmpeg con
 assert.ok(!server.includes("from './final-fps.js'"),'Obsolete FFmpeg service must be removed');
 assert.ok(server.includes("from './legacy-final40-cache.js'"),
   'Already-converted old History media may remain readable without any processing');
-assert.ok(server.includes("const video=outputs.find(x=>String(x.nodeId)==='490')"),
-  'RunningHub output node 490 must be used directly');
+assert.ok(server.includes('const video=selectFinalVideoOutput(outputs)'),
+  'Polling must use the shared final-video selector');
+const direct={nodeId:'490',fileType:'mp4',fileUrl:'https://example.test/native40.mp4'};
+assert.equal(selectFinalVideoOutput([{nodeId:'494',fileType:'mp4',fileUrl:'https://example.test/qa.mp4'},direct]),direct,
+  'RunningHub output node 490 must be used directly even when a QA clip precedes it');
 assert.equal(readLegacyFinal40('../invalid'),null,'Legacy cache reader must reject unsafe IDs');
 console.log('PASS: Native Current/R4 40 FPS frames and output; synchronized R4 masks; no website post-generation FFmpeg');
