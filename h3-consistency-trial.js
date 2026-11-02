@@ -34,7 +34,11 @@ const TRIALS=Object.freeze({
   'native-pose8-screen2-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa012',profile:'native-fun-pose8-caption',media:{
     image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
     video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}},
-  'native-pose8-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa013',profile:'native-fun-pose8-caption'}
+  'native-pose8-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa013',profile:'native-fun-pose8-caption'},
+  'native-retarget4-screen2-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa014',profile:'native-fun-retarget4-caption',media:{
+    image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+    video:'28ebc11903ee5b00bfa1ac0b9a0c3f74e2b9cb379682fa8c586bb2df4b078452'}},
+  'native-retarget4-full15-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa015',profile:'native-fun-retarget4-caption'}
 });
 const MEDIA=Object.freeze({
   image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',

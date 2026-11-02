@@ -8,7 +8,7 @@ import {findValidationRejection} from './runninghub-graph-validation.js';
 
 export const POSE_PROBE_MARKER='VANTA_VALIDATION_ONLY_DO_NOT_RENDER.invalid';
 export function nativePoseValidationGraph(phase='catalog'){
-  if(!['catalog','checkpoint'].includes(phase))throw Error('Invalid validation phase');
+  if(!['catalog','checkpoint','retarget'].includes(phase))throw Error('Invalid validation phase');
   const g={},add=(id,type,inputs)=>{g[id]={class_type:type,inputs};};
   add(1,'UNETLoader',{unet_name:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',type:'minimax',device:'default'});
@@ -44,6 +44,14 @@ export function nativePoseValidationGraph(phase='catalog'){
       strength:1,start_percent:0,end_percent:1,control_video:['20',0]});
     g['9'].inputs.model=['22',0];g['11'].inputs.model=['22',0];
   }
+  if(phase==='retarget'){
+    add(23,'BodyRatioMapperProportionTransfer',{pose_keypoint:['19',0],ref_pose_keypoint:['19',0],
+      enable_rpca:false,hand_scaling:true,foot_scaling:true,offset_stabilizer_y:false,offset_stabilizer_x:false,
+      best_hand_search:true,best_neck_search:false,final_offset_alignment:true,base_offset_mode:true,
+      head_fixed_mode:false,match_original_ear_scale:false,confidence_threshold:.3,output_absolute_coordinates:true,
+      print_detailed_logs:false,anchor_output_mode:'single_frame_multi_person'});
+    g['20'].inputs.keypoints=['23',0];
+  }
   return g;
 }
 export function poseValidationSummary(response){
@@ -60,7 +68,7 @@ export function poseValidationSummary(response){
     ...[...String(e.details||'').matchAll(/['"]([^'"\r\n]{1,240}\.safetensors)['"]/g)].map(m=>m[1])
   ]).filter(safeModel))];
   const missing=[...new Set((JSON.stringify(rejected.error||{}).match(
-    /MiniMaxH3FunControlNetApply|ModelPatchLoader|SDPoseKeypointExtractor|SDPoseDrawKeypoints|RTDETR_detect/g)||[]))];
+    /MiniMaxH3FunControlNetApply|ModelPatchLoader|SDPoseKeypointExtractor|SDPoseDrawKeypoints|RTDETR_detect|BodyRatioMapperProportionTransfer/g)||[]))];
   return {status:'rejected_before_execution',type:rejected.error?.type,missingNodes:missing,
     nodes:Object.entries(rejected.node_errors||{}).slice(0,25).map(([id,n])=>({id,
       type:String(n.class_type||'').replace(/[^A-Za-z0-9_]/g,'').slice(0,80),
@@ -81,12 +89,12 @@ export function installNativePoseInspection({app,rootDir,getTask,getReference,pr
     req.h3InspectedTask=task;next();
   };
   const checkpoint=phase=>path.join(rootDir,'h3-benchmark-checkpoints',
-    (phase==='checkpoint'?'native-pose-checkpoint-v1-':'native-pose-validation-')+taskId+'.json');
+    ({checkpoint:'native-pose-checkpoint-v1-',retarget:'native-pose-retarget-v1-'}[phase]||'native-pose-validation-')+taskId+'.json');
   const read=async(phase='catalog')=>{try{return JSON.parse(await fs.readFile(checkpoint(phase),'utf8'));}catch{return {status:'not_checked'};}};
   app.get(route,auth,async(req,res)=>res.json({taskId,status:req.h3InspectedTask.status,
     inputDiagnostics:req.h3InspectedTask.inputDiagnostics||null,
     references:{image:!!getReference(taskId,'image'),video:!!getReference(taskId,'video'),previewOnly:true},
-    validation:await read(),checkpointValidation:await read('checkpoint')}));
+    validation:await read(),checkpointValidation:await read('checkpoint'),retargetValidation:await read('retarget')}));
   app.get(route+'/source/:kind',auth,(req,res)=>{
     if(!['image','video'].includes(req.params.kind))return res.sendStatus(404);
     const file=getReference(taskId,req.params.kind);if(!file)return res.sendStatus(404);
@@ -119,4 +127,5 @@ export function installNativePoseInspection({app,rootDir,getTask,getReference,pr
   };
   app.post(route+'/validate',auth,validate('catalog'));
   app.post(route+'/validate-checkpoint',auth,validate('checkpoint'));
+  app.post(route+'/validate-retarget',auth,validate('retarget'));
 }

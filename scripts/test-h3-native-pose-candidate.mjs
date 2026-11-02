@@ -50,5 +50,26 @@ for(let i=0;i<3;i++){
  assert.deepEqual(eight[1008+i*30].inputs.model,['8',0]);
 }
 assert.equal(h3ExecutionPlan(eightSource).sampling.steps,8);
+const retargetSource={...full,inferenceProfile:'native-fun-retarget4-caption'};
+const retarget=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:retargetSource});
+assert.equal(Object.values(retarget).filter(n=>n.class_type==='BodyRatioMapperProportionTransfer').length,1,
+ 'Solve body proportions once for the complete sequence, never independently per window');
+assert.deepEqual(retarget['67'].inputs.ref_pose_keypoint,['66',0]);
+assert.deepEqual(retarget['64'].inputs.image,['30',0]);
+assert.equal(retarget['60'].inputs.frame_load_cap,361);
+assert.equal(retarget['67'].inputs.head_fixed_mode,false);
+assert.equal(retarget['67'].inputs.offset_stabilizer_x,false);
+assert.equal(retarget['67'].inputs.offset_stabilizer_y,false);
+for(const [i,s] of h3Segments(361,[],5).entries()){
+ const b=1000+30*i;
+ assert.deepEqual(retarget[b+19].inputs,{image:['68',0],batch_index:s.loadStart,length:s.inputFrames});
+ const control=retarget[b+8].inputs.control_video;
+ assert.equal(control[0],String(b+(s.modelFrames>s.inputFrames?22:19)));
+ assert.equal(retarget[b],undefined,'No second raw-source path or repeated proportion solve');
+ assert.equal(retarget[b+9].inputs['ref_images.ref_image_1'][0],'31');
+}
+const retargetPlan=h3ExecutionPlan(retargetSource);
+assert.equal(retargetPlan.poseRetargeting,'photo_proportions_once_for_whole_sequence');
+for(const [id,node] of Object.entries(retarget))assert.equal(h3NodeClass(id,retargetPlan),node.class_type,'Retarget timing node '+id);
 assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption');
 console.log('PASS: pose-only source conditioning, current native photo, shared caption, matched model paths, generated-only continuation, exact frames/audio and no output resize/refinement; GPU quality remains unvalidated');

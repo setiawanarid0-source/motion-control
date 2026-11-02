@@ -12,7 +12,7 @@ export const NATIVE_POSE_MODELS=Object.freeze({
 });
 const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
   !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
-export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4'}){
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false}){
   if(!['native4','dmd8'].includes(recipe))throw Error('Invalid pose sampling recipe');
   const dmd8=recipe==='dmd8';
   if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
@@ -51,9 +51,39 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       'Keep the camera behaviour and performance timing of the pose sequence. Add no accessories or objects, no smoothing, beauty changes or invented wardrobe. '+
       'Output only the caption using actual visible image attributes, no Markdown or prefatory explanation.'});
   add(40,'KSamplerSelect',{sampler_name:dmd8?'euler':'res_multistep'});
+  if(retarget){
+    // One whole-sequence fit prevents a different body-ratio solve at every join.
+    // Resizing here is solely for keypoint analysis. Native appearance stays on 30 -> 31.
+    const analysisHeight=1024,analysisWidth=Math.round(source.canvasWidth/source.canvasHeight*analysisHeight);
+    add(60,'VHS_LoadVideo',{video:videoName,force_rate:24,force_size:'Disabled',custom_width:0,custom_height:0,
+      frame_load_cap:source.totalFrames,skip_first_frames:0,select_every_nth:1,format:'None'});
+    const resized=(id,image)=>add(id,'ImageScale',{image,upscale_method:'lanczos',width:analysisWidth,height:analysisHeight,crop:'disabled'});
+    const guideAnalysis=resized(61,['60',0]),photoAnalysis=resized(64,['30',0]);
+    for(const [id,analysis] of [[62,guideAnalysis],[65,photoAnalysis]]){
+      const boxes=add(id,'RTDETR_detect',{model:['17',0],image:analysis,threshold:.5,class_name:'person',max_detections:1});
+      add(id+1,'SDPoseKeypointExtractor',{model:['16',0],vae:['16',2],image:analysis,bboxes:boxes,batch_size:4});
+    }
+    add(67,'BodyRatioMapperProportionTransfer',{pose_keypoint:['63',0],ref_pose_keypoint:['66',0],
+      enable_rpca:false,hand_scaling:true,foot_scaling:true,offset_stabilizer_y:false,offset_stabilizer_x:false,
+      best_hand_search:true,best_neck_search:false,final_offset_alignment:true,base_offset_mode:true,
+      head_fixed_mode:false,match_original_ear_scale:false,confidence_threshold:.3,output_absolute_coordinates:true,
+      print_detailed_logs:false,anchor_output_mode:'single_frame_multi_person'},
+      'Fit photo bone proportions once; retain source head, hand and root motion without stabilization');
+    add(68,'SDPoseDrawKeypoints',{keypoints:['67',0],draw_body:true,draw_hands:true,draw_face:true,
+      draw_feet:true,stick_width:4,face_point_size:2,score_threshold:.5,draw_head:true});
+  }
   let previous=null;const exports=[];
   for(const [i,s] of segments.entries()){
     const b=1000+i*30;
+    let pose;
+    if(retarget){
+      pose=add(b+19,'ImageFromBatch',{image:['68',0],batch_index:s.loadStart,length:s.inputFrames});
+      if(s.modelFrames>s.inputFrames){
+        const last=add(b+20,'ImageFromBatch',{image:pose,batch_index:s.inputFrames-1,length:1});
+        const pad=add(b+21,'RepeatImageBatch',{image:last,amount:s.modelFrames-s.inputFrames});
+        pose=add(b+22,'ImageBatch',{image1:pose,image2:pad});
+      }
+    }else{
     let raw=add(b,'VHS_LoadVideo',{video:videoName,force_rate:24,force_size:'Disabled',custom_width:0,custom_height:0,
       frame_load_cap:s.inputFrames,skip_first_frames:s.loadStart,select_every_nth:1,format:'None'});
     if(s.modelFrames>s.inputFrames){
@@ -65,8 +95,9 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       'resize_type.longer_size':1024,scale_method:'lanczos'},'Resize only motion-analysis frames; preserve reference and generated pixels');
     const boxes=add(b+5,'RTDETR_detect',{model:['17',0],image:analysis,threshold:.5,class_name:'person',max_detections:1});
     const points=add(b+6,'SDPoseKeypointExtractor',{model:['16',0],vae:['16',2],image:analysis,bboxes:boxes,batch_size:4});
-    const pose=add(b+7,'SDPoseDrawKeypoints',{keypoints:points,draw_body:true,draw_hands:true,draw_face:true,
+    pose=add(b+7,'SDPoseDrawKeypoints',{keypoints:points,draw_body:true,draw_hands:true,draw_face:true,
       draw_feet:true,stick_width:4,face_point_size:2,score_threshold:.5,draw_head:true});
+    }
     const model=add(b+8,'MiniMaxH3FunControlNetApply',{model:[dmd8?'8':'6',0],model_patch:['13',0],vae:['3',0],
       strength:1,start_percent:0,end_percent:1,control_video:pose},'Trained native pose control; no source RGB or inpaint source');
     let positive=add(b+9,'MiniMaxH3ReferenceToVideo',{clip:['2',0],vae:['3',0],audio_vae:['4',0],

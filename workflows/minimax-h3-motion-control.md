@@ -47,10 +47,22 @@ wrist scrunchie was absent in inspected frames, but torso proportions and fabric
 shading remained insufficiently faithful. This is a rejected visual screen,
 not a reason to promote the new candidate or start its full-duration run.
 
-One separate private `native-fun-pose8-caption` comparison uses the same exact
+One separate private `native-fun-pose8-caption` comparison used the same exact
 photo, two-second guide and seed with the matched DMD eight-step adapter,
-Euler/simple and shifts 12/3. It tests a compatible alternative sampling recipe;
-its actual appearance and runtime remain pending. Ordinary generation is unchanged.
+Euler/simple and shifts 12/3. Task `2117229300269015041` completed 48 native
+1080×1936 frames in 254 provider seconds. It did not justify promotion: the
+source accessory stayed absent, but body/garment fidelity and mouth acting
+were insufficient. Neither rejected screen started a full-duration render.
+
+The next private four-step screen adds reference-aware skeleton retargeting
+with `BodyRatioMapperProportionTransfer`, after native SDPose and before pose
+drawing. It measures body ratios from the actual photo in an analysis branch;
+the appearance reference retains its original pixels. The ratio solve covers
+the whole source sequence once before window slicing, avoiding a new fit at
+each join. Head locking and XY stabilization are disabled to retain movement.
+This node's author supplies a RunningHub workflow, but availability and actual
+quality in this deployment must still be checked. Ordinary generation is unchanged.
+Source: https://github.com/wuwukaka/ComfyUI-BodyRatioMapper
 
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
