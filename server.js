@@ -31,6 +31,7 @@ import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h
 import {longH3Profile,longH3Result,longH3ModelChoices,runLongH3Deployment} from './h3-long-benchmark.js';
 import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} from './h3-consistency-trial.js';
 import {createH3AppearanceModel,CHARACTER_ASSET} from './h3-appearance-model.js';
+import {installNativePoseInspection} from './h3-native-pose-inspect.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -574,6 +575,15 @@ const upload = multer({
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+installNativePoseInspection({app,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),getReference:referenceFile,
+  taskId:process.env.VANTA_H3_INSPECT_TASK_ID||'',hash:process.env.VANTA_H3_INSPECT_TOKEN_HASH||'',
+  expires:process.env.VANTA_H3_INSPECT_EXPIRES||'',
+  probe:(task,graph)=>rhJson('/task/openapi/create',task.key,{apiKey:task.key,workflowId:LOCKED_WORKFLOW_ID,
+    instanceType:'plus',workflow:JSON.stringify(graph),nodeInfoList:[]},60000),
+  cancelUnexpected:async(task,id)=>{
+    const response=await rhJson('/task/openapi/cancel',task.key,{apiKey:task.key,taskId:id},30000);
+    if(Number(response?.code)!==0)throw Error('Validation task cancellation unconfirmed');
+  }});
 installConsistencyTrial({app,upload,queue:generationQueue,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),
   diagnoseTask:async id=>{
     const task=taskRegistry.get(id);
