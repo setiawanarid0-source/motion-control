@@ -16,7 +16,7 @@ export const H3_REVISION='motion-transfer-native-1080-v6';
 export const H3_DEFAULT_PROFILE='guide-dmad4-character-caption';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
-const nativeGlobalProfile=profile=>profile==='native-fun-global4-face-attributes';
+const nativeGlobalProfile=profile=>['native-fun-global4-face-attributes','native-fun-global8-face-attributes'].includes(profile);
 const nativeFaceProfile=profile=>['native-fun-retarget4-face-performance','native-fun-retarget4-face-guard'].includes(profile)||nativeGlobalProfile(profile);
 const nativeVisualProfile=profile=>profile==='native-fun-retarget4-visual'||nativeFaceProfile(profile);
 const nativePoseProfile=profile=>['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption'].includes(profile)||nativeVisualProfile(profile);
@@ -154,7 +154,7 @@ export function h3Segments(totalFrames,sceneCuts=[],continuationFrames=1,windowF
 }
 
 export async function prepareH3Input(file,mode,imageFile,{
-  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor','guide-dmad4-ffp-focus'].includes(inferenceProfile)
+  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor','guide-dmad4-ffp-focus'].includes(inferenceProfile),diagnosticOutputs=false
 }={}){
   const source=await probeH3Input(file,mode);
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-motion-'));
@@ -189,7 +189,7 @@ export async function prepareH3Input(file,mode,imageFile,{
       {timeout:120000,maxBuffer:1048576});
     const sceneCuts=[...new Set([...stderr.matchAll(/pts_time:([0-9.]+)/g)]
       .map(m=>Math.round(Number(m[1])*24)))].filter(n=>n>0&&n<frames);
-    return {...source,...plan,totalFrames:frames,sceneCuts,inferenceProfile,
+    return {...source,...plan,totalFrames:frames,sceneCuts,inferenceProfile,diagnosticOutputs:diagnosticOutputs===true,
       referenceFile:reference.file,referenceColor:reference.color,referenceFace,
       file:{path:output,originalname:'motion-guide.mp4',mimetype:'video/mp4',size:bytes},release};
   }catch(error){await release();throw error;}
@@ -247,7 +247,7 @@ function h3AttentionConditioning(source){
 }
 
 export function h3SamplingPlan(source){
-  if(source.inferenceProfile==='native-fun-pose8-caption')return {steps:8,sampler:'euler',scheduler:'simple',turbo:H3_MODELS.turbo,audioShift:3};
+  if(['native-fun-pose8-caption','native-fun-global8-face-attributes'].includes(source.inferenceProfile))return {steps:8,sampler:'euler',scheduler:'simple',turbo:H3_MODELS.turbo,audioShift:3};
   if(nativePoseProfile(source.inferenceProfile))return {steps:4,sampler:'res_multistep',scheduler:'simple',turbo:NATIVE_POSE_MODELS.turbo,audioShift:null};
   const dmad=['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
   // DMAD's four-step student uses re-noise sampling (LCM/simple), not an
@@ -275,10 +275,10 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
   if(nativePoseProfile(profile))return nativePoseCandidateGraph({imageName,videoName,source,segments,
-    recipe:profile==='native-fun-pose8-caption'?'dmd8':'native4',
+    recipe:['native-fun-pose8-caption','native-fun-global8-face-attributes'].includes(profile)?'dmd8':'native4',
     retarget:profile==='native-fun-retarget4-caption'||nativeVisualProfile(profile),visualDetails:nativeVisualProfile(profile),
     facePerformance:nativeFaceProfile(profile),faceGuard:profile==='native-fun-retarget4-face-guard'||nativeGlobalProfile(profile),
-    attributes:nativeGlobalProfile(profile),globalAttention:nativeGlobalProfile(profile)});
+    attributes:nativeGlobalProfile(profile),globalAttention:nativeGlobalProfile(profile),diagnostics:source.diagnosticOutputs===true});
   if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const ffp=['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(profile);

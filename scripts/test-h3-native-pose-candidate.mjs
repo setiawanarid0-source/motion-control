@@ -33,7 +33,7 @@ assert.throws(()=>nativePoseCandidateGraph({imageName:'../secret',videoName:'gui
 assert.throws(()=>nativePoseCandidateGraph({imageName:'photo',videoName:'guide',source,segments,models:{}}));
 const g=nativePoseCandidateGraph({imageName:'photo',videoName:'guide',source,segments});
 assert.equal(g['50'],undefined);assert.equal(g['490'].inputs.audio,undefined);
-const full={...h3PhotoPlan(1143,2048),fps:24,totalFrames:361,hasAudio:true,inferenceProfile:'native-fun-pose4-caption',sceneCuts:[]};
+const full={...h3PhotoPlan(1143,2048),fps:24,totalFrames:361,hasAudio:true,inferenceProfile:'native-fun-pose4-caption',sceneCuts:[],diagnosticOutputs:true};
 const integrated=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:full}),plan=h3ExecutionPlan(full);
 assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption','A private candidate must not promote itself');
 assert.equal(plan.guideAppearance,'drawn_pose_only_with_generated_continuation');assert.equal(plan.sampling.steps,4);
@@ -138,9 +138,24 @@ assert.ok(global['87'].inputs.string_a.includes('<Picture 1>'));assert.ok(global
 assert.deepEqual(global['1009'].inputs.prompt,['87',0]);
 assert.equal(global['1021'].inputs.amount,1);assert.equal(global['1025'].inputs.amount,1);
 const globalPlan=h3ExecutionPlan(globalSource);
+const ordinaryGraph=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:{...globalSource,diagnosticOutputs:false}});
+for(const id of ['69','70','71','72','73','75','76','77','492','493','494'])assert.equal(ordinaryGraph[id],undefined,'Private diagnostic output absent from normal requests: '+id);
+for(const id of Object.keys(ordinaryGraph))assert.deepEqual(ordinaryGraph[id],global[id],'The normal graph retains the tested inference path: '+id);
+assert.equal(ordinaryGraph['490'].class_type,'VHS_VideoCombine');
 assert.equal(globalPlan.samplerCount,1);assert.equal(globalPlan.nativeWindowFrames,362);
 assert.equal(globalPlan.appearanceCaptionModel,NATIVE_POSE_MODELS.caption);
 for(const [id,node] of Object.entries(global))assert.equal(h3NodeClass(id,globalPlan),node.class_type,'Global native timing node '+id);
+const global8Source={...globalSource,inferenceProfile:'native-fun-global8-face-attributes'};
+const global8=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:global8Source});
+assert.equal(global8['6'].inputs.lora_name,'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors');
+assert.deepEqual(global8['8'].inputs,{model:['6',0],shift_video:12,shift_audio:3});
+assert.deepEqual(global8['9'].inputs.model,['8',0],'Calculate sparse sigma boundaries after the matched DMD shift');
+assert.deepEqual(global8['1008'].inputs.model,['10',0]);assert.equal(global8['1010'].inputs.steps,8);
+assert.equal(global8['40'].inputs.sampler_name,'euler');assert.equal(global8['1009'].inputs.length,362);
+for(const id of Object.keys(global).filter(id=>!['6','9','40','1010'].includes(id)))assert.deepEqual(global8[id],global[id],
+ 'Four/eight-step comparison retains the same input, pose, face, attributes, continuation and export: '+id);
+assert.equal(h3ExecutionPlan(global8Source).sampling.steps,8);
+for(const [id,node] of Object.entries(global8))assert.equal(h3NodeClass(id,h3ExecutionPlan(global8Source)),node.class_type,'Global DMD timing node '+id);
 for(let n=6;n<=1440;n++){
  const parts=h3Segments(n,[],22,362);let cursor=0;
  for(const p of parts){assert.equal(p.start,cursor);assert.ok(p.modelFrames<=362);cursor+=p.length;}

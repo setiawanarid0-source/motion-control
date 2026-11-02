@@ -554,7 +554,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
     if(validation){
-      if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes'].includes(h3Source?.inferenceProfile))
+      if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes'].includes(h3Source?.inferenceProfile))
         console.info('H3 native pose model validation',JSON.stringify(poseValidationSummary(data)));
       if(['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-character-caption'].includes(h3Source?.inferenceProfile))
         console.info('H3 consistency model validation',JSON.stringify(consistencyModelChoices(data)));
@@ -757,7 +757,7 @@ async function handleGeneration(req,res){
     if(workflowKey==='minimaxH3'){
       req.progress?.('analyzing');
       h3Source=await prepareH3Input(videoFile,mode,imageFile,{
-        inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE});
+        inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
       console.info('H3 media plan',JSON.stringify(h3ExecutionPlan(h3Source)));

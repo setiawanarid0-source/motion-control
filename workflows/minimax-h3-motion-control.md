@@ -152,6 +152,36 @@ must retain its gloves before this candidate can progress. Longer inputs keep
 all requested frames in bounded native windows; their joins are not validated
 by a successful single-shot 15-second fixture.
 
+The actual full-shot short screens completed on 2 November 2026:
+
+| Fixture | Provider task | Output | Provider execution | Submission to ready |
+| --- | --- | --- | --- | --- |
+| Current gray shirt, source 2.25–4.25 s | `2117278933011746817` | 1080×1936, 48 frames, 24 FPS | 177 s | 188.541 s |
+| Pink hair / white blouse / brown costume / black gloves | `2117278980688408577` | 1080×1842, 48 frames, 24 FPS | 164 s | 176.898 s |
+
+Every output frame was inspected in contact sheets. The gray fixture does not
+copy the source wrist scrunchie; the second fixture retains black gloves and
+thin metal glasses, including while the gloved hand reaches the mouth. Native
+face crops at frames 0 and 47 were checked against the second photo to confirm
+the glasses. These screens justify a full-duration trial, not production
+promotion or a guarantee of exact 3D body volume, every facial microexpression,
+lighting or texture across longer clips. Full task `2117280220814069761` uses
+the original 15-second driving asset and the 1143×2048 photo; it is pending.
+
+Private pose/crop exports can be disabled independently of inference. Normal
+preflight disables those diagnostic files. The retained inference nodes are
+byte-equivalent to the corresponding private candidate; no generated-frame
+processing or model change accompanies removal of the diagnostic exports.
+
+A matched eight-step comparison keeps this same whole-photo, pose retargeting,
+guarded face sequence, factual inventory, native window and sparse policy. It
+uses the already-executed DMD eight-step adapter with Euler/simple and shifts
+12/3, with sparse thresholds computed after that shift. This is a comparison
+of two matched inference recipes, not a claim that changing only the numeric
+step count isolates every effect. Native-size short crops still re-synthesise
+the shirt's fine detail, so the eight-step screen checks whether the matched
+recipe materially improves that detail before any additional full render.
+
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
 v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,

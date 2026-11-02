@@ -13,13 +13,13 @@ export const NATIVE_POSE_MODELS=Object.freeze({
 });
 const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
   !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
-export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false,attributes=false,globalAttention=false}){
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false,attributes=false,globalAttention=false,diagnostics=true}){
   if(!['native4','dmd8'].includes(recipe))throw Error('Invalid pose sampling recipe');
   if(visualDetails&&!retarget)throw Error('Detailed pose needs whole-sequence retargeting');
   if(facePerformance&&!visualDetails)throw Error('Face performance needs the detailed pose candidate');
   if(faceGuard&&!facePerformance)throw Error('Face guard needs the facial performance candidate');
   if(attributes&&!faceGuard)throw Error('Attribute inventory needs guarded face performance');
-  if(globalAttention&&(!attributes||recipe!=='native4'))throw Error('Global native shot needs the matched four-step attribute recipe');
+  if(globalAttention&&!attributes)throw Error('Global native shot needs the guarded attribute recipe');
   const dmd8=recipe==='dmd8';
   if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
   for(const key of Object.keys(NATIVE_POSE_MODELS))if(!fileName(models[key])||!models[key].endsWith('.safetensors'))
@@ -42,7 +42,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
   add(6,'LoraLoaderModelOnly',{model:['1',0],lora_name:dmd8?'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors':models.turbo,strength_model:1});
   if(dmd8)add(8,'MiniMaxH3SigmaShift',{model:['6',0],shift_video:12,shift_audio:3});
   if(globalAttention){
-    add(9,'ModelAttentionBackend',{model:['6',0],attention:'comfy kitchen attention'});
+    add(9,'ModelAttentionBackend',{model:[dmd8?'8':'6',0],attention:'comfy kitchen attention'});
     add(10,'BlockSparseAttention',{model:['9',0],selection:'sol-attn','selection.tau':1,start_percent:0,end_percent:1,
       dense_blocks:'0,1',min_tokens:12288,extra_tokens:256,sink_conditioning:'exact_kv',verbose:true},
       'Experimental full-shot acceleration; exact reference KV, dense first two blocks; visual QA required');
@@ -117,7 +117,9 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       const draw=(id,keypoints,drawFace=true)=>add(id,'BodyRatioMapperSDPoseRender',{pose_keypoint:keypoints,resolution_x:source.canvasWidth,
         score_threshold:.3,scale_for_xinsir:false,stick_width:4,face_point_size:2,draw_face:drawFace,draw_mouth:drawFace,
         draw_hands:true,draw_feet:true,draw_thigh:true,draw_calf:true});
-      draw(68,['67',0],!facePerformance);draw(73,['66',0]);
+      draw(68,['67',0],!facePerformance);
+      if(diagnostics){
+      draw(73,['66',0]);
       const first=add(75,'ImageFromBatch',{image:['61',0],batch_index:0,length:1});
       const firstBoxes=add(76,'RTDETR_detect',{model:['17',0],image:first,threshold:.5,class_name:'person',max_detections:1});
       add(77,'SDPoseKeypointExtractor',{model:['16',0],vae:['16',2],image:first,bboxes:firstBoxes,batch_size:1});
@@ -127,6 +129,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       add(72,'ImageBatch',{image1:raw,image2:mapped});
       add(492,'SaveImage',{images:['72',0],filename_prefix:'VANTA-NATIVE-POSE-QA-raw-mapped'});
       add(493,'SaveImage',{images:['73',0],filename_prefix:'VANTA-NATIVE-POSE-QA-photo'});
+      }
       if(facePerformance){
         add(78,'SDPoseFaceBBoxes',{keypoints:['63',0],scale:1,force_square:false});
         add(79,'CropByBBoxes',{image:['61',0],bboxes:['78',0],output_width:256,output_height:256,padding:0,keep_aspect:'pad'},
@@ -140,7 +143,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
           facialSequence=add(82,'ImageScale',{image:facialSequence,upscale_method:'nearest-exact',width:['81',0],height:256,crop:'disabled'},
             '256-to-256 identity pass after frame-count assertion; guide input only');
         }
-        add(494,'VHS_VideoCombine',{images:facialSequence,frame_rate:24,loop_count:0,filename_prefix:'VANTA-FACE-PERFORMANCE-QA',
+        if(diagnostics)add(494,'VHS_VideoCombine',{images:facialSequence,frame_rate:24,loop_count:0,filename_prefix:'VANTA-FACE-PERFORMANCE-QA',
           format:'video/h264-mp4',pix_fmt:'yuv420p',crf:16,save_metadata:false,trim_to_audio:false,pingpong:false,save_output:true,no_preview:false});
       }
     }else add(68,'SDPoseDrawKeypoints',{keypoints:['67',0],draw_body:true,draw_hands:true,draw_face:true,
@@ -172,7 +175,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
     pose=add(b+7,'SDPoseDrawKeypoints',{keypoints:points,draw_body:true,draw_hands:true,draw_face:true,
       draw_feet:true,stick_width:4,face_point_size:2,score_threshold:.5,draw_head:true});
     }
-    const model=add(b+8,'MiniMaxH3FunControlNetApply',{model:[dmd8?'8':globalAttention?'10':'6',0],model_patch:['13',0],vae:['3',0],
+    const model=add(b+8,'MiniMaxH3FunControlNetApply',{model:[globalAttention?'10':dmd8?'8':'6',0],model_patch:['13',0],vae:['3',0],
       strength:1,start_percent:0,end_percent:1,control_video:pose},'Trained native pose control; no source RGB or inpaint source');
     let faceClip=null;
     if(facePerformance){
