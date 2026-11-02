@@ -210,6 +210,8 @@ export function h3ExecutionPlan(source){
     sampling:h3SamplingPlan(source),
     referenceFace:source.referenceFace||null,
     attentionConditioning:h3AttentionConditioning(source),
+    guidePhotoCopyResized:source.inferenceProfile==='guide-dmad4-ffp',
+    guideAppearance:source.inferenceProfile==='guide-dmad4-ffp'?'photo_first_frame_then_generated_overlap':'source_rgb_with_generated_keyframe',
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames,contextFrames:s.contextFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
@@ -282,6 +284,17 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   add(30,'LoadImage',{image:imageName});
   const reference=add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,
     right:source.referencePadRight,bottom:source.referencePadBottom,feathering:0},'Original photo pixels; grid padding only');
+  let firstFrame=null;
+  if(ffp){
+    // The FFP model reads the edited appearance at frame 0 of its aligned guide,
+    // not only as a detached reference picture. Fit a CONDITIONING COPY; node 31
+    // still supplies every original photo pixel and decoded output is not resized.
+    const fitted=add(33,'ImageScale',{image:['30',0],upscale_method:'bilinear',
+      width:source.outputWidth,height:source.outputHeight,crop:'center'},'Guide-only first-frame copy; original reference remains native');
+    firstFrame=add(34,'ImagePadForOutpaint',{image:fitted,left:source.padLeft,top:source.padTop,
+      right:source.canvasWidth-source.outputWidth-source.padLeft,
+      bottom:source.canvasHeight-source.outputHeight-source.padTop,feathering:0});
+  }
   let face=null;
   if(focused&&!ffp&&source.referenceFace){
     const f=source.referenceFace;
@@ -324,12 +337,23 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       width:source.canvasWidth,height:source.canvasHeight,length:seg.modelFrames,ref_image_size:'max',
       'ref_images.ref_image_1':reference,...(face?{'ref_images.ref_image_2':face}:{}),
       ...(tara?{'ref_videos.ref_video_1':guide}:{})},'Photo supplies full appearance in every segment');
+    let continuation=null;
+    if(seg.contextFrames&&previous){
+      continuation=add(b+6,'ImageFromBatch',{image:previous.image,
+        batch_index:previous.lastFrame-seg.contextFrames+1,length:seg.contextFrames});
+    }
+    if(ffp){
+      const count=continuation?seg.contextFrames:1;
+      const rest=add(b+14,'ImageFromBatch',{image:guide,batch_index:count,length:seg.modelFrames-count});
+      // Replace the conflicting source prefix; do not append a second guide
+      // containing the original outfit at the same frame positions.
+      guide=add(b+15,'ImageBatch',{image1:continuation||firstFrame,image2:rest},
+        continuation?'Continue generated appearance on the exact source-time overlap':'Edited photo is frame zero of the guide');
+    }
     let positive=tara?[String(b+4),0]:add(b+5,'MiniMaxH3AddGuide',{positive:[String(b+4),0],latent:[String(b+4),1],vae:['3',0],
       image:guide,frame_idx:0},'All aligned motion frames; no native reference-video duplicate');
-    if(seg.contextFrames&&previous){
-      const tail=add(b+6,'ImageFromBatch',{image:previous.image,
-        batch_index:previous.lastFrame-seg.contextFrames+1,length:seg.contextFrames});
-      positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:[String(b+4),1],vae:['3',0],image:tail,frame_idx:0},
+    if(continuation&&!ffp){
+      positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:[String(b+4),1],vae:['3',0],image:continuation,frame_idx:0},
         'Previous generated frames at matching source overlap');
     }
     const noise=add(b+8,'RandomNoise',{noise_seed:ffp?42:42+i});

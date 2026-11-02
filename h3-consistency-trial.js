@@ -8,7 +8,8 @@ import {findValidationRejection} from './runninghub-graph-validation.js';
 const DEVICE='h3-consistency-20261102';
 const TRIALS=Object.freeze({
   'ffp-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa001',profile:'guide-dmad4-ffp'},
-  'ffp-upload-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa002',profile:'guide-dmad4-ffp'}
+  'ffp-upload-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa002',profile:'guide-dmad4-ffp'},
+  'ffp-anchor-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa003',profile:'guide-dmad4-ffp'}
 });
 const MEDIA=Object.freeze({
   image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
@@ -65,7 +66,7 @@ export function consistencyModelChoices(response){
       errors:(node.errors||[]).slice(0,5).map(e=>({type:String(e.type||'').slice(0,80),
         message:String(e.message||'').slice(0,160),details:String(e.details||'').slice(0,500)}))}))};
 }
-export function installConsistencyTrial({app,upload,queue,rootDir,getTask,hash,expires}){
+export function installConsistencyTrial({app,upload,queue,rootDir,getTask,cancelTask,hash,expires}){
   // Registered before owner login solely for this separate expiring credential.
   // With no deployment gate, these routes do not exist.
   if(!/^[a-f0-9]{64}$/.test(String(hash||''))||!Number.isFinite(Date.parse(expires)))return;
@@ -76,6 +77,14 @@ export function installConsistencyTrial({app,upload,queue,rootDir,getTask,hash,e
     next();
   };
   const route='/api/internal/h3-consistency/:caseName';
+  app.post(route+'/cancel',authorized,async(req,res)=>{
+    const job=queue.read(TRIALS[req.params.caseName].jobId);
+    const task=job?.task?.taskId?getTask(String(job.task.taskId)):null;
+    if(!consistencyH3Profile(job)||!task||task.video!=='h3-consistency-driving.mp4'||
+      task.inputDiagnostics?.inferenceProfile!=='guide-dmad4-ffp'||!cancelTask)return res.sendStatus(404);
+    if(['success','failed'].includes(task.status))return res.json({taskId:task.taskId,status:task.status});
+    try{res.json(await cancelTask(task.taskId));}catch{res.status(502).json({error:'Penghentian uji belum terkonfirmasi.'});}
+  });
   app.post(route,authorized,upload.fields([{name:'referenceImage',maxCount:1},{name:'videoReference',maxCount:1}]),async(req,res)=>{
     const image=req.files?.referenceImage?.[0],video=req.files?.videoReference?.[0];
     try{res.json(await stageConsistencyTrial({queue,rootDir,caseName:req.params.caseName,image,video}));}

@@ -573,6 +573,13 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 installConsistencyTrial({app,upload,queue:generationQueue,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),
+  cancelTask:async id=>{
+    const task=taskRegistry.get(id);
+    const result=await rhJson('/task/openapi/cancel',task.key,{apiKey:task.key,taskId:id},30000);
+    if(Number(result?.code)!==0)throw Error('Trial cancellation not confirmed');
+    taskRegistry.update(id,{status:'failed',finishedAt:new Date().toISOString(),error:'Uji internal dihentikan untuk melengkapi jangkar frame awal.'});
+    return {taskId:id,status:'cancelled'};
+  },
   hash:process.env.VANTA_H3_CONSISTENCY_TOKEN_HASH||'',expires:process.env.VANTA_H3_CONSISTENCY_EXPIRES||''});
 // Owner login is the ONLY entry into VANTA. Public exceptions: login assets and Railway health.
 const ownerAuth = createOwnerAuth({ dataDir: DATA_DIR });
