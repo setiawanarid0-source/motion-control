@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+import express from 'express';
+import multer from 'multer';
+import {consistencyTrialAuthorized,consistencyH3Profile,stageConsistencyTrial,
+  verifyConsistencyMedia,installConsistencyTrial,consistencyModelChoices} from '../h3-consistency-trial.js';
+import {h3PhotoPlan,h3Segments,h3GraphForInputs,H3_REVISION,H3_DEFAULT_PROFILE} from '../minimax-h3-motion.js';
+const token='7'.repeat(64),hash=createHash('sha256').update(token).digest('hex');
+const expiry=new Date(Date.now()+60000).toISOString(),dir=await fs.mkdtemp(path.join(os.tmpdir(),'h3-consistency-test-'));
+let server;
+try{
+  assert.ok(consistencyTrialAuthorized(token,hash,expiry));
+  for(const args of [[hash,hash,expiry],[token,'',expiry],[token,hash,'invalid'],[token,hash,'2020-01-01T00:00:00Z']])
+    assert.equal(consistencyTrialAuthorized(...args),false);
+  await assert.rejects(verifyConsistencyMedia({}),/Berkas/);
+  const image={path:path.join(dir,'fake.jpg'),mimetype:'image/jpeg'},video={path:path.join(dir,'fake.mp4'),mimetype:'video/mp4'};
+  await fs.writeFile(image.path,'not the approved photo');await fs.writeFile(video.path,'not the approved video');
+  await assert.rejects(verifyConsistencyMedia({image,video}),/Checksum/);
+  let staged=0;const queue={read:()=>null,stage:async job=>{staged++;assert.equal(consistencyH3Profile(job),'guide-dmad4-ffp');return {stage:'queued'};}};
+  const args={queue,rootDir:'/data',caseName:'ffp-v1',checkpointDir:path.join(dir,'checkpoints'),image,video,verify:async()=>{}};
+  await assert.rejects(stageConsistencyTrial({...args,rootDir:'/tmp'}),/tersedia/);
+  await assert.rejects(stageConsistencyTrial({...args,caseName:'other'}),/tersedia/);
+  assert.equal((await stageConsistencyTrial(args)).stage,'queued');
+  assert.equal((await stageConsistencyTrial(args)).stage,'checkpointed');
+  assert.equal(staged,1,'A restart/expired queue record must not trigger another paid run');
+  const source={...h3PhotoPlan(1143,2048),fps:24,totalFrames:361,hasAudio:true,sceneCuts:[],inferenceProfile:'guide-dmad4-ffp'};
+  const graph=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo.jpg',videoName:'guide.mp4',source});
+  assert.match(graph['7'].inputs.lora_name,/_ffp_/);assert.equal(graph['40'].inputs.sampler_name,'lcm');
+  assert.equal(graph['41'].inputs.steps,4);assert.equal(graph['1004'].inputs.ref_image_size,'max');
+  assert.equal(graph['1004'].inputs['ref_images.ref_image_2'],undefined);
+  assert.match(graph['1004'].inputs.prompt,/^vfx_edit:/);
+  assert.equal(graph['1036'].inputs.length,5);assert.equal(graph['1066'].inputs.length,5);
+  assert.equal(graph['1037'].class_type,'MiniMaxH3AddGuide');
+  assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-focus','Experimental path cannot change normal users before render validation');
+  for(let n=6;n<=1440;n++){
+    const parts=h3Segments(n,[],5);
+    assert.equal(parts.reduce((s,p)=>s+p.length,0),n);
+    assert.ok(parts.every(p=>p.modelFrames<=124));
+    let start=0;
+    for(const p of parts){assert.equal(p.start,start);assert.equal(p.loadStart,start-p.contextFrames);start+=p.length;}
+  }
+  assert.equal(consistencyModelChoices({data:{taskId:'paid'}}),null);
+  const app=express();installConsistencyTrial({app,upload:multer({dest:dir}),queue,rootDir:'/data',getTask:()=>null,hash,expires:expiry});
+  server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+  const base='http://127.0.0.1:'+server.address().port+'/api/internal/h3-consistency/';
+  assert.equal((await fetch(base+'ffp-v1')).status,404);
+  assert.equal((await fetch(base+'unknown',{headers:{'X-Vanta-H3-Trial':token}})).status,404);
+  assert.equal((await fetch(base+'ffp-v1',{headers:{'X-Vanta-H3-Trial':token}})).status,200);
+  console.log('PASS: private case admission, expired/wrong credentials, checksums, permanent once-only guard, native FFP graph and aligned five-frame continuation');
+}finally{if(server)await new Promise(r=>server.close(r));await fs.rm(dir,{recursive:true,force:true});}

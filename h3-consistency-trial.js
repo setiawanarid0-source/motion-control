@@ -1,0 +1,88 @@
+// Temporary, private admission for one explicitly reviewed, fully clothed case.
+// No account keys, uploads or result URLs are written to Git or public logs.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createHash,timingSafeEqual} from 'node:crypto';
+import {findValidationRejection} from './runninghub-graph-validation.js';
+
+const DEVICE='h3-consistency-20261102';
+const TRIALS=Object.freeze({
+  'ffp-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa001',profile:'guide-dmad4-ffp'}
+});
+const MEDIA=Object.freeze({
+  image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+  video:'217f2e11a9da490d0fb7fb7fbf3aef49f24cb56618bc0eb74184e6ff9593ab50'
+});
+export function consistencyH3Profile(job){
+  const trial=Object.values(TRIALS).find(t=>t.jobId===job?.jobId);
+  return trial&&job.deviceId===DEVICE&&job.image?.originalname==='h3-consistency-reference.jpg'&&
+    job.video?.originalname==='h3-consistency-driving.mp4'?trial.profile:null;
+}
+export function consistencyTrialAuthorized(token,hash,expires,now=Date.now()){
+  if(!/^[a-f0-9]{64}$/.test(String(hash||''))||typeof token!=='string'||!/^\w{64}$/.test(token)||
+    !Number.isFinite(Date.parse(expires))||now>=Date.parse(expires))return false;
+  return timingSafeEqual(createHash('sha256').update(token).digest(),Buffer.from(hash,'hex'));
+}
+export async function verifyConsistencyMedia({image,video}){
+  if(!image?.path||!video?.path||image.mimetype!=='image/jpeg'||video.mimetype!=='video/mp4')
+    throw Error('Berkas uji tidak sesuai.');
+  for(const [name,file] of Object.entries({image,video})){
+    const bytes=await fs.readFile(file.path);
+    if(createHash('sha256').update(bytes).digest('hex')!==MEDIA[name])throw Error('Checksum berkas uji tidak sesuai.');
+  }
+}
+export async function stageConsistencyTrial({queue,rootDir,caseName,image,video,verify=verifyConsistencyMedia,
+  checkpointDir=path.join(rootDir,'h3-benchmark-checkpoints')}){
+  const trial=TRIALS[caseName];
+  if(!trial||rootDir!=='/data')throw Error('Kasus uji tidak tersedia.');
+  const old=queue.read(trial.jobId);
+  if(old)return {jobId:trial.jobId,stage:old.stage,reused:true};
+  await verify({image,video});
+  await fs.mkdir(checkpointDir,{recursive:true,mode:0o700});
+  try{await fs.writeFile(path.join(checkpointDir,trial.jobId+'.json'),
+    JSON.stringify({jobId:trial.jobId,startedAt:new Date().toISOString()}),{flag:'wx',mode:0o600});}
+  catch(error){if(error.code==='EEXIST')return {jobId:trial.jobId,stage:'checkpointed',reused:true};throw error;}
+  return queue.stage({jobId:trial.jobId,deviceId:DEVICE,body:{workflow:'minimaxH3',mode:'plus',accountId:'auto'},
+    image:{...image,originalname:'h3-consistency-reference.jpg'},
+    video:{...video,originalname:'h3-consistency-driving.mp4'}});
+}
+export function consistencyModelChoices(response){
+  const rejected=findValidationRejection(response);
+  if(!rejected)return null;
+  const options=[];
+  for(const node of Object.values(rejected.node_errors||{})){
+    if(node?.class_type!=='LoraLoaderModelOnly')continue;
+    for(const error of node.errors||[]){
+      const names=error.extra_info?.input_config?.[0];
+      if(Array.isArray(names))for(const name of names)
+        if(typeof name==='string'&&name.length<240&&!name.includes('..')&&
+          /^[A-Za-z0-9_./ ()-]+\.safetensors$/.test(name)&&/minimax.*(motion_transfer|character_swap|DMAD)/i.test(name))options.push(name);
+    }
+  }
+  return {type:rejected.error?.type,options:[...new Set(options)].slice(0,30)};
+}
+export function installConsistencyTrial({app,upload,queue,rootDir,getTask,hash,expires}){
+  // Registered before owner login solely for this separate expiring credential.
+  // With no deployment gate, these routes do not exist.
+  if(!/^[a-f0-9]{64}$/.test(String(hash||''))||!Number.isFinite(Date.parse(expires)))return;
+  const authorized=(req,res,next)=>{
+    res.set('Cache-Control','no-store');
+    if(!consistencyTrialAuthorized(req.get('X-Vanta-H3-Trial'),hash,expires))return res.sendStatus(404);
+    if(!Object.hasOwn(TRIALS,req.params.caseName))return res.sendStatus(404);
+    next();
+  };
+  const route='/api/internal/h3-consistency/:caseName';
+  app.post(route,authorized,upload.fields([{name:'referenceImage',maxCount:1},{name:'videoReference',maxCount:1}]),async(req,res)=>{
+    const image=req.files?.referenceImage?.[0],video=req.files?.videoReference?.[0];
+    try{res.json(await stageConsistencyTrial({queue,rootDir,caseName:req.params.caseName,image,video}));}
+    catch(error){res.status(400).json({error:error.message});}
+    finally{for(const file of [image,video])if(file?.path)await fs.rm(file.path,{force:true}).catch(()=>{});}
+  });
+  app.get(route,authorized,(req,res)=>{
+    const trial=TRIALS[req.params.caseName],job=queue.read(trial.jobId);
+    const task=job?.task?.taskId?getTask(String(job.task.taskId)):null;
+    res.json({jobId:trial.jobId,stage:job?.stage||'not_staged',error:job?.error||null,
+      task:task?{taskId:task.taskId,status:task.status,providerRuntimeSeconds:task.providerRuntimeSeconds??null,
+        resultUrl:task.resultUrl||null,error:task.error||null}:null});
+  });
+}

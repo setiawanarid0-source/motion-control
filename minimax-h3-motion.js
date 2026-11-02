@@ -19,6 +19,7 @@ export const H3_MODELS=Object.freeze({
   turbo:'minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors',
   turboDmad4:'minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors',
   motion:'minimax_h3_motion_transfer_v1.0_ref2va.safetensors',
+  motionFfp:'minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors',
   motionTara:'minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors'
 });
 // Photo supplies the ENTIRE appearance, including the setting. Video supplies
@@ -110,7 +111,8 @@ export function h3ModelFrames(frames){return 5+17*Math.max(0,Math.ceil((frames-5
 // Export each real frame once. Continuations include one aligned overlap frame.
 // Scene-change heuristics are diagnostic only: fast pans/rolls must not create
 // many tiny, independently sampled clips and restart the character identity.
-export function h3Segments(totalFrames,sceneCuts=[]){
+export function h3Segments(totalFrames,sceneCuts=[],continuationFrames=1){
+  if(![1,5,22].includes(continuationFrames))throw Error('Konteks lanjutan H3 tidak valid.');
   if(!Number.isSafeInteger(totalFrames)||totalFrames<6||totalFrames>H3_MAX_SECONDS*H3_FPS)
     throw Error('Jumlah frame H3 tidak valid.');
   if(!Array.isArray(sceneCuts)||sceneCuts.some(n=>!Number.isSafeInteger(n)||n<=0||n>=totalFrames))
@@ -123,11 +125,11 @@ export function h3Segments(totalFrames,sceneCuts=[]){
     const a=boundaries[shot],length=boundaries[shot+1]-a;
     // 124 is a native 17n+5 H3 window. The old 106-frame cap split even
     // a five-second / 120-frame shot into two independent samplers at 2.5 s.
-    const count=length<=H3_WINDOW_FRAMES?1:Math.ceil((length-1)/(H3_WINDOW_FRAMES-1));
-    const inputTotal=length+count-1;
+    const count=length<=H3_WINDOW_FRAMES?1:Math.ceil((length-continuationFrames)/(H3_WINDOW_FRAMES-continuationFrames));
+    const inputTotal=length+(count-1)*continuationFrames;
     let start=a,inputCursor=0;
     for(let i=0;i<count;i++){
-      const contextFrames=i?1:0;
+      const contextFrames=i?continuationFrames:0;
       const inputFrames=Math.ceil((inputTotal-inputCursor)/(count-i));
       const end=start+inputFrames-contextFrames;
       segments.push({start,length:end-start,contextFrames,loadStart:start-contextFrames,inputFrames,
@@ -208,7 +210,7 @@ export function h3ExecutionPlan(source){
     referenceFace:source.referenceFace||null,
     attentionConditioning:h3AttentionConditioning(source),
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
-    segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames})),
+    segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames,contextFrames:s.contextFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
     postDecodeResize:false,postRefinement:false};
 }
@@ -217,11 +219,11 @@ function h3AttentionConditioning(source){
   // Native exact_kv keeps every query's access to the reference exact. The
   // extra dense target-audio query rows are unnecessary for source-audio export.
   return source.sparseConditioningMode||
-    ((source.inferenceProfile||H3_DEFAULT_PROFILE)==='guide-dmad4-focus'?'exact_kv':'exact_kv_and_rows');
+    (['guide-dmad4-focus','guide-dmad4-ffp'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE)?'exact_kv':'exact_kv_and_rows');
 }
 
 export function h3SamplingPlan(source){
-  const dmad=(source.inferenceProfile||H3_DEFAULT_PROFILE)==='guide-dmad4-focus';
+  const dmad=['guide-dmad4-focus','guide-dmad4-ffp'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
   // DMAD's four-step student uses re-noise sampling (LCM/simple), not an
   // eight-step DMD adapter with its scheduler shortened arbitrarily.
   return {steps:dmad?4:8,sampler:dmad?'lcm':'euler',scheduler:'simple',
@@ -238,16 +240,17 @@ function validateSource(source){
   let expected;
   try{expected=h3PhotoPlan(source.referenceWidth,source.referenceHeight);}catch{throw Error('Metadata foto H3 belum tervalidasi.');}
   if(Object.entries(expected).some(([key,value])=>source[key]!==value))throw Error('Metadata canvas H3 belum tervalidasi.');
-  return h3Segments(source.totalFrames,source.sceneCuts);
+  return h3Segments(source.totalFrames,source.sceneCuts,source.inferenceProfile==='guide-dmad4-ffp'?5:1);
 }
 export function h3GraphForInputs(base,{imageName,videoName,source}){
   inputName(imageName);inputName(videoName);
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
-  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
+  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
-  const focused=['guide-sol-focus','guide-dmad4-focus'].includes(profile),sampling=h3SamplingPlan(source);
+  const ffp=profile==='guide-dmad4-ffp';
+  const focused=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp'].includes(profile),sampling=h3SamplingPlan(source);
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:H3_MODELS.clip,type:'minimax',device:'default'});
@@ -255,7 +258,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(profile==='legacy-training-adapter')
     add(5,'LoraLoaderModelOnly',{model:['1',0],lora_name:H3_MODELS.adapter,strength_model:1});
   add(6,'LoraLoaderModelOnly',{model:[profile==='legacy-training-adapter'?'5':'1',0],lora_name:sampling.turbo,strength_model:1});
-  add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:H3_MODELS.motion,strength_model:1},'Motion Transfer v1.0');
+  add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:ffp?H3_MODELS.motionFfp:H3_MODELS.motion,strength_model:1},ffp?'Motion Transfer FFP v1.0':'Motion Transfer v1.0');
   add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:sampling.audioShift});
   if(profile==='guide-kitchen'||focused){
     add(9,'ModelAttentionBackend',{model:['7',0],attention:'comfy kitchen attention'});
@@ -275,7 +278,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   const reference=add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,
     right:source.referencePadRight,bottom:source.referencePadBottom,feathering:0},'Original photo pixels; grid padding only');
   let face=null;
-  if(focused&&source.referenceFace){
+  if(focused&&!ffp&&source.referenceFace){
     const f=source.referenceFace;
     if(!validIdentityCrop(f,source.referenceWidth,source.referenceHeight))
       throw Error('Area referensi wajah H3 tidak valid.');
@@ -283,6 +286,14 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       'Additional native-pixel identity reference from the same photo; no output face editing');
   }
   let prompt=H3_PROMPT;
+  // FFP is trained to propagate a complete edited appearance, with one native
+  // picture. Do not feed competing whole-photo/face references or guide CLIP.
+  if(ffp)prompt='vfx_edit: Propagate the complete appearance in <Picture 1> through the entire video: '+
+    'the same face and facial proportions, hair, body proportions, exact clothing and its colour, fabric texture, accessories, lighting and scene. '+
+    '<Picture 1> is the edited appearance reference for the video. Preserve its changes throughout the whole clip '+
+    'while keeping the original guide body and hand motion, facial expression changes, timing, camera movement and framing. '+
+    'Keep the outfit unchanged through turns and occlusions; do not restore the original performer or clothing. '+
+    'Keep the natural texture and facial geometry of the picture.';
   if(face)prompt=prompt.replace('The aligned motion guide supplies',
     '<Picture 2> is a close-up cropped from <Picture 1>, depicting the SAME <Subject 1>, not another person. '+
     'Preserve its visible eyes, nose, lips, jaw and facial proportions throughout the performance. '+
@@ -311,9 +322,10 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     let positive=tara?[String(b+4),0]:add(b+5,'MiniMaxH3AddGuide',{positive:[String(b+4),0],latent:[String(b+4),1],vae:['3',0],
       image:guide,frame_idx:0},'All aligned motion frames; no native reference-video duplicate');
     if(seg.contextFrames&&previous){
-      const tail=add(b+6,'ImageFromBatch',{image:previous.image,batch_index:previous.lastFrame,length:1});
+      const tail=add(b+6,'ImageFromBatch',{image:previous.image,
+        batch_index:previous.lastFrame-seg.contextFrames+1,length:seg.contextFrames});
       positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:[String(b+4),1],vae:['3',0],image:tail,frame_idx:0},
-        'Previous generated frame at matching source overlap');
+        'Previous generated frames at matching source overlap');
     }
     const noise=add(b+8,'RandomNoise',{noise_seed:42+i});
     const guider=add(b+9,'CFGGuider',{model:[samplingModel,0],positive,negative:positive,cfg:1});

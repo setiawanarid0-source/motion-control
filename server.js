@@ -29,6 +29,7 @@ import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from 
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
 import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h3-safe-benchmark.js';
 import {longH3Profile,longH3Result,longH3ModelChoices,runLongH3Deployment} from './h3-long-benchmark.js';
+import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} from './h3-consistency-trial.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -539,6 +540,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
     if(validation){
+      if(h3Source?.inferenceProfile==='guide-dmad4-ffp')
+        console.info('H3 consistency model validation',JSON.stringify(consistencyModelChoices(data)));
       if(h3Source?.inferenceProfile==='guide-dmad4-focus')
         console.info('H3 long model validation',JSON.stringify(longH3ModelChoices(data)));
       if(workflowKey==='rife60')validation.message=validation.message.replace('workflow H3','workflow RIFE');
@@ -558,6 +561,8 @@ const upload = multer({
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+installConsistencyTrial({app,upload,queue:generationQueue,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),
+  hash:process.env.VANTA_H3_CONSISTENCY_TOKEN_HASH||'',expires:process.env.VANTA_H3_CONSISTENCY_EXPIRES||''});
 // Owner login is the ONLY entry into VANTA. Public exceptions: login assets and Railway health.
 const ownerAuth = createOwnerAuth({ dataDir: DATA_DIR });
 app.use('/api/auth', ownerAuth.router);
@@ -879,7 +884,7 @@ async function runQueuedGeneration(job,report){
     headers:{'x-vanta-device':job.deviceId},
     cookies:{},query:{},body:job.body,
     files:{...(job.image?{referenceImage:[job.image]}:{}),videoReference:[job.video]},
-    progress:report,submissionAttempted:false,h3BenchmarkProfile:safeH3Profile(job)||longH3Profile(job),
+    progress:report,submissionAttempted:false,h3BenchmarkProfile:safeH3Profile(job)||longH3Profile(job)||consistencyH3Profile(job),
     h3SafeFaceFocus:safeH3FaceFocus(job),h3SafeConditioning:safeH3Conditioning(job)
   };
   let result=null,httpStatus=200;
@@ -888,7 +893,7 @@ async function runQueuedGeneration(job,report){
     json(data){result=data;return this;}
   };
   await handleGeneration(req,response);
-  if(longH3Profile(job))console.info('H3 long benchmark submission',JSON.stringify({
+  if(longH3Profile(job)||consistencyH3Profile(job))console.info('H3 long benchmark submission',JSON.stringify({
     jobId:job.jobId,accepted:result?.ok===true,taskId:/^\d{10,25}$/.test(String(result?.taskId||''))?String(result.taskId):null,
     submissionUnconfirmed:req.submissionAttempted&&result?.ok!==true}));
   if(result?.ok&&result.taskId){
