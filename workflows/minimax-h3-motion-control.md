@@ -85,7 +85,7 @@ acting is weak and an invented prolonged blink appears in the short output.
 The native photo-only prompt and pose path have not validated full-duration
 lighting, material fidelity or the speed target. No full-duration task was started.
 
-The next private `native-fun-retarget4-face-performance` candidate supplies a
+The private `native-fun-retarget4-face-performance` candidate supplies a
 tightly bounded, tracked facial crop in native Ref2VA's video slot. Pose still
 controls the body, while the current photo alone defines complete appearance.
 It omits low-confidence facial dots from the pose raster to avoid conflicting
@@ -93,7 +93,34 @@ facial controls. This is a test of expression transfer, not a guarantee that
 face appearance cannot leak. Before any full run, inspect every crop frame for
 accessories, verify exact count/FPS, and check generated facial identity and
 acting. `CropByBBoxes` can skip missing detections; this private candidate must
-not become a general default without a frame-preserving missing-face policy.
+not silently shift the facial sequence when detections are missing.
+
+Its short screen `2117265248348364802` completed in 213 provider seconds,
+303.132 seconds from accepted submission to ready. Both render and facial crop
+contain exactly 48 frames at 24 FPS (1080×1936 and 256×256 respectively). All 48
+crop frames were inspected: no wrist scrunchie or outfit entered the crop.
+Mouth acting improves and the invented prolonged blink is absent, while the
+initial expression timing is still approximate. This supports a full-duration
+trial for the owner's lighting/body/material regression, not a claim of perfect
+expression timing. Full trial `2117267691572387841` is pending visual review.
+Its photo is the supplied native 1143×2048 asset, not the unavailable native
+1536×2752 upload from the reported run. Do not present this timing as a measured
+result for that larger upload or upscale a preview to impersonate its original.
+
+The separate `native-fun-retarget4-face-guard` candidate asserts that tracked
+cropping returns the original source frame count and 256×256 pixels before any
+sampling dependency can execute. A dropped detection or full-RGB fallback stops
+the task; it never silently shifts the facial timeline. The subsequent 256×256
+identity pass changes no valid crop geometry. This is a rejection guard, not a
+replacement algorithm for missing detections. CPU tests against the upstream
+MathExpression evaluator exercise exact admission and both rejection paths;
+provider availability and a changed-reference GPU screen remain pending.
+
+The changed-reference screen uses an unscaled native first frame of the previous
+fully clothed pink-haired outdoor fixture, with the **current gym motion**. It
+tests actual independent hair/outfit/scene binding rather than reusing a driver
+whose scene already matches the reference. The photo is 1080×1842, SHA-256
+`d28ac156ed7f71730a9b98acbd917b3a90b8ac8b1ec2b2d81606b0bd758711b8`.
 
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap

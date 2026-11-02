@@ -13,10 +13,11 @@ export const NATIVE_POSE_MODELS=Object.freeze({
 });
 const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
   !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
-export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false}){
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false}){
   if(!['native4','dmd8'].includes(recipe))throw Error('Invalid pose sampling recipe');
   if(visualDetails&&!retarget)throw Error('Detailed pose needs whole-sequence retargeting');
   if(facePerformance&&!visualDetails)throw Error('Face performance needs the detailed pose candidate');
+  if(faceGuard&&!facePerformance)throw Error('Face guard needs the facial performance candidate');
   const dmd8=recipe==='dmd8';
   if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
   for(const key of Object.keys(NATIVE_POSE_MODELS))if(!fileName(models[key])||!models[key].endsWith('.safetensors'))
@@ -68,6 +69,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
     'The facial performance is not an appearance reference: retain <Picture 1>\'s face, hair, skin, makeup and lighting. '+
     'Preserve the performance\'s mouth opening and expression changes instead of keeping the still photo\'s neutral expression.';
   add(40,'KSamplerSelect',{sampler_name:dmd8?'euler':'res_multistep'});
+  let facialSequence=null;
   if(retarget){
     // One whole-sequence fit prevents a different body-ratio solve at every join.
     // Resizing here is solely for keypoint analysis. Native appearance stays on 30 -> 31.
@@ -106,7 +108,16 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
         add(78,'SDPoseFaceBBoxes',{keypoints:['63',0],scale:1,force_square:false});
         add(79,'CropByBBoxes',{image:['61',0],bboxes:['78',0],output_width:256,output_height:256,padding:0,keep_aspect:'pad'},
           'Private candidate: verify crop excludes accessories and retains every source frame before any promotion');
-        add(494,'VHS_VideoCombine',{images:['79',0],frame_rate:24,loop_count:0,filename_prefix:'VANTA-FACE-PERFORMANCE-QA',
+        facialSequence=['79',0];
+        if(faceGuard){
+          add(80,'GetImageSize',{image:facialSequence});
+          add(81,'MathExpression|pysssss',{a:['80',2],b:['80',0],c:['80',1],
+            expression:`256/((a==${source.totalFrames})*(b==256)*(c==256))`},
+            'Stop before sampling if face detection drops frames or falls back to a full RGB frame');
+          facialSequence=add(82,'ImageScale',{image:facialSequence,upscale_method:'lanczos',width:['81',0],height:256,crop:'disabled'},
+            '256-to-256 identity pass after frame-count assertion; guide input only');
+        }
+        add(494,'VHS_VideoCombine',{images:facialSequence,frame_rate:24,loop_count:0,filename_prefix:'VANTA-FACE-PERFORMANCE-QA',
           format:'video/h264-mp4',pix_fmt:'yuv420p',crf:16,save_metadata:false,trim_to_audio:false,pingpong:false,save_output:true,no_preview:false});
       }
     }else add(68,'SDPoseDrawKeypoints',{keypoints:['67',0],draw_body:true,draw_hands:true,draw_face:true,
@@ -142,7 +153,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       strength:1,start_percent:0,end_percent:1,control_video:pose},'Trained native pose control; no source RGB or inpaint source');
     let faceClip=null;
     if(facePerformance){
-      faceClip=add(b+23,'ImageFromBatch',{image:['79',0],batch_index:s.loadStart,length:s.inputFrames});
+      faceClip=add(b+23,'ImageFromBatch',{image:facialSequence,batch_index:s.loadStart,length:s.inputFrames});
       if(s.modelFrames>s.inputFrames){
         const last=add(b+24,'ImageFromBatch',{image:faceClip,batch_index:s.inputFrames-1,length:1});
         const pad=add(b+25,'RepeatImageBatch',{image:last,amount:s.modelFrames-s.inputFrames});

@@ -9,7 +9,7 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
   if(!/^motion-transfer-native-1080-v[123456]$/.test(String(plan?.revision)))return null;
-  if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance'].includes(plan.inferenceProfile)){
+  if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard'].includes(plan.inferenceProfile)){
     const globals={1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',6:'LoraLoaderModelOnly',13:'ModelPatchLoader',
       8:'MiniMaxH3SigmaShift',16:'CheckpointLoaderSimple',17:'UNETLoader',30:'LoadImage',31:'ImagePadForOutpaint',40:'KSamplerSelect',
       49:'ImageBatchMulti',50:'VHS_LoadAudioUpload',60:'VHS_LoadVideo',61:'ImageScale',62:'RTDETR_detect',63:'SDPoseKeypointExtractor',
@@ -17,8 +17,9 @@ export function h3NodeClass(node,plan){
       69:'BodyRatioMapperSDPoseRender',70:'ImageFromBatch',71:'ImageFromBatch',72:'ImageBatch',73:'BodyRatioMapperSDPoseRender',
       75:'ImageFromBatch',76:'RTDETR_detect',77:'SDPoseKeypointExtractor',
       78:'SDPoseFaceBBoxes',79:'CropByBBoxes',492:'SaveImage',493:'SaveImage',494:'VHS_VideoCombine',
+      80:'GetImageSize',81:'MathExpression|pysssss',82:'ImageScale',
       85:'CLIPLoader',86:'TextGenerate',490:'VHS_VideoCombine'};
-    if(String(node)==='68'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance'].includes(plan.inferenceProfile))return 'BodyRatioMapperSDPoseRender';
+    if(String(node)==='68'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard'].includes(plan.inferenceProfile))return 'BodyRatioMapperSDPoseRender';
     if(globals[node])return globals[node];
     const n=Number(node),index=Math.floor((n-1000)/30),offset=(n-1000)%30;
     const types=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBatch','ResizeImageMaskNode','RTDETR_detect',

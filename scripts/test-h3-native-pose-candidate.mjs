@@ -108,5 +108,18 @@ for(const [i,s] of h3Segments(361,[],22).entries()){
 const facePlan=h3ExecutionPlan(faceSource);
 assert.equal(facePlan.guideAppearance,'pose_and_face_performance_with_generated_continuation');
 for(const [id,node] of Object.entries(face))assert.equal(h3NodeClass(id,facePlan),node.class_type,'Face performance timing node '+id);
+const guardedSource={...full,inferenceProfile:'native-fun-retarget4-face-guard'};
+const guarded=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:guardedSource});
+assert.deepEqual(guarded['80'].inputs.image,['79',0]);
+assert.equal(guarded['81'].inputs.expression,'256/((a==361)*(b==256)*(c==256))');
+assert.deepEqual(guarded['81'].inputs,{a:['80',2],b:['80',0],c:['80',1],expression:'256/((a==361)*(b==256)*(c==256))'});
+assert.deepEqual(guarded['494'].inputs.images,['82',0],'QA and inference must use the same validated face sequence');
+for(let i=0;i<4;i++){
+ assert.deepEqual(guarded[1023+i*30].inputs.image,['82',0]);
+ assert.deepEqual(guarded[1009+i*30].inputs.prompt,face[1009+i*30].inputs.prompt);
+}
+assert.equal(guarded['82'].inputs.height,256);assert.deepEqual(guarded['82'].inputs.width,['81',0]);
+assert.equal(h3ExecutionPlan(guardedSource).faceCropValidation,'exact_source_frame_count_and_256_square');
+for(const [id,node] of Object.entries(guarded))assert.equal(h3NodeClass(id,h3ExecutionPlan(guardedSource)),node.class_type,'Guarded face timing node '+id);
 assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption');
 console.log('PASS: pose-only source conditioning, current native photo, shared caption, matched model paths, generated-only continuation, exact frames/audio and no output resize/refinement; GPU quality remains unvalidated');

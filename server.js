@@ -554,7 +554,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
     if(validation){
-      if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance'].includes(h3Source?.inferenceProfile))
+      if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard'].includes(h3Source?.inferenceProfile))
         console.info('H3 native pose model validation',JSON.stringify(poseValidationSummary(data)));
       if(['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-character-caption'].includes(h3Source?.inferenceProfile))
         console.info('H3 consistency model validation',JSON.stringify(consistencyModelChoices(data)));

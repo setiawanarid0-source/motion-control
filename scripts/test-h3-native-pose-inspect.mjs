@@ -34,6 +34,13 @@ const faceGraph=nativePoseValidationGraph('face');
 assert.equal(faceGraph['5'].inputs.name,POSE_PROBE_MARKER);
 assert.equal(faceGraph['24'].class_type,'SDPoseFaceBBoxes');assert.equal(faceGraph['25'].class_type,'CropByBBoxes');
 assert.deepEqual(faceGraph['8'].inputs['ref_videos.ref_video_1'],['25',0]);
+const guardedGraph=nativePoseValidationGraph('faceguard');
+assert.equal(guardedGraph['27'].class_type,'MathExpression|pysssss');
+for(const output of ['27','490']){
+ const seen=new Set(),walk=id=>{if(seen.has(id))return;seen.add(id);
+  for(const v of Object.values(guardedGraph[id].inputs))if(Array.isArray(v)&&guardedGraph[v[0]])walk(v[0]);};
+ walk(output);assert.ok(seen.has('5'),'Every output, including the standalone math output, must require the invalid patch');
+}
 assert.throws(()=>nativePoseValidationGraph('render'));
 assert.equal(poseValidationSummary({code:0,data:{taskId:'2117000000000000001'}}).status,'unexpected_acceptance');
 const reject={code:1,msg:JSON.stringify({result:false,error:{type:'prompt_outputs_failed_validation'},node_errors:{5:{
@@ -73,11 +80,14 @@ try{
  const faceReport=await (await fetch(url+'/validate-face',{method:'POST',headers})).json();
  assert.equal(faceReport.status,'rejected_before_execution');assert.equal(calls,5);
  await fetch(url+'/validate-face',{method:'POST',headers});assert.equal(calls,5);
+ const guardReport=await (await fetch(url+'/validate-faceguard',{method:'POST',headers})).json();
+ assert.equal(guardReport.status,'rejected_before_execution');assert.equal(calls,6);
  // A new process with the same durable checkpoint must not send another request.
  await new Promise(r=>server.close(r));const app2=express();installNativePoseInspection({...options,app:app2});
  server=app2.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  await fetch('http://127.0.0.1:'+server.address().port+'/api/internal/h3-native-pose-inspect/validate',{method:'POST',headers});
- assert.equal(calls,5);
+ await fetch('http://127.0.0.1:'+server.address().port+'/api/internal/h3-native-pose-inspect/validate-faceguard',{method:'POST',headers});
+ assert.equal(calls,6);
  const disabled=express();installNativePoseInspection({...options,app:disabled,hash:''});
  console.log('PASS: native pose-only validation graph, required invalid patch, private task scope, no credential leakage and durable once-only provider check');
 }finally{if(server)await new Promise(r=>server.close(r));await fs.rm(dir,{recursive:true,force:true});}

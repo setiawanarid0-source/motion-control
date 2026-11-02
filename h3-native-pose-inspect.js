@@ -1,5 +1,6 @@
 // Expiring inspection of one reported task, plus a once-only validation probe.
-// Every probe has one output with a deliberately invalid required loader.
+// Every output depends on a deliberately invalid required loader, including
+// the MathExpression output used by the frame-count validation probe.
 // Neither probe is a render request with runnable weights.
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -8,7 +9,7 @@ import {findValidationRejection} from './runninghub-graph-validation.js';
 
 export const POSE_PROBE_MARKER='VANTA_VALIDATION_ONLY_DO_NOT_RENDER.invalid';
 export function nativePoseValidationGraph(phase='catalog'){
-  if(!['catalog','checkpoint','retarget','visual','face'].includes(phase))throw Error('Invalid validation phase');
+  if(!['catalog','checkpoint','retarget','visual','face','faceguard'].includes(phase))throw Error('Invalid validation phase');
   const g={},add=(id,type,inputs)=>{g[id]={class_type:type,inputs};};
   add(1,'UNETLoader',{unet_name:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',type:'minimax',device:'default'});
@@ -44,20 +45,28 @@ export function nativePoseValidationGraph(phase='catalog'){
       strength:1,start_percent:0,end_percent:1,control_video:['20',0]});
     g['9'].inputs.model=['22',0];g['11'].inputs.model=['22',0];
   }
-  if(['retarget','visual','face'].includes(phase)){
+  if(['retarget','visual','face','faceguard'].includes(phase)){
     add(23,'BodyRatioMapperProportionTransfer',{pose_keypoint:['19',0],ref_pose_keypoint:['19',0],
       enable_rpca:false,hand_scaling:true,foot_scaling:true,offset_stabilizer_y:false,offset_stabilizer_x:false,
       best_hand_search:true,best_neck_search:false,final_offset_alignment:true,base_offset_mode:true,
       head_fixed_mode:false,match_original_ear_scale:false,confidence_threshold:.3,output_absolute_coordinates:true,
       print_detailed_logs:false,anchor_output_mode:'single_frame_multi_person'});
     g['20'].inputs.keypoints=['23',0];
-    if(['visual','face'].includes(phase))g['20']={class_type:'BodyRatioMapperSDPoseRender',inputs:{pose_keypoint:['23',0],resolution_x:1088,
+    if(['visual','face','faceguard'].includes(phase))g['20']={class_type:'BodyRatioMapperSDPoseRender',inputs:{pose_keypoint:['23',0],resolution_x:1088,
       score_threshold:.3,scale_for_xinsir:false,stick_width:4,face_point_size:2,draw_face:true,draw_mouth:true,
       draw_hands:true,draw_feet:true,draw_thigh:true,draw_calf:true}};
-    if(phase==='face'){
+    if(['face','faceguard'].includes(phase)){
       add(24,'SDPoseFaceBBoxes',{keypoints:['19',0],scale:1,force_square:false});
       add(25,'CropByBBoxes',{image:['15',0],bboxes:['24',0],output_width:256,output_height:256,padding:0,keep_aspect:'pad'});
       g['8'].inputs['ref_videos.ref_video_1']=['25',0];
+      if(phase==='faceguard'){
+        add(26,'GetImageSize',{image:['25',0]});
+        // MathExpression is itself an output node. The otherwise-unused c
+        // dependency makes its separate output require the invalid patch too.
+        add(27,'MathExpression|pysssss',{a:['26',2],b:['26',0],c:['5',0],expression:'256/((a==22)*(b==256))'});
+        add(28,'ImageScale',{image:['25',0],upscale_method:'lanczos',width:['27',0],height:256,crop:'disabled'});
+        g['8'].inputs['ref_videos.ref_video_1']=['28',0];
+      }
     }
   }
   return g;
@@ -76,7 +85,7 @@ export function poseValidationSummary(response){
     ...[...String(e.details||'').matchAll(/['"]([^'"\r\n]{1,240}\.safetensors)['"]/g)].map(m=>m[1])
   ]).filter(safeModel))];
   const missing=[...new Set((JSON.stringify(rejected.error||{}).match(
-    /MiniMaxH3FunControlNetApply|ModelPatchLoader|SDPoseKeypointExtractor|SDPoseDrawKeypoints|SDPoseFaceBBoxes|CropByBBoxes|RTDETR_detect|BodyRatioMapperProportionTransfer|BodyRatioMapperSDPoseRender/g)||[]))];
+    /MiniMaxH3FunControlNetApply|ModelPatchLoader|SDPoseKeypointExtractor|SDPoseDrawKeypoints|SDPoseFaceBBoxes|CropByBBoxes|GetImageSize|MathExpression\|pysssss|RTDETR_detect|BodyRatioMapperProportionTransfer|BodyRatioMapperSDPoseRender/g)||[]))];
   return {status:'rejected_before_execution',type:rejected.error?.type,missingNodes:missing,
     nodes:Object.entries(rejected.node_errors||{}).slice(0,25).map(([id,n])=>({id,
       type:String(n.class_type||'').replace(/[^A-Za-z0-9_]/g,'').slice(0,80),
@@ -97,12 +106,12 @@ export function installNativePoseInspection({app,rootDir,getTask,getReference,pr
     req.h3InspectedTask=task;next();
   };
   const checkpoint=phase=>path.join(rootDir,'h3-benchmark-checkpoints',
-    ({checkpoint:'native-pose-checkpoint-v1-',retarget:'native-pose-retarget-v1-',visual:'native-pose-visual-v1-',face:'native-pose-face-v1-'}[phase]||'native-pose-validation-')+taskId+'.json');
+    ({checkpoint:'native-pose-checkpoint-v1-',retarget:'native-pose-retarget-v1-',visual:'native-pose-visual-v1-',face:'native-pose-face-v1-',faceguard:'native-pose-faceguard-v1-'}[phase]||'native-pose-validation-')+taskId+'.json');
   const read=async(phase='catalog')=>{try{return JSON.parse(await fs.readFile(checkpoint(phase),'utf8'));}catch{return {status:'not_checked'};}};
   app.get(route,auth,async(req,res)=>res.json({taskId,status:req.h3InspectedTask.status,
     inputDiagnostics:req.h3InspectedTask.inputDiagnostics||null,
     references:{image:!!getReference(taskId,'image'),video:!!getReference(taskId,'video'),previewOnly:true},
-    validation:await read(),checkpointValidation:await read('checkpoint'),retargetValidation:await read('retarget'),visualValidation:await read('visual'),faceValidation:await read('face')}));
+    validation:await read(),checkpointValidation:await read('checkpoint'),retargetValidation:await read('retarget'),visualValidation:await read('visual'),faceValidation:await read('face'),faceGuardValidation:await read('faceguard')}));
   app.get(route+'/source/:kind',auth,(req,res)=>{
     if(!['image','video'].includes(req.params.kind))return res.sendStatus(404);
     const file=getReference(taskId,req.params.kind);if(!file)return res.sendStatus(404);
@@ -138,4 +147,5 @@ export function installNativePoseInspection({app,rootDir,getTask,getReference,pr
   app.post(route+'/validate-retarget',auth,validate('retarget'));
   app.post(route+'/validate-visual',auth,validate('visual'));
   app.post(route+'/validate-face',auth,validate('face'));
+  app.post(route+'/validate-faceguard',auth,validate('faceguard'));
 }
