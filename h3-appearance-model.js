@@ -6,14 +6,20 @@ import {Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import axios from 'axios';
 export const FFP_ASSET=Object.freeze({
+  name:'minimax_h3_motion_transfer_ffp_v1.0_ref2va',
   url:'https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/8cfc2964aa872e3d18dd90bf7ae5c4cdf8303184/loras/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors',
   sha256:'4c38bb2685af503e890bbae70a0aaa7cfc0241d98166771f637b726f57a09ee8',size:230065752
+});
+export const CHARACTER_ASSET=Object.freeze({
+  name:'minimax_h3_character_swap_v1.1_ref2va_fro',
+  url:'https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/8cfc2964aa872e3d18dd90bf7ae5c4cdf8303184/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors',
+  sha256:'ab21167bed71db99ac09527ad1f26f5f3517687ebf2e1f1bd5e91cc0bdf9b9c3',size:80673112
 });
 export function validUploadedH3Lora(name){return typeof name==='string'&&/^api-lora-[a-z0-9-]+\/[a-f0-9]{32}\.safetensors$/.test(name);}
 async function digest(file,asset){
   const sha=createHash('sha256'),md5=createHash('md5');let size=0;
   for await(const chunk of fs.createReadStream(file)){size+=chunk.length;sha.update(chunk);md5.update(chunk);}
-  if(size!==asset.size||sha.digest('hex')!==asset.sha256)throw Error('Checksum model H3 FFP tidak sesuai.');
+  if(size!==asset.size||sha.digest('hex')!==asset.sha256)throw Error('Checksum model penampilan H3 tidak sesuai.');
   return md5.digest('hex');
 }
 export function createH3AppearanceModel({dir,request,http=axios,asset=FFP_ASSET,registryFile=null}){
@@ -33,7 +39,7 @@ export function createH3AppearanceModel({dir,request,http=axios,asset=FFP_ASSET,
   }
   async function localModel(){
     await fs.promises.mkdir(dir,{recursive:true,mode:0o700});
-    const file=path.join(dir,'motion-ffp-'+asset.sha256+'.safetensors');
+    const file=path.join(dir,'appearance-'+asset.sha256+'.safetensors');
     if(fs.existsSync(file))return {file,md5:await digest(file,asset)};
     const temp=file+'.tmp-'+randomUUID();
     const response=await http.get(asset.url,{responseType:'stream',timeout:180000});
@@ -49,7 +55,7 @@ export function createH3AppearanceModel({dir,request,http=axios,asset=FFP_ASSET,
     if(!download)download=localModel().catch(error=>{download=null;throw error;});
     const {file,md5}=await download;
     const response=await request('/api/openapi/getLoraUploadUrl',apiKey,
-      {apiKey,loraName:'minimax_h3_motion_transfer_ffp_v1.0_ref2va',md5Hex:md5},60000);
+      {apiKey,loraName:asset.name||'minimax_h3_motion_transfer_ffp_v1.0_ref2va',md5Hex:md5},60000);
     const name=response?.data?.fileName,url=response?.data?.url;
     if(Number(response?.code)!==0||!validUploadedH3Lora(name)||!name.endsWith('/'+md5+'.safetensors'))
       throw Error('RunningHub belum memberikan lokasi unggah model H3 FFP.');

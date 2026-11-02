@@ -30,7 +30,7 @@ import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub
 import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h3-safe-benchmark.js';
 import {longH3Profile,longH3Result,longH3ModelChoices,runLongH3Deployment} from './h3-long-benchmark.js';
 import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} from './h3-consistency-trial.js';
-import {createH3AppearanceModel} from './h3-appearance-model.js';
+import {createH3AppearanceModel,CHARACTER_ASSET} from './h3-appearance-model.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -170,6 +170,8 @@ const generationQueue=createGenerationQueue({dir:DATA_DIR,maxConcurrent:1});
 // the tiny successful upload receipt persists across deploys.
 const h3AppearanceModel=createH3AppearanceModel({dir:path.join(os.tmpdir(),'vanta-h3-model-cache'),
   registryFile:path.join(DATA_DIR,'h3-appearance-loras.json'),request:rhJson});
+const h3CharacterModel=createH3AppearanceModel({dir:path.join(os.tmpdir(),'vanta-h3-character-cache'),
+  registryFile:path.join(DATA_DIR,'h3-character-loras.json'),request:rhJson,asset:CHARACTER_ASSET});
 function registeredAccount(taskId,accountId=''){
   const item=taskRegistry.get(String(taskId));
   if(!item)return null;
@@ -512,6 +514,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   if(workflowKey==='minimaxH3'){
     if(['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(h3Source.inferenceProfile))
       h3Source.appearanceLoraFile=await h3AppearanceModel.ensure(apiKey);
+    if(h3Source.inferenceProfile==='guide-dmad4-character-caption')
+      h3Source.appearanceLoraFile=await h3CharacterModel.ensure(apiKey);
     selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
   }
   const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
@@ -549,7 +553,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     if(!data?.data?.taskId&&explicitQueueMaxed(data))throw queueCapacityError();
     const validation=graphValidationError(data);
     if(validation){
-      if(['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(h3Source?.inferenceProfile))
+      if(['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-character-caption'].includes(h3Source?.inferenceProfile))
         console.info('H3 consistency model validation',JSON.stringify(consistencyModelChoices(data)));
       if(h3Source?.inferenceProfile==='guide-dmad4-focus')
         console.info('H3 long model validation',JSON.stringify(longH3ModelChoices(data)));

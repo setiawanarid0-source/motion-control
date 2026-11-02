@@ -12,6 +12,7 @@ export const H3_REVISION='motion-transfer-native-1080-v5';
 export const H3_DEFAULT_PROFILE='guide-dmad4-focus';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
+const continuityProfile=profile=>photoGuideProfile(profile)||profile==='guide-dmad4-character-caption';
 export const H3_MODELS=Object.freeze({
   unet:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',
   clip:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
@@ -212,7 +213,9 @@ export function h3ExecutionPlan(source){
     referenceFace:source.referenceFace||null,
     attentionConditioning:h3AttentionConditioning(source),
     guidePhotoCopyResized:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE),
-    guideAppearance:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?'photo_first_frame_then_generated_overlap':'source_rgb_with_generated_keyframe',
+    guideAppearance:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?'photo_first_frame_then_generated_overlap':
+      source.inferenceProfile==='guide-dmad4-character-caption'?'source_rgb_then_generated_overlap':'source_rgb_with_generated_keyframe',
+    appearanceCaptionModel:source.inferenceProfile==='guide-dmad4-character-caption'?'qwen3.5_9b_w4a8_gptq.safetensors':null,
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     segments:segments.map(s=>({start:s.start,frames:s.length,modelFrames:s.modelFrames,contextFrames:s.contextFrames})),
     samplerCount:segments.length,detectedCuts:source.sceneCuts||[],referenceColor:source.referenceColor||null,
@@ -223,11 +226,11 @@ function h3AttentionConditioning(source){
   // Native exact_kv keeps every query's access to the reference exact. The
   // extra dense target-audio query rows are unnecessary for source-audio export.
   return source.sparseConditioningMode||
-    (['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE)?'exact_kv':'exact_kv_and_rows');
+    (['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE)?'exact_kv':'exact_kv_and_rows');
 }
 
 export function h3SamplingPlan(source){
-  const dmad=['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
+  const dmad=['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
   // DMAD's four-step student uses re-noise sampling (LCM/simple), not an
   // eight-step DMD adapter with its scheduler shortened arbitrarily.
   return {steps:dmad?4:8,sampler:dmad?'lcm':'euler',scheduler:'simple',
@@ -244,18 +247,19 @@ function validateSource(source){
   let expected;
   try{expected=h3PhotoPlan(source.referenceWidth,source.referenceHeight);}catch{throw Error('Metadata foto H3 belum tervalidasi.');}
   if(Object.entries(expected).some(([key,value])=>source[key]!==value))throw Error('Metadata canvas H3 belum tervalidasi.');
-  return h3Segments(source.totalFrames,source.sceneCuts,photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?5:1);
+  return h3Segments(source.totalFrames,source.sceneCuts,continuityProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?5:1);
 }
 export function h3GraphForInputs(base,{imageName,videoName,source}){
   inputName(imageName);inputName(videoName);
   if(base?.revision!==H3_REVISION)throw Error('Revisi Motion Control H3 tidak valid.');
   const segments=validateSource(source),g={};
   const profile=source.inferenceProfile||H3_DEFAULT_PROFILE;
-  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
+  if(!['legacy-training-adapter','no-training-adapter','tara-native','guide-kitchen','guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(profile))throw Error('Profil inferensi H3 tidak valid.');
   const tara=profile==='tara-native';
   const ffp=['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(profile);
+  const character=profile==='guide-dmad4-character-caption';
   const anchored=photoGuideProfile(profile);
-  const focused=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile),sampling=h3SamplingPlan(source);
+  const focused=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(profile),sampling=h3SamplingPlan(source);
   const add=(id,class_type,inputs,title)=>{id=String(id);g[id]={class_type,inputs,...(title?{_meta:{title}}:{})};return [id,0];};
   add(1,'UNETLoader',{unet_name:H3_MODELS.unet,weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:H3_MODELS.clip,type:'minimax',device:'default'});
@@ -263,10 +267,11 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
   if(profile==='legacy-training-adapter')
     add(5,'LoraLoaderModelOnly',{model:['1',0],lora_name:H3_MODELS.adapter,strength_model:1});
   add(6,'LoraLoaderModelOnly',{model:[profile==='legacy-training-adapter'?'5':'1',0],lora_name:sampling.turbo,strength_model:1});
-  if(ffp&&source.appearanceLoraFile){
+  if(character&&!source.appearanceLoraFile)throw Error('File model karakter H3 tidak valid.');
+  if((ffp||character)&&source.appearanceLoraFile){
     if(!validUploadedH3Lora(source.appearanceLoraFile))throw Error('File model H3 FFP tidak valid.');
     add(7,'RHLoraLoader',{model:['6',0],clip:['2',0],lora_name:'',file_name:source.appearanceLoraFile,
-      strength_model:1,strength_clip:0},'SHA-verified native Motion Transfer FFP v1.0');
+      strength_model:1,strength_clip:0},character?'SHA-verified native Character v1.1':'SHA-verified native Motion Transfer FFP v1.0');
   }else add(7,'LoraLoaderModelOnly',{model:['6',0],lora_name:tara?H3_MODELS.motionTara:ffp?H3_MODELS.motionFfp:H3_MODELS.motion,strength_model:1},ffp?'Motion Transfer FFP v1.0':'Motion Transfer v1.0');
   add(8,'MiniMaxH3SigmaShift',{model:['7',0],shift_video:12,shift_audio:sampling.audioShift});
   if(profile==='guide-kitchen'||focused){
@@ -298,7 +303,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       bottom:source.canvasHeight-source.outputHeight-source.padTop,feathering:0});
   }
   let face=null;
-  if(focused&&(!ffp||profile==='guide-dmad4-ffp-focus')&&source.referenceFace){
+  if(focused&&!character&&(!ffp||profile==='guide-dmad4-ffp-focus')&&source.referenceFace){
     const f=source.referenceFace;
     if(!validIdentityCrop(f,source.referenceWidth,source.referenceHeight))
       throw Error('Area referensi wajah H3 tidak valid.');
@@ -325,6 +330,20 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     prompt=ffp?prompt+' '+role:prompt.replace('The aligned motion guide supplies',role+'\nThe aligned motion guide supplies');
   }
   if(tara)prompt=prompt.replace('The aligned motion guide supplies','<Video 1> supplies');
+  if(character){
+    add(85,'CLIPLoader',{clip_name:'qwen3.5_9b_w4a8_gptq.safetensors',type:'minimax',device:'default'},'Describe the current photo, not a stored person or outfit');
+    prompt=add(86,'TextGenerate',{clip:['85',0],image:['30',0],max_length:768,sampling_mode:'off',thinking:false,use_default_template:true,
+      prompt:'Inspect only the attached reference photo. Write one English paragraph for a video renderer, beginning with body_swap:. '+
+        'First write subject_definitions: and describe <Subject 1> in <Picture 1> with concrete visible facial proportions, eye shape and colour, nose, lips, jaw, hair colour, hairstyle and length, '+
+        'visible body proportions, exact garment type, neckline, sleeves, fit, colour, fabric, patterns and accessories. Never guess identity, ethnicity, nationality, age or gender identity. '+
+        'Omit anything hidden or uncertain. Do not beautify, invent details, smooth the skin or change clothing. '+
+        'Then write summary: and detailed_description:. The subject and complete visible outfit must keep the appearance in <Picture 1> throughout the clip. '+
+        'The aligned guide supplies only the body and hand motion, head rotation, gaze, mouth movement, expressions, timing and camera movement. '+
+        'Follow them frame by frame without importing the original performer appearance or clothes. Preserve the picture natural texture, proportions, colours, lighting character and scene appearance. '+
+        'A stationary guide camera stays stationary; reproduce actual pans, tilts, rolls, zooms and framing changes without adding any. '+
+        'Output only that paragraph, no preface, Markdown or reasoning. Use real visible attributes from this image rather than generic placeholders.'},
+      'One photo-derived character description shared by every render window');
+  }
   add(40,'KSamplerSelect',{sampler_name:sampling.sampler});
   const samplingModel=tara?'9':focused?'10':'8';
   add(41,'BasicScheduler',{model:[samplingModel,0],scheduler:sampling.scheduler,steps:sampling.steps,denoise:1});
@@ -349,7 +368,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
       continuation=add(b+6,'ImageFromBatch',{image:previous.image,
         batch_index:previous.lastFrame-seg.contextFrames+1,length:seg.contextFrames});
     }
-    if(anchored){
+    if(anchored||(character&&continuation)){
       const count=continuation?seg.contextFrames:1;
       const rest=add(b+14,'ImageFromBatch',{image:guide,batch_index:count,length:seg.modelFrames-count});
       // Replace the conflicting source prefix; do not append a second guide
@@ -359,7 +378,7 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     }
     let positive=tara?[String(b+4),0]:add(b+5,'MiniMaxH3AddGuide',{positive:[String(b+4),0],latent:[String(b+4),1],vae:['3',0],
       image:guide,frame_idx:0},'All aligned motion frames; no native reference-video duplicate');
-    if(continuation&&!anchored){
+    if(continuation&&!anchored&&!character){
       positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:[String(b+4),1],vae:['3',0],image:continuation,frame_idx:0},
         'Previous generated frames at matching source overlap');
     }

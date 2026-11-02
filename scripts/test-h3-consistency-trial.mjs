@@ -52,6 +52,14 @@ try{
     source:{...source,inferenceProfile:'guide-dmad4-ffp-focus',appearanceLoraFile:file,referenceFace:{x:192,y:224,width:160,height:192}}});
   assert.equal(ffpFace['7'].class_type,'RHLoraLoader');assert.deepEqual(ffpFace['1004'].inputs['ref_images.ref_image_2'],['32',0]);
   assert.match(ffpFace['1004'].inputs.prompt,/^vfx_edit:/);assert.match(ffpFace['1004'].inputs.prompt,/<Picture 2> is a close-up/);
+  const character=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo.jpg',videoName:'guide.mp4',
+    source:{...source,inferenceProfile:'guide-dmad4-character-caption',appearanceLoraFile:file}});
+  assert.equal(character['7'].class_type,'RHLoraLoader');assert.equal(character['41'].inputs.steps,4);
+  assert.equal(character['86'].class_type,'TextGenerate');assert.deepEqual(character['86'].inputs.image,['30',0]);
+  assert.equal(character['86'].inputs.sampling_mode,'off');
+  for(let i=0;i<3;i++)assert.deepEqual(character[1004+i*30].inputs.prompt,['86',0],'Each window uses the same description of the current photo');
+  assert.ok(!character['33'],'The published character path uses a native photo reference, not an edited first-frame copy');
+  assert.deepEqual(character['1045'].inputs.image1,['1036',0]);assert.ok(!character['1037']);
   assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-focus','Experimental path cannot change normal users before render validation');
   for(let n=6;n<=1440;n++){
     const parts=h3Segments(n,[],5);

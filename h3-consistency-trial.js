@@ -22,6 +22,9 @@ const TRIALS=Object.freeze({
     video:'1bb15f1d4d1dee8d7d28757b742f8764a0a18cc9725e603bcee938c4eb3f316a'}},
   'ffpfocus-private5-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa007',profile:'guide-dmad4-ffp-focus',media:{
     image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
+    video:'1bb15f1d4d1dee8d7d28757b742f8764a0a18cc9725e603bcee938c4eb3f316a'}},
+  'character-private5-v1':{jobId:'b3e714a1-f769-4aec-a919-447f953fa008',profile:'guide-dmad4-character-caption',media:{
+    image:'c6faff7a25e0726babc5830ddd806b586656b39763909f53b33e2b20b27c90a4',
     video:'1bb15f1d4d1dee8d7d28757b742f8764a0a18cc9725e603bcee938c4eb3f316a'}}
 });
 const MEDIA=Object.freeze({
@@ -66,13 +69,16 @@ export function consistencyModelChoices(response){
   const rejected=findValidationRejection(response);
   if(!rejected)return null;
   const options=[];
+  const strings=value=>typeof value==='string'?[value]:Array.isArray(value)?value.flatMap(strings):
+    value&&typeof value==='object'?Object.values(value).flatMap(strings):[];
   for(const node of Object.values(rejected.node_errors||{})){
-    if(node?.class_type!=='LoraLoaderModelOnly')continue;
+    if(!['LoraLoaderModelOnly','RHLoraLoader','CLIPLoader'].includes(node?.class_type))continue;
     for(const error of node.errors||[]){
-      const names=error.extra_info?.input_config?.[0];
-      if(Array.isArray(names))for(const name of names)
+      const names=strings(error.extra_info?.input_config);
+      for(const name of names)
         if(typeof name==='string'&&name.length<240&&!name.includes('..')&&
-          /^[A-Za-z0-9_./ ()-]+\.safetensors$/.test(name)&&/minimax.*(motion_transfer|character_swap|DMAD)/i.test(name))options.push(name);
+          /^[A-Za-z0-9_./ ()-]+\.safetensors$/.test(name)&&
+          (node.class_type==='CLIPLoader'?/qwen/i.test(name):/(?:minimax|h3).*(motion_transfer|character_swap|DMAD)/i.test(name)))options.push(name);
     }
   }
   return {type:rejected.error?.type,options:[...new Set(options)].slice(0,30),
