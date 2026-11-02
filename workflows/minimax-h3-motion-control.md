@@ -5,7 +5,51 @@ aligned video frames for performance, expression, timing and camera movement.
 The existing uploads, Plus Account Pool, durable queue, History and 72-hour
 result retention are unchanged. No extra login, review form or head-swap UI.
 
-## Production v5: matched four-step inference
+## Production v6: photo-derived character appearance
+
+Normal submissions now use `guide-dmad4-character-caption`, the same graph as
+the completed short, full-duration and changed-reference trials. Character Swap
+v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,
+LCM/simple sampler, CFG 1, Sigma Shift 12/2 and exact-reference Sol-Attn remain.
+The task model is SHA-256/size pinned and provisioned through the official
+RunningHub upload path, with per-account durable upload caching.
+
+The current whole native photo supplies appearance. Qwen3.5 9B describes that
+photo once; every window consumes that same description and original reference.
+No fixed hair/outfit caption, second face crop or first-frame photo resize is
+used. Later windows replace the first five guide frames with the matching five
+generated overlap frames. Only real frames are exported, once each. Existing
+accepted provider graphs are not changed or resubmitted.
+
+### Completed visual continuation checks, 2 November 2026
+
+| Trial | Provider task | Provider time | Submission to ready | Actual output |
+| --- | --- | --- | --- | --- |
+| Same photo, first five seconds | `2117124302247911425` | 549 s | 568.087 s | 1080×1936, 24 FPS, 120 frames, 5.000 s |
+| Same photo, complete source | `2117131431696486402` | 1488 s | 1493.431 s | 1080×1936, 24 FPS, 361 frames, 15.041667 s |
+| Distinct public reference and driver | `2117131534394019842` | 481 s | 495.415 s | 1080×1842, 24 FPS, 120 frames, 5.000 s |
+
+The full input's video track is 15.033008 seconds; the output follows the
+24 FPS frame grid. The complete measured run took 24m53.431s, within the
+25-minute target for this input. This is one measured case, not a speed
+guarantee for other inputs, durations or worker allocations.
+
+Inspection includes the beginning, middle, end and both window transitions.
+The same gray crew-neck short-sleeved T-shirt, black shorts and dark brown hair
+remain visible throughout the complete clothed case. The source crop top,
+loose trousers, light hair and wrist scrunchie do not return. Head/mouth/hand
+movement continues across the windows. The distinct public reference produces
+pink hair, a white blouse, brown skirt and black boots instead of reusing the
+first photo's appearance. Its moving-camera result is not a full-duration
+camera-fidelity benchmark.
+
+Facial proportions and fabric shading still vary somewhat, especially during
+movement. These checks support promoting the improved appearance recipe; they
+do not establish pixel-identical faces, texture locking, arbitrary backgrounds,
+all camera moves or every supported duration. No generated media, private input,
+credential, signed URL or inferred identity is committed to this repository.
+
+## Previous production v5: matched four-step inference
 
 Ref2VA INT8 → DMAD four-step student → Motion Transfer v1.0 → Kitchen attention
 selection → H3 Sigma Shift 12/2 → native Sol-Attn → scheduler AND every guider.
@@ -105,7 +149,7 @@ camera move or expression. Visual acceptance remains separate from timing.
 - Accepted duration remains 0.25–60 seconds. Each native window has at most 124
   model frames. Five seconds uses one window / 124 model frames, exporting all
   120 real frames. Fifteen seconds uses three windows. Later windows include
-  one matching source/generated-frame overlap. All model padding and overlap
+  five matching source/generated-frame overlap frames in v6 (one in v5). All model padding and overlap
   frames are trimmed; every real output frame appears once.
 - Scene-change heuristics are diagnostic only. Pans, roll, flashes and actual
   cuts in the guide do not create extra independent sampling windows. There is

@@ -1,6 +1,6 @@
 {
-  "revision": "motion-transfer-native-1080-v5",
+  "revision": "motion-transfer-native-1080-v6",
   "method": "guide-latents",
-  "recipe": "DMAD 4-step student -> Motion Transfer v1.0 -> Kitchen backend -> Sigma Shift 12/2 -> Sol-Attn with exact reference KV; LCM/simple, CFG 1",
+  "recipe": "Current-photo caption -> native Character Swap v1.1 with DMAD 4-step student -> Kitchen backend -> Sigma Shift 12/2 -> Sol-Attn with exact reference KV; LCM/simple, CFG 1; five-frame generated continuation",
   "source": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/blob/main/docs/motion-transfer.md"
 }

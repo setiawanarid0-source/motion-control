@@ -60,7 +60,7 @@ try{
   for(let i=0;i<3;i++)assert.deepEqual(character[1004+i*30].inputs.prompt,['86',0],'Each window uses the same description of the current photo');
   assert.ok(!character['33'],'The published character path uses a native photo reference, not an edited first-frame copy');
   assert.deepEqual(character['1045'].inputs.image1,['1036',0]);assert.ok(!character['1037']);
-  assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-focus','Experimental path cannot change normal users before render validation');
+  assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption','Normal generation must use the recipe validated by the full-duration and changed-reference renders');
   for(let n=6;n<=1440;n++){
     const parts=h3Segments(n,[],5);
     assert.equal(parts.reduce((s,p)=>s+p.length,0),n);

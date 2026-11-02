@@ -8,8 +8,11 @@ import {validUploadedH3Lora} from './h3-appearance-model.js';
 const run=promisify(execFile);
 export const H3_FPS=24;
 export const H3_MAX_SECONDS=60;
-export const H3_REVISION='motion-transfer-native-1080-v5';
-export const H3_DEFAULT_PROFILE='guide-dmad4-focus';
+export const H3_REVISION='motion-transfer-native-1080-v6';
+// Promoted after the original 361-frame clip and a changed-reference trial.
+// Keep the tested graph: one native photo, one shared photo-derived caption,
+// four-step character model and five aligned generated continuation frames.
+export const H3_DEFAULT_PROFILE='guide-dmad4-character-caption';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
 const continuityProfile=profile=>photoGuideProfile(profile)||profile==='guide-dmad4-character-caption';

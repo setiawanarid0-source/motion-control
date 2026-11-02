@@ -63,10 +63,11 @@ candidateWithBackend['8'].inputs.model=['9',0];
 assert.deepEqual(kitchen,candidateWithBackend,'Attention comparison changes only the model backend branch');
 const faceFocus={x:192,y:224,width:160,height:192};
 const focused=h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:'guide-sol-focus',referenceFace:faceFocus}});
-assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-focus');
+assert.equal(H3_DEFAULT_PROFILE,'guide-dmad4-character-caption');
 const {inferenceProfile:_legacy,...normalSource}=source;
-const normal=h3GraphForInputs(manifest,{...args,source:{...normalSource,referenceFace:faceFocus}});
-assert.deepEqual(normal,h3GraphForInputs(manifest,{...args,source:{...source,inferenceProfile:H3_DEFAULT_PROFILE,referenceFace:faceFocus}}),
+const productionSource={...normalSource,referenceFace:faceFocus,appearanceLoraFile:'api-lora-usa/'+'a'.repeat(32)+'.safetensors'};
+const normal=h3GraphForInputs(manifest,{...args,source:productionSource});
+assert.deepEqual(normal,h3GraphForInputs(manifest,{...args,source:{...productionSource,inferenceProfile:H3_DEFAULT_PROFILE}}),
   'Production must use the selected recipe, not just a private benchmark');
 assert.equal(h3ExecutionPlan(normalSource).inferenceProfile,H3_DEFAULT_PROFILE);
 assert.ok(!normal['5'],'Production inference must not retain the training-only adapter');
@@ -74,10 +75,20 @@ assert.equal(normal['41'].inputs.steps,4,'Use the matched DMAD four-step student
 assert.equal(normal['6'].inputs.lora_name,H3_MODELS.turboDmad4);
 assert.equal(normal['40'].inputs.sampler_name,'lcm');
 assert.equal(normal['10'].inputs.sink_conditioning,'exact_kv');
-for(let i=0;i<h3Segments(source.totalFrames).length;i++){
+assert.equal(normal['7'].class_type,'RHLoraLoader');
+assert.equal(normal['86'].class_type,'TextGenerate');
+assert.deepEqual(normal['86'].inputs.image,['30',0],'Appearance must come from this request photo');
+assert.ok(!normal['32']&&!normal['33'],'Use the tested whole-photo path without extra crops or first-frame resize');
+for(let i=0;i<h3Segments(source.totalFrames,[],5).length;i++){
   const b=1000+30*i;
   assert.deepEqual(normal[b+9].inputs.model,['10',0],'Every production window must use the optimized model');
-  assert.deepEqual(normal[b+4].inputs['ref_images.ref_image_2'],['32',0],'The same current identity reference reaches every window');
+  assert.deepEqual(normal[b+4].inputs['ref_images.ref_image_1'],['31',0],'The same native current photo reaches every window');
+  assert.equal(normal[b+4].inputs['ref_images.ref_image_2'],undefined);
+  assert.deepEqual(normal[b+4].inputs.prompt,['86',0],'One current-photo description is shared across windows');
+  if(i){
+    assert.equal(normal[b+6].inputs.length,5,'Continue appearance with the five matching generated frames');
+    assert.deepEqual(normal[b+15].inputs.image1,[String(b+6),0]);
+  }
 }
 assert.equal(focused['10'].class_type,'BlockSparseAttention');
 assert.equal(focused['10'].inputs.selection,'sol-attn');

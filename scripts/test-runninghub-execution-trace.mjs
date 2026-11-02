@@ -13,6 +13,11 @@ assert.equal(h3NodeClass('10',{...plan,inferenceProfile:'guide-sol-focus'}),'Blo
 assert.equal(h3NodeClass('32',{...plan,inferenceProfile:'guide-sol-focus'}),'ImageCrop');
 assert.equal(h3NodeClass('1010',{...plan,revision:'motion-transfer-native-1080-v4'}),'SamplerCustomAdvanced');
 assert.equal(h3NodeClass('1010',{...plan,revision:'motion-transfer-native-1080-v5'}),'SamplerCustomAdvanced');
+const character={revision:'motion-transfer-native-1080-v6',inferenceProfile:'guide-dmad4-character-caption',samplerCount:3};
+for(const [node,type] of Object.entries({7:'RHLoraLoader',9:'ModelAttentionBackend',10:'BlockSparseAttention',85:'CLIPLoader',86:'TextGenerate',
+  1010:'SamplerCustomAdvanced',1036:'ImageFromBatch',1044:'ImageFromBatch',1045:'ImageBatch',1074:'ImageFromBatch',1075:'ImageBatch'}))
+  assert.equal(h3NodeClass(node,character),type,'Production character node '+node+' must remain observable');
+assert.equal(h3NodeClass('1105',character),null,'Never classify a non-existent continuation window');
 for(const url of ['wss://www.runninghub.ai/ws?token=private','wss://worker.runninghub.cn/ws'])assert.ok(allowedProgressUrl(url));
 for(const url of ['ws://www.runninghub.ai/ws','wss://127.0.0.1/ws','wss://runninghub.ai.attacker.invalid/ws',
   'wss://user:secret@www.runninghub.ai/ws','wss://www.runninghub.ai:8080/ws'])assert.ok(!allowedProgressUrl(url));

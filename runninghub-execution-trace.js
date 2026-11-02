@@ -8,16 +8,26 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'MiniMaxH3ReferenceToVideo','MiniMaxH3AddGuide','ImageFromBatch','MiniMaxH3AddGuide',
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
-  if(!/^motion-transfer-native-1080-v[12345]$/.test(String(plan?.revision)))return null;
+  if(!/^motion-transfer-native-1080-v[123456]$/.test(String(plan?.revision)))return null;
+  const character=plan.inferenceProfile==='guide-dmad4-character-caption';
+  if(character){
+    if(String(node)==='7')return 'RHLoraLoader';
+    if(String(node)==='85')return 'CLIPLoader';
+    if(String(node)==='86')return 'TextGenerate';
+  }
   if(String(node)==='9'&&plan.inferenceProfile==='tara-native')return 'BFSMiniMaxH3NativeTemporal';
   if(String(node)==='9'&&plan.inferenceProfile==='guide-kitchen')return 'ModelAttentionBackend';
-  if(['guide-sol-focus','guide-dmad4-focus'].includes(plan.inferenceProfile)){
+  if(character||['guide-sol-focus','guide-dmad4-focus'].includes(plan.inferenceProfile)){
     if(String(node)==='9')return 'ModelAttentionBackend';
     if(String(node)==='10')return 'BlockSparseAttention';
-    if(String(node)==='32')return 'ImageCrop';
+    if(!character&&String(node)==='32')return 'ImageCrop';
   }
   if(BASE_NODES[node])return BASE_NODES[node];
   const n=Number(node),offset=(n-1000)%30,index=Math.floor((n-1000)/30);
+  if(character&&Number.isSafeInteger(n)&&index>0&&index<plan.samplerCount){
+    if(offset===14)return 'ImageFromBatch';
+    if(offset===15)return 'ImageBatch';
+  }
   return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODES.length?
     WINDOW_NODES[offset]:null;
 }

@@ -63,7 +63,7 @@ const workflowMeta = {
   minimaxH3: {
     id:'minimaxH3',name:'MiniMax H3 · Motion Control · 1080p',
     subtitle:'1080p · foto + panduan gerak video · 24 FPS · Plus',
-    detail:'Foto menentukan tampilan dan rasio hasil; video memandu gerak tubuh, ekspresi dan kamera. Sampling langsung pada canvas 1080p, tanpa upscale, downscale atau refinement hasil. Audio sumber dipertahankan. Video 0,25–60 detik diproses per segmen. Ketepatan visual dan kecukupan memori RunningHub belum dibuktikan lewat render.',
+    detail:'Foto menentukan wajah, rambut, pakaian, latar dan rasio hasil; video memandu gerak tubuh, ekspresi dan kamera. Deskripsi tampilan dibaca dari foto yang diunggah. Hasil native 1080p tanpa upscale, downscale atau refinement, dengan audio sumber. Video 0,25–60 detik diproses per segmen. Konsistensi visual tetap dapat bervariasi.',
     outputKind:'video',experimental:true,requiredMode:'plus'
   },
   rife60: {
