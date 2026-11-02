@@ -1,13 +1,14 @@
 // Expiring inspection of one reported task, plus a once-only validation probe.
-// The probe has one output whose required model-patch input is deliberately
-// invalid. It is never a render request with runnable weights.
+// Every probe has one output with a deliberately invalid required loader.
+// Neither probe is a render request with runnable weights.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {consistencyTrialAuthorized} from './h3-consistency-trial.js';
 import {findValidationRejection} from './runninghub-graph-validation.js';
 
 export const POSE_PROBE_MARKER='VANTA_VALIDATION_ONLY_DO_NOT_RENDER.invalid';
-export function nativePoseValidationGraph(){
+export function nativePoseValidationGraph(phase='catalog'){
+  if(!['catalog','checkpoint'].includes(phase))throw Error('Invalid validation phase');
   const g={},add=(id,type,inputs)=>{g[id]={class_type:type,inputs};};
   add(1,'UNETLoader',{unet_name:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',weight_dtype:'default'});
   add(2,'CLIPLoader',{clip_name:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',type:'minimax',device:'default'});
@@ -34,23 +35,32 @@ export function nativePoseValidationGraph(){
     draw_feet:true,stick_width:4,face_point_size:2,score_threshold:.5,draw_head:true});
   add(490,'VHS_VideoCombine',{images:['14',0],frame_rate:24,loop_count:0,filename_prefix:'VANTA-VALIDATION-NO-RENDER',
     format:'video/h264-mp4',pix_fmt:'yuv420p',crf:16,save_metadata:false,trim_to_audio:false,pingpong:false,save_output:true,no_preview:true});
+  if(phase==='checkpoint'){
+    g['1'].inputs.unet_name=POSE_PROBE_MARKER;
+    g['5'].inputs.name='minimax_h3_fun_controlnet_union_pruned_int8_convrot.safetensors';
+  }
   return g;
 }
 export function poseValidationSummary(response){
   if(response?.taskId||response?.data?.taskId)return {status:'unexpected_acceptance'};
   const rejected=findValidationRejection(response);
-  if(!rejected)return {status:'unconfirmed'};
+  if(!rejected)return {status:'unconfirmed',providerCode:Number.isFinite(Number(response?.code))?Number(response.code):null};
   const strings=v=>typeof v==='string'?[v]:Array.isArray(v)?v.flatMap(strings):
     v&&typeof v==='object'?Object.values(v).flatMap(strings):[];
   const safeModel=v=>typeof v==='string'&&v.length<240&&!v.includes('..')&&
-    /^[A-Za-z0-9_./ ()-]+\.safetensors$/.test(v)&&/(minimax|h3|sdpose|rt_detr)/i.test(v);
+    /^[\p{L}\p{N}_./ ()-]+\.safetensors$/u.test(v);
+  const advertisedModels=n=>[...new Set((n.errors||[]).flatMap(e=>[
+    ...strings(e.extra_info?.input_config),
+    ...[...String(e.details||'').matchAll(/['"]([^'"\r\n]{1,240}\.safetensors)['"]/g)].map(m=>m[1])
+  ]).filter(safeModel))];
   const missing=[...new Set((JSON.stringify(rejected.error||{}).match(
     /MiniMaxH3FunControlNetApply|ModelPatchLoader|SDPoseKeypointExtractor|SDPoseDrawKeypoints|RTDETR_detect/g)||[]))];
   return {status:'rejected_before_execution',type:rejected.error?.type,missingNodes:missing,
     nodes:Object.entries(rejected.node_errors||{}).slice(0,25).map(([id,n])=>({id,
       type:String(n.class_type||'').replace(/[^A-Za-z0-9_]/g,'').slice(0,80),
       errors:(n.errors||[]).map(e=>String(e.type||'').replace(/[^A-Za-z0-9_]/g,'').slice(0,80)),
-      models:[...new Set((n.errors||[]).flatMap(e=>strings(e.extra_info?.input_config)).filter(safeModel))].slice(0,40)}))};
+      availableModelCount:advertisedModels(n).length,
+      models:advertisedModels(n).filter(v=>/(minimax|h3|sdpose|rt_detr)/i.test(v)).slice(0,40)}))};
 }
 export function installNativePoseInspection({app,rootDir,getTask,getReference,probe,cancelUnexpected,
   taskId,hash,expires}){
@@ -64,27 +74,29 @@ export function installNativePoseInspection({app,rootDir,getTask,getReference,pr
     if(!task||!/MiniMax H3/.test(task.workflow||''))return res.sendStatus(404);
     req.h3InspectedTask=task;next();
   };
-  const checkpoint=path.join(rootDir,'h3-benchmark-checkpoints','native-pose-validation-'+taskId+'.json');
-  const read=async()=>{try{return JSON.parse(await fs.readFile(checkpoint,'utf8'));}catch{return {status:'not_checked'};}};
+  const checkpoint=phase=>path.join(rootDir,'h3-benchmark-checkpoints',
+    (phase==='checkpoint'?'native-pose-checkpoint-v1-':'native-pose-validation-')+taskId+'.json');
+  const read=async(phase='catalog')=>{try{return JSON.parse(await fs.readFile(checkpoint(phase),'utf8'));}catch{return {status:'not_checked'};}};
   app.get(route,auth,async(req,res)=>res.json({taskId,status:req.h3InspectedTask.status,
     inputDiagnostics:req.h3InspectedTask.inputDiagnostics||null,
     references:{image:!!getReference(taskId,'image'),video:!!getReference(taskId,'video'),previewOnly:true},
-    validation:await read()}));
+    validation:await read(),checkpointValidation:await read('checkpoint')}));
   app.get(route+'/source/:kind',auth,(req,res)=>{
     if(!['image','video'].includes(req.params.kind))return res.sendStatus(404);
     const file=getReference(taskId,req.params.kind);if(!file)return res.sendStatus(404);
     res.type(req.params.kind==='image'?'image/jpeg':'video/mp4');res.sendFile(file);
   });
-  let pending=null;
-  app.post(route+'/validate',auth,async(req,res)=>{
-    if(pending)return res.json(await pending);
-    pending=(async()=>{
-      await fs.mkdir(path.dirname(checkpoint),{recursive:true,mode:0o700});
-      try{await fs.writeFile(checkpoint,JSON.stringify({status:'checking'}),{flag:'wx',mode:0o600});}
-      catch(e){if(e.code==='EEXIST')return read();throw e;}
+  const pending=new Map();
+  const validate=phase=>async(req,res)=>{
+    if(pending.has(phase))return res.json(await pending.get(phase));
+    const result=(async()=>{
+      const file=checkpoint(phase);
+      await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});
+      try{await fs.writeFile(file,JSON.stringify({status:'checking'}),{flag:'wx',mode:0o600});}
+      catch(e){if(e.code==='EEXIST')return read(phase);throw e;}
       let report;
       try{
-        const response=await probe(req.h3InspectedTask,nativePoseValidationGraph());
+        const response=await probe(req.h3InspectedTask,nativePoseValidationGraph(phase));
         report=poseValidationSummary(response);
         if(report.status==='unexpected_acceptance'){
           const id=String(response?.data?.taskId||response?.taskId||'');
@@ -94,8 +106,11 @@ export function installNativePoseInspection({app,rootDir,getTask,getReference,pr
           }
         }
       }catch{report={status:'unconfirmed'};}
-      await fs.writeFile(checkpoint,JSON.stringify(report),{mode:0o600});return report;
+      await fs.writeFile(file,JSON.stringify(report),{mode:0o600});return report;
     })();
-    try{res.json(await pending);}catch{res.status(502).json({status:'unconfirmed'});}
-  });
+    pending.set(phase,result);
+    try{res.json(await result);}catch{res.status(502).json({status:'unconfirmed'});}
+  };
+  app.post(route+'/validate',auth,validate('catalog'));
+  app.post(route+'/validate-checkpoint',auth,validate('checkpoint'));
 }
