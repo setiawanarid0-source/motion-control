@@ -40,5 +40,9 @@ try{
   assert.equal(updates[0].status,'success','A diagnostics outage must not mark a successful job failed');
   assert.equal(updates[0].providerRuntimeSeconds,null);
   assert.equal(reports.at(-1).lookupSucceeded,false);
+  let akatzLookups=0;
+  await auditCompletedH3Timings({tasks:[{...task,workflow:'MiniMax H3 · Akatz V1.5 Native · 1080p'}],
+    query:async()=>{akatzLookups++;return output('99');},update:(id,p)=>updates.push(p)});
+  assert.equal(akatzLookups,1);assert.equal(updates.at(-1).providerRuntimeSeconds,99);
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
 console.log('PASS: provider workflow runtime, no per-file double count, bounded read-only audit, preserved task duration/credentials/state and no invented queue time');

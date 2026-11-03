@@ -24,4 +24,13 @@ assert.equal(updates[0].patch.status,'failed');assert.equal(updates[0].patch.fai
 assert.ok(!('finishedAt' in updates[0].patch),'Audit must not change elapsed time');
 assert.ok(!JSON.stringify(reports).includes('secret'));
 assert.equal(await auditFailedH3Tasks({tasks:[{...task,failureAuditCheckedAt:'done'}],query:async()=>{throw Error('Do not retry');},update:()=>{}}),0);
+const akatz={...task,taskId:'2117568678426140673',workflow:'MiniMax H3 · Akatz V1.5 Native · 1080p'};
+await auditFailedH3Tasks({tasks:[akatz],query:async()=>({code:805,data:{failedReason:{
+  node_id:'104',node_name:'SamplerCustomAdvanced',exception_type:'torch.OutOfMemoryError',
+  exception_message:'CUDA out of memory',current_inputs:'secret',traceback:'secret'}}}),
+  update:async(id,patch)=>updates.push({id,patch}),log:x=>reports.push(x)});
+assert.equal(updates.at(-1).id,akatz.taskId);assert.equal(updates.at(-1).patch.failureCategory,'out_of_memory');
+assert.equal(reports.at(-1).nodeName,'SamplerCustomAdvanced');
+assert.equal(reports.at(-1).exceptionType,'torch.OutOfMemoryError');
+assert.ok(!JSON.stringify(reports).includes('secret'));
 console.log('PASS: RunningHub failedReason extracts node/type/message only; hides traceback and current_inputs.');

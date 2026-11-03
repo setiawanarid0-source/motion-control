@@ -36,7 +36,7 @@ export function classifyH3Failure(result){
 // Once-only terminal metadata lookup; no new render, retry or cancellation.
 export async function auditFailedH3Tasks({tasks,query,update,log=()=>{},now=()=>new Date().toISOString(),limit=1}){
   const candidates=tasks.filter(t=>t.status==='failed'&&
-    /^MiniMax H3 · Motion Control/.test(String(t.workflow))&&!t.failureAuditCheckedAt).slice(0,limit);
+    /^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native)(?: ·|$)/.test(String(t.workflow))&&!t.failureAuditCheckedAt).slice(0,limit);
   for(const task of candidates){
     let result=null,lookupSucceeded=false;
     try{result=await query(task);lookupSucceeded=true;}catch{}
@@ -45,7 +45,8 @@ export async function auditFailedH3Tasks({tasks,query,update,log=()=>{},now=()=>
     log({taskId:String(task.taskId),category,lookupSucceeded,
       providerCode:result?.code!==null&&result?.code!==undefined&&Number.isFinite(Number(result.code))?Number(result.code):null,
       nodeId:/^\d{1,7}$/.test(failure?.nodeId||'')?failure.nodeId:null,
-      exceptionType:['TimeoutError','RuntimeError','CancelledError','TaskCancelledError','OutOfMemoryError'].includes(failure?.exceptionType)?failure.exceptionType:null});
+      nodeName:/^[\w .|:-]{1,100}$/.test(failure?.nodeName||'')?failure.nodeName:null,
+      exceptionType:/^[\w.]{1,100}$/.test(failure?.exceptionType||'')?failure.exceptionType:null});
   }
   return candidates.length;
 }

@@ -70,6 +70,11 @@ assert.ok(!JSON.stringify(logs).includes('do-not-log'));
 monitor.retain([]);assert.equal(Socket.instances[0].closed,true);
 assert.equal(monitor.observe({...task,workflow:'Other workflow'},url),false);
 monitor.closeAll();
+const akatzMonitor=createH3ExecutionMonitor({WebSocketImpl:Socket,now:()=>clock});
+assert.equal(akatzMonitor.observe({...task,workflow:'MiniMax H3 · Akatz V1.5 Native · 1080p',
+  inputDiagnostics:{revision:'akatz-native-1080-v1',samplerCount:1}},url),true,
+  'Akatz must receive the same read-only node timing stream as existing H3');
+akatzMonitor.closeAll();
 // The browser polls with an account-only credential object. Exercise the actual
 // status function and verify tracing resolves the task's workflow and node plan.
 const source=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
