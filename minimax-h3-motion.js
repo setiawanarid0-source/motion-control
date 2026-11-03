@@ -175,11 +175,15 @@ export async function prepareH3Input(file,mode,imageFile,{
       :`setpts=PTS-STARTPTS,fps=24,`+
         `scale=${plan.outputWidth}:${plan.outputHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,`+
         `pad=${plan.canvasWidth}:${plan.canvasHeight}:(ow-iw)/2:(oh-ih)/2:color=black`;
+    // Preserve small expression/texture cues before Ref2VA sees the driver.
+    // Akatz's <=15s input stays below the existing 100 MiB upload ceiling with
+    // the bounded 24 Mb/s rate and 48 Mb buffer; other H3 profiles keep theirs.
+    const driverEncoding=nativeDriver?{crf:12,maxrate:'24M',bufsize:'48M'}:{crf:16,maxrate:'12M',bufsize:'24M'};
     await run('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y','-threads','2','-i',file.path,
       '-map','0:v:0','-map','0:a:0?','-vf',filter,
       ...(source.hasAudio?['-af',`atrim=end=${source.totalFrames/24},asetpts=PTS-STARTPTS`]:[]),
       '-frames:v',String(source.totalFrames),'-t',String(source.totalFrames/24),
-      '-c:v','libx264','-preset','fast','-crf','16','-maxrate','12M','-bufsize','24M',
+      '-c:v','libx264','-preset','fast','-crf',String(driverEncoding.crf),'-maxrate',driverEncoding.maxrate,'-bufsize',driverEncoding.bufsize,
       '-pix_fmt','yuv420p','-threads','2','-c:a','aac','-b:a','192k','-movflags','+faststart',output],
       {timeout:300000,maxBuffer:65536});
     const {stdout}=await run('ffprobe',['-v','error','-show_streams','-of','json',output],{timeout:30000,maxBuffer:65536});
@@ -195,7 +199,7 @@ export async function prepareH3Input(file,mode,imageFile,{
     const sceneCuts=[...new Set([...stderr.matchAll(/pts_time:([0-9.]+)/g)]
       .map(m=>Math.round(Number(m[1])*24)))].filter(n=>n>0&&n<frames);
     return {...source,...plan,totalFrames:frames,sceneCuts,inferenceProfile,diagnosticOutputs:diagnosticOutputs===true,
-      ...(nativeDriver?{driverCanvas:[driverWidth,driverHeight]}:{}),
+      ...(nativeDriver?{driverCanvas:[driverWidth,driverHeight],driverEncoding}:{}),
       referenceFile:reference.file,referenceColor:reference.color,referenceFace,
       file:{path:output,originalname:'motion-guide.mp4',mimetype:'video/mp4',size:bytes},release};
   }catch(error){await release();throw error;}

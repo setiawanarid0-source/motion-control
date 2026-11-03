@@ -6,11 +6,12 @@ import {validUploadedH3Lora} from './h3-appearance-model.js';
 import {randomInt} from 'node:crypto';
 
 export const AKATZ_PROFILE='akatz-v1.5-native4-ref2v';
-export const AKATZ_REVISION='akatz-native-1080-v3';
+export const AKATZ_REVISION='akatz-native-1080-v4';
 export const AKATZ_MAX_FRAMES=362;
 export const AKATZ_WINDOW_FRAMES=124;
 export const AKATZ_CONTEXT_FRAMES=5;
 export const AKATZ_SAMPLING=Object.freeze({steps:4,sampler:'euler',scheduler:'simple',videoShift:12,audioShift:3});
+export const AKATZ_OUTPUT_CRF=12;
 export const AKATZ_ASSET=Object.freeze({
   name:'minimax_h3_akatz_character_swap_v1_5',
   url:'https://huggingface.co/akatz-ai/MiniMax-H3-Character-Swap-LoRA/resolve/0f409f0c2a18f123f3985041ec52982c813f5a9c/h3_character_swap_v1.5.safetensors',
@@ -32,7 +33,7 @@ const V1_NODE_CLASSES=Object.freeze({
 });
 export const AKATZ_NODE_CLASSES=Object.freeze({
   1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',6:'RHLoraLoader',7:'RHLoraLoader',
-  8:'MiniMaxH3SigmaShift',9:'ModelAttentionBackend',10:'BlockSparseAttention',
+  8:'MiniMaxH3SigmaShift',9:'ModelAttentionBackend',
   30:'LoadImage',31:'ImagePadForOutpaint',40:'KSamplerSelect',41:'BasicScheduler',49:'ImageBatchMulti',
   50:'VHS_LoadAudioUpload',85:'CLIPLoader',86:'TextGenerate',87:'StringConcatenate',490:'VHS_VideoCombine'
 });
@@ -42,7 +43,8 @@ const WINDOW_NODE_CLASSES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','
   'VAEDecode','ImageFromBatch','ImageCrop'];
 export function akatzNodeClass(node,plan){
   if(plan?.revision==='akatz-native-1080-v1')return V1_NODE_CLASSES[String(node)]||null;
-  if(!['akatz-native-1080-v2',AKATZ_REVISION].includes(plan?.revision))return null;
+  if(!['akatz-native-1080-v2','akatz-native-1080-v3',AKATZ_REVISION].includes(plan?.revision))return null;
+  if(String(node)==='10'&&plan.revision!==AKATZ_REVISION)return 'BlockSparseAttention';
   if(AKATZ_NODE_CLASSES[String(node)])return AKATZ_NODE_CLASSES[String(node)];
   const n=Number(node),index=Math.floor((n-1000)/40),offset=(n-1000)%40;
   return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODE_CLASSES.length?
@@ -80,7 +82,9 @@ export function akatzExecutionPlan(source){
     driverCanvas:source.driverCanvas||null,driverGeometry:'original_pixels_with_grid_padding',
     referenceColor:source.referenceColor||null,guideAppearance:'akatz_native_video_reference',
     photoRole:'identity_hair_body_clothes_accessories_texture_and_scene_target',
-    attentionConditioning:'sol_after_20pct_exact_reference_kv',
+    attentionConditioning:'dense_target_and_reference_all_steps',
+    driverEncoding:source.driverEncoding||null,outputEncoding:{format:'video/h264-mp4',crf:AKATZ_OUTPUT_CRF},
+    expressionConditioning:'source_video_timing_and_intensity_photo_identity_only',
     segments:p.segments.map(s=>({start:s.start,frames:s.length,inputFrames:s.inputFrames,
       loadStart:s.loadStart,modelFrames:s.modelFrames,contextFrames:s.contextFrames,seed:s.seed})),
     continuation:'generated_native_canvas_frames',continuationFrames:AKATZ_CONTEXT_FRAMES,
@@ -105,11 +109,9 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
   add(7,'RHLoraLoader',{model:['6',0],clip:['2',0],lora_name:'',file_name:characterLoraFile,strength_model:1,strength_clip:0});
   add(9,'ModelAttentionBackend',{model:['7',0],attention:'comfy kitchen attention'});
   add(8,'MiniMaxH3SigmaShift',{model:['9',0],shift_video:AKATZ_SAMPLING.videoShift,shift_audio:AKATZ_SAMPLING.audioShift});
-  // Preserve exact image/video reference attention; accelerate target attention
-  // after the opening steps. No output enhancement.
-  add(10,'BlockSparseAttention',{model:['8',0],selection:'sol-attn','selection.tau':1,
-    start_percent:.2,end_percent:1,dense_blocks:'0,1',min_tokens:12288,extra_tokens:256,
-    sink_conditioning:'exact_kv',verbose:true});
+  // The four-step student keeps its matched schedule. Use the existing dense
+  // backend for every step, including fine-detail reconstruction: sparse target
+  // approximations must not become the appearance carried into later windows.
   add(30,'LoadImage',{image:imageName});
   add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,right:source.referencePadRight,
     bottom:source.referencePadBottom,feathering:0});
@@ -127,13 +129,17 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
     'Do not borrow the video performer identity, hair, body shape, clothes, wrist accessories or other appearance details. '+
     'Keep the photo scene and illumination character; do not import unrelated video objects, add jewellery, alter garments, smooth textures or apply artificial bokeh. '+
     'Transfer the video body and hand motion, head movement, gaze and performance timing. Follow the source camera, including genuine shake, roll and framing changes; '+
+    'At every corresponding video moment, reproduce the source facial expression and its intensity: eyebrow raises and furrows, eyelid opening and blinks, '+
+    'eye direction, cheek movement, smiles, mouth corners, lip shape, mouth opening and speech articulation, with the same onset and release timing. '+
+    'The photo defines facial identity and texture, not a frozen expression. Let those same facial features move with the video performance; '+
+    'do not keep the photo smile or neutral mouth when the video expression changes. '+
     'keep a stationary source camera stationary. Do not stabilize, add drift or replace the moving pose with the photo pose. '+
     'Keep the same character and materials from the first frame to the last. Visible photo appearance: ';
   add(87,'StringConcatenate',{string_a:instructions,string_b:['86',0],delimiter:''});
   // Match the publisher's Ref2VA four-step student and native Comfy workflow;
   // do not truncate the previous FL2VA eight-step checkpoint to four steps.
   add(40,'KSamplerSelect',{sampler_name:AKATZ_SAMPLING.sampler});
-  add(41,'BasicScheduler',{model:['10',0],scheduler:AKATZ_SAMPLING.scheduler,steps:AKATZ_SAMPLING.steps,denoise:1});
+  add(41,'BasicScheduler',{model:['8',0],scheduler:AKATZ_SAMPLING.scheduler,steps:AKATZ_SAMPLING.steps,denoise:1});
   const exports=[];let previous=null;
   for(const [i,seg] of p.segments.entries()){
     const b=1000+i*40,link=(offset,out=0)=>[String(b+offset),out];
@@ -159,7 +165,7 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
     }
     if(audio)positive=add(b+8,'MiniMaxH3AddGuide',{positive,latent:link(5,1),audio_vae:['4',0],audio,frame_idx:0});
     add(b+9,'RandomNoise',{noise_seed:seg.seed});
-    add(b+10,'CFGGuider',{model:['10',0],positive,negative:positive,cfg:1});
+    add(b+10,'CFGGuider',{model:['8',0],positive,negative:positive,cfg:1});
     add(b+11,'SamplerCustomAdvanced',{noise:link(9),guider:link(10),sampler:['40',0],sigmas:['41',0],latent_image:link(5,1)});
     add(b+12,'LTXVSeparateAVLatent',{av_latent:link(11)});
     const decoded=add(b+13,'VAEDecode',{samples:link(12),vae:['3',0]});
@@ -170,7 +176,7 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
   const images=exports.length===1?exports[0]:add(49,'ImageBatchMulti',{inputcount:exports.length,
     ...Object.fromEntries(exports.map((value,i)=>['image_'+(i+1),value]))});
   add(490,'VHS_VideoCombine',{images,...(source.hasAudio?{audio:['50',0]}:{}),frame_rate:24,loop_count:0,
-    filename_prefix:'VANTA-H3-AKATZ-V1_5-NATIVE1080',format:'video/h264-mp4',pix_fmt:'yuv420p',crf:16,
+    filename_prefix:'VANTA-H3-AKATZ-V1_5-NATIVE1080',format:'video/h264-mp4',pix_fmt:'yuv420p',crf:AKATZ_OUTPUT_CRF,
     save_metadata:true,trim_to_audio:false,pingpong:false,save_output:true,no_preview:false});
   return g;
 }
