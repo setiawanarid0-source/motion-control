@@ -87,6 +87,48 @@ await assert.rejects(context.createTask({...args,apiKey:'key-timeout'}),
 assert.equal(explicitQueueMaxed(responses[2]),false,
   'Null/missing acknowledgement remains uncertain (no fallback)');
 
+responses.push({code:500,msg:'NOT_ENOUGH_BALANCE'});
+await assert.rejects(context.createTask({...args,apiKey:'key-rejected-balance'}),
+  e=>e.code==='RUNNINGHUB_INSUFFICIENT_BALANCE'&&/Task belum dibuat/.test(e.message),
+  'Explicit balance rejection without an accepted ID must be shown as a refusal');
+for(const reply of [{code:500,msg:'NOT_ENOUGH_BALANCE',taskId:'2109126366731984999'},
+  {code:500,msg:'NOT_ENOUGH_BALANCE',data:{taskId:'2109126366731984999'}}]){
+  responses.push(reply);
+  await assert.rejects(context.createTask({...args,apiKey:'key-with-id'}),
+    e=>e.code!=='RUNNINGHUB_INSUFFICIENT_BALANCE',
+    'A response containing a task ID cannot be declared unaccepted');
+}
+
+// Run the actual account loop and durable worker with mocked provider refusals.
+// Neither a failed shared model transfer nor a definite balance rejection may
+// loop through accounts or leave the browser polling an uncertain acceptance.
+const handlerStart=server.indexOf('async function handleGeneration(');
+const handlerEnd=server.indexOf('generationQueue.setExecutor(runQueuedGeneration);',handlerStart);
+let attempts=0,saved,refusal,discarded=0;
+const worker={...context,IMAGE_MAX:20e6,VIDEO_MAX:100e6,MIN_POOL_CREDITS:100,LOCKED_WORKFLOW_ID:'fixture-workflow',
+  workflowGraphs:{current:{}},console:{info(){},warn(){},error(){}},
+  getPersistentAccounts:()=>({deviceId:'fixture-device',accounts:[{id:'one',key:'fixture-one'},{id:'two',key:'fixture-two'}]}),
+  accountStatus:async()=>({remainCoins:500}),canGenerateWithAccount:()=>true,rankGenerationAccounts,
+  stageReferences:async()=>({staged:true}),discardReferences:async()=>{discarded++;},
+  taskRegistry:{ensureWritable(){}},
+  createTask:async args=>{attempts++;if(refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE')args.onBeforeSubmit();
+    throw Object.assign(new Error(refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE'?'Saldo tidak mencukupi. Task belum dibuat.':'Transfer model terhenti.'),{code:refusal});},
+  safeH3Profile:()=>null,longH3Profile:()=>null,consistencyH3Profile:()=>null,
+  safeH3FaceFocus:()=>null,safeH3Conditioning:()=>null,
+  generationQueue:{read:()=>saved,update:(_id,patch)=>{saved={...saved,...patch};}}};
+vm.createContext(worker);vm.runInContext(server.slice(handlerStart,handlerEnd)+'\nthis.run=runQueuedGeneration;',worker);
+for(refusal of ['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE']){
+  attempts=0;saved={stage:'queued'};
+  await worker.run({jobId:'fixture-job',deviceId:'fixture-device',body:{workflow:'current',mode:'plus',accountId:'auto'},
+    image:{mimetype:'image/jpeg',originalname:'photo.jpg',size:1},video:{mimetype:'video/mp4',originalname:'driver.mp4',size:1}},
+    stage=>{saved.stage=stage;});
+  assert.equal(attempts,1,'A definite refusal must not repeat model setup or submit through other accounts');
+  assert.equal(saved.stage,'error','The UI must receive a terminal failure, not poll indefinitely');
+  assert.equal(saved.failureStage,refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE'?'submitting':'uploading_inputs');
+  assert.match(saved.error,refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE'?/Saldo tidak mencukupi/:/Transfer model terhenti/);
+}
+assert.equal(discarded,2,'Rejected submissions release staged media');
+
 const accounts=[
   {account:{id:'unusable',addedAt:'2026-10-20T12:00:00Z'},status:{remainCoins:700}},
   {account:{id:'top',addedAt:'2026-10-20T10:00:00Z'},status:{remainCoins:600}},

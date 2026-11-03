@@ -116,7 +116,7 @@ assert.equal(Object.values(sent).filter(n=>n.class_type==='SamplerCustomAdvanced
 assert.equal(sent['41'].inputs.steps,4);
 await assert.rejects(context.createTask({...task,mode:'standard'}),/Plus/);assert.equal(submitted,1);
 context.h3AkatzModels.turbo.ensure=async()=>{throw Error('Model setup incomplete');};
-await assert.rejects(context.createTask(task),/Model setup incomplete/);assert.equal(submitted,1,
+await assert.rejects(context.createTask(task),e=>e.code==='H3_MODEL_PREPARATION_FAILED'&&/Model setup incomplete/.test(e.message));assert.equal(submitted,1,
   'Failed model setup cannot submit a paid task');
 
 // Actual short, rotated media preprocessing; compare against FFmpeg's own
