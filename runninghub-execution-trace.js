@@ -133,7 +133,7 @@ export function createH3ExecutionMonitor({WebSocketImpl=globalThis.WebSocket,log
   }
   return {observe(task,url){
     const id=String(task?.taskId||'');
-    if(!/^\d{10,25}$/.test(id)||!/^MiniMax H3 · Motion Control/.test(String(task?.workflow))||
+    if(!/^\d{10,25}$/.test(id)||!/^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native)(?: ·|$)/.test(String(task?.workflow))||
       !allowedProgressUrl(url)||typeof WebSocketImpl!=='function'||connections.has(id))return false;
     const previous=attempts.get(id)||{count:0,at:0};
     if(previous.count>=3||now()-previous.at<30000&&previous.count)return false;

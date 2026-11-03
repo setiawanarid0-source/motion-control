@@ -20,7 +20,7 @@ export function taskTimingReport(task,executionSeconds){
 }
 export async function auditCompletedH3Timings({tasks,query,update,log=()=>{},now=()=>new Date().toISOString(),limit=2}){
   const candidates=tasks.filter(t=>t.status==='success'&&
-    /^MiniMax H3 · Motion Control/.test(String(t.workflow))&&!t.providerTimingCheckedAt).slice(0,limit);
+    /^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native)(?: ·|$)/.test(String(t.workflow))&&!t.providerTimingCheckedAt).slice(0,limit);
   await Promise.all(candidates.map(async task=>{
     let seconds=null,lookupSucceeded=false,providerCode=null;
     try{
