@@ -13,7 +13,7 @@ export const NATIVE_POSE_MODELS=Object.freeze({
 });
 const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
   !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
-export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false,attributes=false,globalAttention=false,diagnostics=true,warmStart=0}){
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false,attributes=false,globalAttention=false,diagnostics=true,warmStart=0,faceSide=256}){
   if(!['native4','dmd8'].includes(recipe))throw Error('Invalid pose sampling recipe');
   if(visualDetails&&!retarget)throw Error('Detailed pose needs whole-sequence retargeting');
   if(facePerformance&&!visualDetails)throw Error('Face performance needs the detailed pose candidate');
@@ -21,6 +21,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
   if(attributes&&!faceGuard)throw Error('Attribute inventory needs guarded face performance');
   if(globalAttention&&!attributes)throw Error('Global native shot needs the guarded attribute recipe');
   if(![0,.2].includes(warmStart)||warmStart&&!globalAttention)throw Error('Invalid sparse attention warmup');
+  if(![128,256].includes(faceSide)||faceSide===128&&!faceGuard)throw Error('Invalid guarded face reference size');
   const dmd8=recipe==='dmd8';
   if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
   for(const key of Object.keys(NATIVE_POSE_MODELS))if(!fileName(models[key])||!models[key].endsWith('.safetensors'))
@@ -134,16 +135,16 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       }
       if(facePerformance){
         add(78,'SDPoseFaceBBoxes',{keypoints:['63',0],scale:1,force_square:false});
-        add(79,'CropByBBoxes',{image:['61',0],bboxes:['78',0],output_width:256,output_height:256,padding:0,keep_aspect:'pad'},
+        add(79,'CropByBBoxes',{image:['61',0],bboxes:['78',0],output_width:faceSide,output_height:faceSide,padding:0,keep_aspect:'pad'},
           'Private candidate: verify crop excludes accessories and retains every source frame before any promotion');
         facialSequence=['79',0];
         if(faceGuard){
           add(80,'GetImageSize',{image:facialSequence});
           add(81,'MathExpression|pysssss',{a:['80',2],b:['80',0],c:['80',1],
-            expression:`256/((a==${source.totalFrames})*(b==256)*(c==256))`},
+            expression:`${faceSide}/((a==${source.totalFrames})*(b==${faceSide})*(c==${faceSide}))`},
             'Stop before sampling if face detection drops frames or falls back to a full RGB frame');
-          facialSequence=add(82,'ImageScale',{image:facialSequence,upscale_method:'nearest-exact',width:['81',0],height:256,crop:'disabled'},
-            '256-to-256 identity pass after frame-count assertion; guide input only');
+          facialSequence=add(82,'ImageScale',{image:facialSequence,upscale_method:'nearest-exact',width:['81',0],height:faceSide,crop:'disabled'},
+            `${faceSide}-to-${faceSide} identity pass after frame-count assertion; guide input only`);
         }
         if(diagnostics)add(494,'VHS_VideoCombine',{images:facialSequence,frame_rate:24,loop_count:0,filename_prefix:'VANTA-FACE-PERFORMANCE-QA',
           format:'video/h264-mp4',pix_fmt:'yuv420p',crf:16,save_metadata:false,trim_to_audio:false,pingpong:false,save_output:true,no_preview:false});

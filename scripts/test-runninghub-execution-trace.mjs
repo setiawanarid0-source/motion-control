@@ -49,6 +49,11 @@ joined.message(JSON.stringify({type:'progress',data:{node:'1010',value:4,max:8}}
 clock=10100;joined.message(JSON.stringify({type:'execution_success',data:{}}));
 assert.equal(partial.find(x=>x.event==='node_end').partial,true);
 assert.equal(partial.find(x=>x.event==='node_end').observedSeconds,10);
+const interrupted=[];clock=0;
+const disconnected=createExecutionTrace({taskId:'2113333333333333333',plan,now:()=>clock,emit:e=>interrupted.push(e)});
+disconnected.message(JSON.stringify({type:'executing',data:{node:'1010'}}));clock=300000;disconnected.close();
+assert.equal(interrupted.find(e=>e.event==='node_end').partial,true,'A mid-sampler connection close is not a completed sampler measurement');
+assert.equal(interrupted.find(e=>e.event==='node_end').observedSeconds,300);
 class Socket{
   static instances=[];
   constructor(url){this.url=url;this.listeners={};this.closed=false;Socket.instances.push(this);}

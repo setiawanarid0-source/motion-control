@@ -70,6 +70,8 @@ const normal=h3GraphForInputs(manifest,{...args,source:productionSource});
 assert.deepEqual(normal,h3GraphForInputs(manifest,{...args,source:{...productionSource,inferenceProfile:H3_DEFAULT_PROFILE}}),
   'Production must use the selected recipe, not just a private benchmark');
 assert.equal(h3ExecutionPlan(normalSource).inferenceProfile,H3_DEFAULT_PROFILE);
+assert.deepEqual(h3ExecutionPlan(normalSource),h3ExecutionPlan({...normalSource,inferenceProfile:H3_DEFAULT_PROFILE}),
+  'Omitted and explicit default profiles must agree on actual windows, sampling and diagnostics');
 assert.ok(!normal['5'],'Production inference must not retain the training-only adapter');
 assert.equal(normal['41'].inputs.steps,4,'Use the matched DMAD four-step student');
 assert.equal(normal['6'].inputs.lora_name,H3_MODELS.turboDmad4);

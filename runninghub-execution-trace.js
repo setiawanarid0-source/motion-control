@@ -10,7 +10,7 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
 export function h3NodeClass(node,plan){
   if(!/^motion-transfer-native-1080-v[123456]$/.test(String(plan?.revision)))return null;
   if(plan.inferenceProfile==='native-photo-inventory-check')return ({30:'LoadImage',85:'CLIPLoader',86:'TextGenerate',495:'SaveText'})[node]||null;
-  if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo'].includes(plan.inferenceProfile)){
+  if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo','native-fun-global4-face128'].includes(plan.inferenceProfile)){
     const globals={1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',6:'LoraLoaderModelOnly',13:'ModelPatchLoader',
       8:'MiniMaxH3SigmaShift',9:'ModelAttentionBackend',10:'BlockSparseAttention',16:'CheckpointLoaderSimple',17:'UNETLoader',30:'LoadImage',31:'ImagePadForOutpaint',40:'KSamplerSelect',
       49:'ImageBatchMulti',50:'VHS_LoadAudioUpload',60:'VHS_LoadVideo',61:'ImageScale',62:'RTDETR_detect',63:'SDPoseKeypointExtractor',
@@ -20,7 +20,7 @@ export function h3NodeClass(node,plan){
       78:'SDPoseFaceBBoxes',79:'CropByBBoxes',492:'SaveImage',493:'SaveImage',494:'VHS_VideoCombine',
       80:'GetImageSize',81:'MathExpression|pysssss',82:'ImageScale',
       85:'CLIPLoader',86:'TextGenerate',87:'StringConcatenate',490:'VHS_VideoCombine',495:'SaveText'};
-    if(String(node)==='68'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo'].includes(plan.inferenceProfile))return 'BodyRatioMapperSDPoseRender';
+    if(String(node)==='68'&&['native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo','native-fun-global4-face128'].includes(plan.inferenceProfile))return 'BodyRatioMapperSDPoseRender';
     if(globals[node])return globals[node];
     const n=Number(node),index=Math.floor((n-1000)/30),offset=(n-1000)%30;
     const types=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBatch','ResizeImageMaskNode','RTDETR_detect',
@@ -120,7 +120,7 @@ export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit,diagno
     }else if(message.type==='execution_success'||message.type==='execution_error'){
       finishNode();finished=true;send(message.type);
     }
-  },close(){finishNode();finished=true;},get finished(){return finished;}};
+  },close(){if(!finished&&current!==null)partial=true;finishNode();finished=true;},get finished(){return finished;}};
 }
 export function createH3ExecutionMonitor({WebSocketImpl=globalThis.WebSocket,log=()=>{},now=()=>Date.now(),diagnosticText }={}){
   const connections=new Map(),attempts=new Map();

@@ -16,7 +16,7 @@ export const H3_REVISION='motion-transfer-native-1080-v6';
 export const H3_DEFAULT_PROFILE='guide-dmad4-character-caption';
 export const H3_WINDOW_FRAMES=124;
 const photoGuideProfile=profile=>['guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor'].includes(profile);
-const nativeGlobalProfile=profile=>['native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo','native-photo-inventory-check'].includes(profile);
+const nativeGlobalProfile=profile=>['native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo','native-fun-global4-face128','native-photo-inventory-check'].includes(profile);
 const nativeFaceProfile=profile=>['native-fun-retarget4-face-performance','native-fun-retarget4-face-guard'].includes(profile)||nativeGlobalProfile(profile);
 const nativeVisualProfile=profile=>profile==='native-fun-retarget4-visual'||nativeFaceProfile(profile);
 const nativePoseProfile=profile=>['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption'].includes(profile)||nativeVisualProfile(profile);
@@ -216,6 +216,7 @@ export async function prepareH3Reference(file,outputPath){
 }
 
 export function h3ExecutionPlan(source){
+  source={...source,inferenceProfile:source?.inferenceProfile||H3_DEFAULT_PROFILE};
   const segments=validateSource(source);
   if(source.inferenceProfile==='native-photo-inventory-check')return {revision:H3_REVISION,
     inferenceProfile:source.inferenceProfile,diagnosticOnly:true,sampling:null,samplerCount:0,
@@ -225,10 +226,10 @@ export function h3ExecutionPlan(source){
     inferenceProfile:source.inferenceProfile||H3_DEFAULT_PROFILE,
     sampling:h3SamplingPlan(source),
     ...(source.inferenceProfile==='native-fun-retarget4-caption'||nativeVisualProfile(source.inferenceProfile)?{poseRetargeting:'photo_proportions_once_for_whole_sequence'}:{}),
-    ...(source.inferenceProfile==='native-fun-retarget4-face-guard'||nativeGlobalProfile(source.inferenceProfile)?{faceCropValidation:'exact_source_frame_count_and_256_square'}:{}),
+    ...(source.inferenceProfile==='native-fun-retarget4-face-guard'||nativeGlobalProfile(source.inferenceProfile)?{faceCropValidation:`exact_source_frame_count_and_${source.inferenceProfile==='native-fun-global4-face128'?128:256}_square`}:{}),
     ...(nativeGlobalProfile(source.inferenceProfile)?{nativeWindowFrames:362,appearanceCaptionScope:'visible_hair_outfit_accessories_scene_only_no_body_description'}:{}),
     referenceFace:source.referenceFace||null,
-    attentionConditioning:source.inferenceProfile==='native-fun-global4-warm-photo'?'sol_after_20pct_exact_reference_kv_dense_blocks_0_1':
+    attentionConditioning:['native-fun-global4-warm-photo','native-fun-global4-face128'].includes(source.inferenceProfile)?'sol_after_20pct_exact_reference_kv_dense_blocks_0_1':
       nativeGlobalProfile(source.inferenceProfile)?'sol_all_steps_exact_reference_kv_dense_blocks_0_1':
       nativePoseProfile(source.inferenceProfile)?'native_full_attention':h3AttentionConditioning(source),
     guidePhotoCopyResized:photoGuideProfile(source.inferenceProfile||H3_DEFAULT_PROFILE),
@@ -252,6 +253,7 @@ function h3AttentionConditioning(source){
 }
 
 export function h3SamplingPlan(source){
+  source={...source,inferenceProfile:source?.inferenceProfile||H3_DEFAULT_PROFILE};
   if(['native-fun-pose8-caption','native-fun-global8-face-attributes'].includes(source.inferenceProfile))return {steps:8,sampler:'euler',scheduler:'simple',turbo:H3_MODELS.turbo,audioShift:3};
   if(nativePoseProfile(source.inferenceProfile))return {steps:4,sampler:'res_multistep',scheduler:'simple',turbo:NATIVE_POSE_MODELS.turbo,audioShift:null};
   const dmad=['guide-dmad4-focus','guide-dmad4-ffp','guide-dmad4-ffp-focus','guide-dmad4-motion-anchor','guide-dmad4-character-caption'].includes(source.inferenceProfile||H3_DEFAULT_PROFILE);
@@ -272,7 +274,7 @@ function validateSource(source){
   try{expected=h3PhotoPlan(source.referenceWidth,source.referenceHeight);}catch{throw Error('Metadata foto H3 belum tervalidasi.');}
   if(Object.entries(expected).some(([key,value])=>source[key]!==value))throw Error('Metadata canvas H3 belum tervalidasi.');
   return h3Segments(source.totalFrames,source.sceneCuts,continuationFrames(source.inferenceProfile||H3_DEFAULT_PROFILE),
-    nativeGlobalProfile(source.inferenceProfile)?362:H3_WINDOW_FRAMES);
+    nativeGlobalProfile(source.inferenceProfile||H3_DEFAULT_PROFILE)?362:H3_WINDOW_FRAMES);
 }
 export function h3GraphForInputs(base,{imageName,videoName,source}){
   inputName(imageName);inputName(videoName);
@@ -285,7 +287,8 @@ export function h3GraphForInputs(base,{imageName,videoName,source}){
     retarget:profile==='native-fun-retarget4-caption'||nativeVisualProfile(profile),visualDetails:nativeVisualProfile(profile),
     facePerformance:nativeFaceProfile(profile),faceGuard:profile==='native-fun-retarget4-face-guard'||nativeGlobalProfile(profile),
     attributes:nativeGlobalProfile(profile),globalAttention:nativeGlobalProfile(profile),diagnostics:source.diagnosticOutputs===true,
-    warmStart:profile==='native-fun-global4-warm-photo'?.2:0});
+    warmStart:['native-fun-global4-warm-photo','native-fun-global4-face128'].includes(profile)?.2:0,
+    faceSide:profile==='native-fun-global4-face128'?128:256});
     if(profile==='native-photo-inventory-check'){
       if(source.diagnosticOutputs!==true)throw Error('Photo inventory is a private diagnostic only.');
       return Object.fromEntries(['30','85','86','495'].map(id=>[id,graph[id]]));

@@ -231,6 +231,57 @@ acceptable full-duration timing. A new 0–3.5 s fixture specifically includes
 the early frames where the unrequested watch first appeared; both that fixture
 and a changed-photo fixture must be checked before its full-duration admission.
 
+Both 0–3.5 s screens completed at native 1080p / 24 FPS / 84 frames:
+
+| Fixture | Task | Provider execution | Submission to ready |
+| --- | --- | --- | --- |
+| Gray shirt / early accessory interval | `2117289999343120385` | 241 s | 323.395 s |
+| Changed photo / black gloves and glasses | `2117290082100928513` | 218 s | 303.634 s |
+
+All 84 output frames in each screen were inspected. Native wrist crops at
+frames 48, 72 and 83 show bare wrists without the earlier silver band. The
+changed-reference output retains black gloves and thin metal glasses, confirmed
+in native face crops at frames 0 and 83. Its first frames still inherit the
+photo's three-quarter starting pose before turning frontal; exact first-frame
+pose/performance transfer is not established. The reproduced captions are now
+saved as private text outputs, including an explicit bare-wrist description.
+The full original 15-second source is admitted separately as task
+`2117292765385940993`.
+
+**The full warmup candidate is also rejected.** It completed 361 native
+1080×1936 / 24 FPS frames in 1061 provider seconds and 1089.548 seconds overall
+(18m09.548s). All 361 output frames were reviewed in contact sheets. A native
+wrist crop of frame 48 still exposes a silver watch/band at the lower edge,
+despite the successful short screen. Native crops at frames 144/240/300/360
+also show that preview-scale inspection is insufficient for final acceptance;
+shirt fine detail remains re-synthesised. The ceiling ROI's largest adjacent
+change is 0.9979, with no independent-window joins, but its mean grows from
+41.0651 to 48.1395. No constant-exposure or complete appearance claim follows.
+The actual saved caption from this run explicitly says no wrist jewelry, so
+caption wording alone did not prevent this artifact. Ordinary generation has
+not been switched to this failed candidate.
+
+Default-profile metadata is resolved before window, sampling and diagnostics
+planning. Omitted and explicitly named defaults must build and report the same
+graph; this avoids reporting or selecting legacy 124-frame windows when the
+chosen native profile uses 362-frame windows.
+
+A connection closing mid-sampler now marks that node measurement as partial.
+The provider's complete task duration and the registry's submission-to-ready
+duration remain the timing authorities; a 300-second idle stream closure is
+not evidence that sampling finished.
+
+The next private comparison reduces only the input facial crop from 256² to
+128² while keeping every driving frame, native photo pixels, output dimensions,
+four-step recipe, pose retargeting and dense opening. Native Ref2VA packs the
+entire VAE reference video as conditioning; its spatial reference positions
+therefore fall by four at the same temporal length. Whether this reduces
+unwanted appearance influence from a long video is an inference to test, not an
+established cause or fix. The full 15-second fixture is required directly,
+because the previous short screens failed to predict the full-run accessory.
+The 128² frame/dimension guard still stops before sampling on dropped faces or
+full-RGB fallback. This changes an analysis/guide input, never generated output.
+
 Normal submissions now use `guide-dmad4-character-caption`, the same graph as
 the completed short, full-duration and changed-reference trials. Character Swap
 v1.1 replaces Motion Transfer v1.0; the existing DMAD four-step student,
