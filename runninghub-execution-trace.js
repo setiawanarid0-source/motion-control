@@ -9,7 +9,7 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'MiniMaxH3ReferenceToVideo','MiniMaxH3AddGuide','ImageFromBatch','MiniMaxH3AddGuide',
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
-  if(/^akatz-native-1080-v[123]$/.test(String(plan?.revision)))return akatzNodeClass(node,plan);
+  if(/^akatz-native-1080-v[1234]$/.test(String(plan?.revision)))return akatzNodeClass(node,plan);
   if(!/^motion-transfer-native-1080-v[123456]$/.test(String(plan?.revision)))return null;
   if(plan.inferenceProfile==='native-photo-inventory-check')return ({30:'LoadImage',85:'CLIPLoader',86:'TextGenerate',495:'SaveText'})[node]||null;
   if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo','native-fun-global4-face128','native-fun-global4-face128-keypoints'].includes(plan.inferenceProfile)){

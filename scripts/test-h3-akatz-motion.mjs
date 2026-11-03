@@ -29,6 +29,14 @@ for(let frames=6;frames<=362;frames++){
   assert.ok(plan.samplerCount<=3);assert.equal(plan.workBudget.totalSteps,plan.samplerCount*4);
   assert.ok(plan.workBudget.totalSteps<=12);assert.equal(plan.workBudget.providerHardLimitSeconds,2400);
   assert.equal(plan.workBudget.measuredRuntimeSeconds,null,'A budget is not a measured runtime');
+  assert.equal(plan.attentionConditioning,'dense_target_and_reference_all_steps');
+  assert.equal(g['10'],undefined,'The four-step detail reconstruction must never enter sparse target attention');
+  assert.deepEqual(g['41'].inputs.model,['8',0]);
+  assert.equal(g['490'].inputs.crf,12,'Preserve generated detail in the final video encoder');
+  assert.deepEqual(plan.outputEncoding,{format:'video/h264-mp4',crf:12});
+  assert.match(g['87'].inputs.string_a,/eyebrow raises.*eyelid opening.*blinks/);
+  assert.match(g['87'].inputs.string_a,/mouth corners.*lip shape.*mouth opening.*speech articulation/);
+  assert.match(g['87'].inputs.string_a,/not a frozen expression/);
   if(frames<=124)assert.equal(plan.samplerCount,1,'Short clips must not be split');
   const timeline=[];
   for(const [i,seg] of plan.segments.entries()){
@@ -70,7 +78,7 @@ for(let frames=6;frames<=362;frames++){
     assert.equal(g['49'].inputs.inputcount,plan.samplerCount);
     for(let i=0;i<plan.samplerCount;i++)assert.deepEqual(g['49'].inputs['image_'+(i+1)],[String(1015+i*40),0]);
   }
-  assert.ok(!Object.values(g).some(n=>/Upscale|ImageScale|Refine|Composite|FaceRestore|H3Relay|BodyRatio|SDPose/.test(n.class_type)));
+  assert.ok(!Object.values(g).some(n=>/Upscale|ImageScale|Refine|Composite|FaceRestore|H3Relay|BodyRatio|SDPose|BlockSparseAttention/.test(n.class_type)));
   assert.equal(Object.values(g).filter(n=>n.class_type==='SamplerCustomAdvanced').length,plan.samplerCount);
   for(const [id,n] of Object.entries(g)){
     assert.equal(h3NodeClass(id,plan),n.class_type);
@@ -84,6 +92,9 @@ const silent=akatzGraphForInputs(args);
 assert.equal(silent['50'],undefined);assert.equal(silent['1004'],undefined);assert.equal(silent['1008'],undefined);
 assert.equal(silent['490'].inputs.audio,undefined);assert.deepEqual(silent['1010'].inputs.positive,['1005',0]);
 assert.equal(h3NodeClass('104',{revision:'akatz-native-1080-v1'}),'SamplerCustomAdvanced','Historical Akatz task IDs stay observable');
+for(const revision of ['akatz-native-1080-v1','akatz-native-1080-v2','akatz-native-1080-v3'])
+  assert.equal(h3NodeClass('10',{revision}),'BlockSparseAttention','Old in-flight tasks keep their original trace schema');
+assert.equal(h3NodeClass('10',akatzExecutionPlan(sourceFor(361))),null);
 assert.equal(h3NodeClass('1131',{revision:'akatz-native-1080-v2',samplerCount:4}),'SamplerCustomAdvanced');
 assert.equal(h3NodeClass('1131',akatzExecutionPlan(sourceFor(361))),null,'The new profile must have no fourth window');
 assert.throws(()=>akatzGraphForInputs({...args,imageName:'../private'}));
@@ -141,9 +152,34 @@ try{
   prepared=await prepareAkatzInput({path:rotated,originalname:'short.mp4',mimetype:'video/mp4'},'plus',image);
   assert.equal(prepared.totalFrames,6);assert.deepEqual(prepared.driverCanvas,[96,160]);
   assert.ok(Number.isSafeInteger(prepared.seed));
+  assert.deepEqual(prepared.driverEncoding,{crf:12,maxrate:'24M',bufsize:'48M'});
   const first=file=>execFileSync('ffmpeg',['-v','error','-i',file,'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-']);
   const a=first(rotated),b=first(prepared.file.path);assert.equal(a.length,b.length);
   const mean=a.reduce((sum,v,i)=>sum+Math.abs(v-b[i]),0)/a.length;assert.ok(mean<4,'Native driver must not rotate or scale again');
   assert.equal(hash(),before,'The original reference photo bytes remain unchanged');
 }finally{if(prepared)await prepared.release();fs.rmSync(dir,{recursive:true,force:true});}
-console.log('PASS: matched Ref2VA four-step recipe, at most 12 total steps, generated-only five-frame continuity, exhaustive 6–362 frame timeline, native 1080, rotated short input and one owner-initiated provider submission');
+
+// Measure the actual preprocessor against the old re-encode using small,
+// detailed moving frames. This tests pixel preservation, not generative quality.
+const detailDir=fs.mkdtempSync(path.join(os.tmpdir(),'akatz-driver-detail-'));let detail;
+try{
+  const source=path.join(detailDir,'detail.mp4'),baseline=path.join(detailDir,'old-crf16.mp4'),photo=path.join(detailDir,'photo.png');
+  execFileSync('ffmpeg',['-v','error','-y','-f','lavfi','-i','testsrc2=s=96x160:r=1','-frames:v','1',photo]);
+  execFileSync('ffmpeg',['-v','error','-y','-f','lavfi','-i','testsrc2=s=360x640:r=24',
+    '-vf','noise=alls=12:allf=t:all_seed=17','-t','0.75','-c:v','libx264','-crf','0','-pix_fmt','yuv420p',source]);
+  detail=await prepareAkatzInput({path:source,originalname:'detail.mp4',mimetype:'video/mp4'},'plus',
+    {path:photo,originalname:'photo.png',mimetype:'image/png'});
+  assert.equal(detail.totalFrames,18);assert.deepEqual(detail.driverCanvas,[384,640]);
+  const filter='setpts=PTS-STARTPTS,fps=24,setsar=1,pad=384:640:(ow-iw)/2:(oh-ih)/2:color=black';
+  execFileSync('ffmpeg',['-v','error','-y','-i',source,'-vf',filter,'-an','-frames:v','18',
+    '-c:v','libx264','-preset','fast','-crf','16','-maxrate','12M','-bufsize','24M','-pix_fmt','yuv420p',baseline]);
+  const pixels=(file,filters='null')=>execFileSync('ffmpeg',['-v','error','-i',file,'-an','-vf',filters,
+    '-frames:v','18','-f','rawvideo','-pix_fmt','yuv420p','-'],{maxBuffer:10*1024*1024});
+  const original=pixels(source,filter),old=pixels(baseline),current=pixels(detail.file.path);
+  assert.equal(current.length,original.length);assert.equal(old.length,original.length);
+  const mse=bytes=>bytes.reduce((sum,value,i)=>sum+(value-original[i])**2,0)/bytes.length;
+  const oldMse=mse(old),newMse=mse(current);
+  assert.ok(newMse<oldMse*.85,`Driver detail regressed: new MSE ${newMse}, old ${oldMse}`);
+  console.log('PASS: actual low-resolution driver pixel error reduced '+Math.round((1-newMse/oldMse)*100)+'% at identical frame count, pixels and orientation; no inference');
+}finally{if(detail)await detail.release();fs.rmSync(detailDir,{recursive:true,force:true});}
+console.log('PASS: dense four-step Ref2VA, explicit source expression timing, at most 12 total steps, generated-only five-frame continuity, exhaustive 6–362 frame timeline, native 1080, rotated short input and one owner-initiated provider submission');
