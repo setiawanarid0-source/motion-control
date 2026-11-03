@@ -177,6 +177,13 @@ expectedSmallFace['82'].inputs.height=128;expectedSmallFace['82']._meta.title='1
 assert.deepEqual(smallFace,expectedSmallFace,'Reduce only the input face-reference spatial token budget; native photo, source timing, output pixels and sampling remain identical');
 assert.equal(h3ExecutionPlan(smallFaceSource).faceCropValidation,'exact_source_frame_count_and_128_square');
 for(const [id,node] of Object.entries(smallFace))assert.equal(h3NodeClass(id,h3ExecutionPlan(smallFaceSource)),node.class_type,'Small face-reference timing node '+id);
+const facialPoseSource={...smallFaceSource,inferenceProfile:'native-fun-global4-face128-keypoints'};
+const facialPose=h3GraphForInputs({revision:H3_REVISION},{imageName:'photo',videoName:'guide',source:facialPoseSource});
+const expectedFacialPose=structuredClone(smallFace);
+expectedFacialPose['68'].inputs.draw_face=true;expectedFacialPose['68'].inputs.draw_mouth=true;
+assert.deepEqual(facialPose,expectedFacialPose,'Facial timing comparison changes only aligned control landmarks, preserving every original crop and whole-photo reference');
+assert.deepEqual(h3ExecutionPlan(facialPoseSource),{...h3ExecutionPlan(smallFaceSource),inferenceProfile:facialPoseSource.inferenceProfile});
+for(const [id,node] of Object.entries(facialPose))assert.equal(h3NodeClass(id,h3ExecutionPlan(facialPoseSource)),node.class_type,'Facial timing native node '+id);
 for(let n=6;n<=1440;n++){
  const parts=h3Segments(n,[],22,362);let cursor=0;
  for(const p of parts){assert.equal(p.start,cursor);assert.ok(p.modelFrames<=362);cursor+=p.length;}

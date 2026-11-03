@@ -13,7 +13,7 @@ export const NATIVE_POSE_MODELS=Object.freeze({
 });
 const fileName=v=>typeof v==='string'&&v.length>0&&v.length<500&&!v.startsWith('/')&&
   !v.includes('://')&&!v.split('/').includes('..')&&!/[\u0000-\u001f\\]/.test(v);
-export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false,attributes=false,globalAttention=false,diagnostics=true,warmStart=0,faceSide=256}){
+export function nativePoseCandidateGraph({imageName,videoName,source,segments,models=NATIVE_POSE_MODELS,recipe='native4',retarget=false,visualDetails=false,facePerformance=false,faceGuard=false,attributes=false,globalAttention=false,diagnostics=true,warmStart=0,faceSide=256,faceLandmarks=false}){
   if(!['native4','dmd8'].includes(recipe))throw Error('Invalid pose sampling recipe');
   if(visualDetails&&!retarget)throw Error('Detailed pose needs whole-sequence retargeting');
   if(facePerformance&&!visualDetails)throw Error('Face performance needs the detailed pose candidate');
@@ -22,6 +22,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
   if(globalAttention&&!attributes)throw Error('Global native shot needs the guarded attribute recipe');
   if(![0,.2].includes(warmStart)||warmStart&&!globalAttention)throw Error('Invalid sparse attention warmup');
   if(![128,256].includes(faceSide)||faceSide===128&&!faceGuard)throw Error('Invalid guarded face reference size');
+  if(faceLandmarks&&(!faceGuard||faceSide!==128))throw Error('Direct facial landmarks need guarded small-face performance');
   const dmd8=recipe==='dmd8';
   if(!fileName(imageName)||!fileName(videoName))throw Error('Invalid input filename');
   for(const key of Object.keys(NATIVE_POSE_MODELS))if(!fileName(models[key])||!models[key].endsWith('.safetensors'))
@@ -120,7 +121,7 @@ export function nativePoseCandidateGraph({imageName,videoName,source,segments,mo
       const draw=(id,keypoints,drawFace=true)=>add(id,'BodyRatioMapperSDPoseRender',{pose_keypoint:keypoints,resolution_x:source.canvasWidth,
         score_threshold:.3,scale_for_xinsir:false,stick_width:4,face_point_size:2,draw_face:drawFace,draw_mouth:drawFace,
         draw_hands:true,draw_feet:true,draw_thigh:true,draw_calf:true});
-      draw(68,['67',0],!facePerformance);
+      draw(68,['67',0],!facePerformance||faceLandmarks);
       if(diagnostics){
       draw(73,['66',0]);
       const first=add(75,'ImageFromBatch',{image:['61',0],batch_index:0,length:1});
