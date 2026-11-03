@@ -41,6 +41,15 @@ assert.equal(await auditFailedH3Tasks({tasks:[{...missing,...updates.at(-1).patc
 await auditFailedH3Tasks({tasks:[missing],query:async()=>{throw Error('Transport unavailable');},
   queryV2:async()=>{throw Error('Transport unavailable');},update:async(id,patch)=>updates.push({id,patch})});
 assert.ok(updates.at(-1).patch.failureV2CheckedAt,'An unavailable diagnostic cannot create an endless lookup loop');
+let detailReads=0;
+await auditFailedH3Tasks({tasks:[missing],query:async()=>sample,
+  queryV2:async()=>{detailReads++;throw Error('A usable legacy reason needs no fallback');},
+  update:async(id,patch)=>updates.push({id,patch})});
+assert.equal(detailReads,0);assert.equal(updates.at(-1).patch.failureCategory,'unclassified');
+assert.ok(updates.at(-1).patch.failureV2CheckedAt);
+assert.equal(await auditFailedH3Tasks({tasks:[{...missing,...updates.at(-1).patch}],
+  query:async()=>{throw Error('Unclassified legacy reason already checked');},queryV2:async()=>{},update:()=>{}}),0,
+  'An unclassified legacy error must not monopolize the once-only audit queue');
 assert.equal(await auditFailedH3Tasks({tasks:[{...task,failureAuditCheckedAt:'done'}],query:async()=>{throw Error('Do not retry');},update:()=>{}}),0);
 await auditFailedH3Tasks({tasks:[akatz],query:async()=>({code:805,data:{failedReason:{
   node_id:'104',node_name:'SamplerCustomAdvanced',exception_type:'torch.OutOfMemoryError',

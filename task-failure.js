@@ -41,7 +41,9 @@ export async function auditFailedH3Tasks({tasks,query,queryV2,update,log=()=>{},
   for(const task of candidates){
     let result=null,lookupSucceeded=false;
     try{result=await query(task);lookupSucceeded=true;}catch{}
-    let failureV2CheckedAt=null;
+    // Checkpoint the fallback decision even when a legacy reason exists but
+    // is unclassified. Otherwise that task is selected again on every poll.
+    let failureV2CheckedAt=queryV2?now():null;
     if(!extractTaskFailure(result)&&queryV2){
       try{
         const modern=await queryV2(task),detail=extractTaskFailure(modern);

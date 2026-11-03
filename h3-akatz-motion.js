@@ -5,20 +5,21 @@ import {prepareH3Input,probeH3Input,h3PhotoPlan,h3Segments} from './minimax-h3-m
 import {validUploadedH3Lora} from './h3-appearance-model.js';
 import {randomInt} from 'node:crypto';
 
-export const AKATZ_PROFILE='akatz-v1.5-native8';
-export const AKATZ_REVISION='akatz-native-1080-v2';
+export const AKATZ_PROFILE='akatz-v1.5-native4-ref2v';
+export const AKATZ_REVISION='akatz-native-1080-v3';
 export const AKATZ_MAX_FRAMES=362;
 export const AKATZ_WINDOW_FRAMES=124;
-export const AKATZ_CONTEXT_FRAMES=22;
+export const AKATZ_CONTEXT_FRAMES=5;
+export const AKATZ_SAMPLING=Object.freeze({steps:4,sampler:'euler',scheduler:'simple',videoShift:12,audioShift:3});
 export const AKATZ_ASSET=Object.freeze({
   name:'minimax_h3_akatz_character_swap_v1_5',
   url:'https://huggingface.co/akatz-ai/MiniMax-H3-Character-Swap-LoRA/resolve/0f409f0c2a18f123f3985041ec52982c813f5a9c/h3_character_swap_v1.5.safetensors',
   sha256:'8f2c3c3eba161df8d0c6099598b4730f641f5ce01e04cd16d2427cff8a35218f',size:155110792
 });
 export const AKATZ_TURBO_ASSET=Object.freeze({
-  name:'minimax_h3_akatz_fl2v_turbo8',
-  url:'https://huggingface.co/lightx2v/Minimax-h3-Turbo/resolve/3ec17a324ced54151364f24f8b5fb6bf7e26414f/minimax_h3_fl2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors',
-  sha256:'08cfe946033af7d27719b964b6e0a0e50c32138daabbd6ce4137e23df6bf9980',size:1956193000
+  name:'minimax_h3_akatz_ref2v_turbo4_v0_1',
+  url:'https://huggingface.co/lightx2v/Minimax-h3-Turbo/resolve/30f485ed874aa44c8183348ad361c5eabad318da/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors',
+  sha256:'5b9ab5ade15d0775676d01a907268a69a1468dc6033b3b0d3ded5502f3ebb84c',size:1956193000
 });
 const V1_NODE_CLASSES=Object.freeze({
   1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',6:'RHLoraLoader',7:'RHLoraLoader',
@@ -41,7 +42,7 @@ const WINDOW_NODE_CLASSES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','
   'VAEDecode','ImageFromBatch','ImageCrop'];
 export function akatzNodeClass(node,plan){
   if(plan?.revision==='akatz-native-1080-v1')return V1_NODE_CLASSES[String(node)]||null;
-  if(plan?.revision!==AKATZ_REVISION)return null;
+  if(!['akatz-native-1080-v2',AKATZ_REVISION].includes(plan?.revision))return null;
   if(AKATZ_NODE_CLASSES[String(node)])return AKATZ_NODE_CLASSES[String(node)];
   const n=Number(node),index=Math.floor((n-1000)/40),offset=(n-1000)%40;
   return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODE_CLASSES.length?
@@ -64,14 +65,17 @@ function plan(source){
   if(!Number.isSafeInteger(seed)||seed<0||seed>=2**32)throw Error('Seed Akatz harus berupa bilangan bulat yang valid.');
   const segments=h3Segments(source.totalFrames,source.sceneCuts||[],AKATZ_CONTEXT_FRAMES,AKATZ_WINDOW_FRAMES)
     .map((seg,i)=>({...seg,seed:(seed+i)%2**32}));
+  if(segments.length*AKATZ_SAMPLING.steps>12)throw Error('Beban Akatz melampaui batas profil 15 detik. Task belum dikirim.');
   return {segments,seed};
 }
 export function akatzExecutionPlan(source){
   const p=plan(source);
   return {revision:AKATZ_REVISION,inferenceProfile:AKATZ_PROFILE,frames:source.totalFrames,fps:24,
-    sampling:{steps:8,sampler:'er_sde',scheduler:'normal',character:'Akatz V1.5',
-      turbo:'FL2V Turbo 8-step',characterSha256:AKATZ_ASSET.sha256,turboSha256:AKATZ_TURBO_ASSET.sha256},
+    sampling:{...AKATZ_SAMPLING,character:'Akatz V1.5',turbo:'Ref2VA Turbo 4-step v0.1',
+      characterSha256:AKATZ_ASSET.sha256,turboSha256:AKATZ_TURBO_ASSET.sha256},
     nativeWindowFrames:AKATZ_WINDOW_FRAMES,samplerCount:p.segments.length,seed:p.seed,
+    workBudget:{totalSteps:p.segments.length*AKATZ_SAMPLING.steps,maxTotalSteps:12,
+      targetSeconds:1500,providerHardLimitSeconds:2400,measuredRuntimeSeconds:null},
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     driverCanvas:source.driverCanvas||null,driverGeometry:'original_pixels_with_grid_padding',
     referenceColor:source.referenceColor||null,guideAppearance:'akatz_native_video_reference',
@@ -100,9 +104,9 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
   add(6,'RHLoraLoader',{model:['1',0],clip:['2',0],lora_name:'',file_name:turboLoraFile,strength_model:1,strength_clip:0});
   add(7,'RHLoraLoader',{model:['6',0],clip:['2',0],lora_name:'',file_name:characterLoraFile,strength_model:1,strength_clip:0});
   add(9,'ModelAttentionBackend',{model:['7',0],attention:'comfy kitchen attention'});
-  add(8,'MiniMaxH3SigmaShift',{model:['9',0],shift_video:12,shift_audio:3});
+  add(8,'MiniMaxH3SigmaShift',{model:['9',0],shift_video:AKATZ_SAMPLING.videoShift,shift_audio:AKATZ_SAMPLING.audioShift});
   // Preserve exact image/video reference attention; accelerate target attention
-  // after the opening steps. No output enhancement or shorter-step substitute.
+  // after the opening steps. No output enhancement.
   add(10,'BlockSparseAttention',{model:['8',0],selection:'sol-attn','selection.tau':1,
     start_percent:.2,end_percent:1,dense_blocks:'0,1',min_tokens:12288,extra_tokens:256,
     sink_conditioning:'exact_kv',verbose:true});
@@ -126,8 +130,10 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
     'keep a stationary source camera stationary. Do not stabilize, add drift or replace the moving pose with the photo pose. '+
     'Keep the same character and materials from the first frame to the last. Visible photo appearance: ';
   add(87,'StringConcatenate',{string_a:instructions,string_b:['86',0],delimiter:''});
-  add(40,'KSamplerSelect',{sampler_name:'er_sde'});
-  add(41,'BasicScheduler',{model:['10',0],scheduler:'normal',steps:8,denoise:1});
+  // Match the publisher's Ref2VA four-step student and native Comfy workflow;
+  // do not truncate the previous FL2VA eight-step checkpoint to four steps.
+  add(40,'KSamplerSelect',{sampler_name:AKATZ_SAMPLING.sampler});
+  add(41,'BasicScheduler',{model:['10',0],scheduler:AKATZ_SAMPLING.scheduler,steps:AKATZ_SAMPLING.steps,denoise:1});
   const exports=[];let previous=null;
   for(const [i,seg] of p.segments.entries()){
     const b=1000+i*40,link=(offset,out=0)=>[String(b+offset),out];
