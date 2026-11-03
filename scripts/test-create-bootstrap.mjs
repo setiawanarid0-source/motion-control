@@ -35,7 +35,7 @@ function makeElement(dataset={}){
 }
 const nav=['create','image-create','history','image-history','accounts','kie-accounts']
   .map(view=>makeElement({view}));
-const workflow=['rife60','r15','current','koh1AntiObject','r4Lab','minimaxH3']
+const workflow=['rife60','r15','current','koh1AntiObject','r4Lab','minimaxH3','minimaxH3Akatz']
   .map(id=>makeElement({workflow:id}));
 const modes=['standard','plus'].map(mode=>makeElement({mode}));
 for(const key of ['create','image-create','history','image-history','accounts','kie-accounts']){
@@ -44,7 +44,7 @@ for(const key of ['create','image-create','history','image-history','accounts','
 for(const key of workflow.map(x=>x.dataset.workflow)){
   assert.ok(html.includes('data-workflow="'+key+'"'),'Workflow option must exist: '+key);
 }
-const nodeKeys=['#menuBtn','#sidebar','#diagnosticNotice','#fullLabNotice','#rifeNotice','#h3Notice','#mediaRequirements',
+const nodeKeys=['#menuBtn','#sidebar','#diagnosticNotice','#fullLabNotice','#rifeNotice','#h3Notice','#akatzNotice','#mediaRequirements',
   '#imageDrop','#referenceImage','#videoDrop',
   '#videoReference','#generateBtn','#refreshAccounts','#motionGalleryRefresh',
   '#addAccountBtn'];
@@ -99,8 +99,17 @@ assert.equal(state.workflow,'minimaxH3');
 assert.equal(nodes.get('#imageDrop').classList.contains('hidden'),false,'H3 needs the character image');
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),false);
 assert.equal(nodes.get('#rifeNotice').classList.contains('hidden'),true);
+workflow.find(x=>x.dataset.workflow==='minimaxH3Akatz').onclick();
+assert.equal(state.workflow,'minimaxH3Akatz');
+assert.equal(state.mode,'plus','Akatz requires the Plus instance');
+assert.equal(modes.find(x=>x.dataset.mode==='standard').disabled,true);
+assert.equal(nodes.get('#imageDrop').classList.contains('hidden'),false);
+assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),false);
+assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true);
 workflow.find(x=>x.dataset.workflow==='r4Lab').onclick();
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true,'H3 help must not leak into old workflows');
+assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),true,'Akatz help is scoped to its own option');
+assert.equal(modes.find(x=>x.dataset.mode==='standard').disabled,false);
 assert.equal(nodes.get('#imageDrop').classList.contains('hidden'),false,'Other motion modes need image input');
 assert.equal(state.workflow,'r4Lab');
 modes.find(x=>x.dataset.mode==='plus').onclick();

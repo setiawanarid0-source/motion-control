@@ -215,6 +215,7 @@ function updateGenerate(){
   refreshLabNotice();
 }
 function workflowName(){
+  if(state.workflow==='minimaxH3Akatz')return 'MiniMax H3 · Akatz V1.5 Native · 1080p';
   if(state.workflow==='minimaxH3')return 'MiniMax H3 · Motion Control · 1080p';
   if(state.workflow==='rife60')return 'RIFE Adaptive · hingga 60 FPS';
   if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
@@ -321,6 +322,7 @@ function clearSubmission(){
 }
 function stageDescription(stage){
   // Internal preprocessing steps must not clutter the user's flow.
+  if(stage==='preparing_models')return 'Menyiapkan model Akatz…';
   return stage==='submitting'?'Mengirim task…':'Memulai generate…';
 }
 function showSubmissionStage(data){
@@ -1038,7 +1040,8 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');
   $('#fullLabNotice').classList.toggle('hidden',state.workflow!=='r4Lab');
   $('#h3Notice').classList.toggle('hidden',state.workflow!=='minimaxH3');
-  const h3=state.workflow==='minimaxH3';
+  $('#akatzNotice').classList.toggle('hidden',state.workflow!=='minimaxH3Akatz');
+  const h3=['minimaxH3','minimaxH3Akatz'].includes(state.workflow);
   $$('.mode-card').forEach(x=>{x.disabled=h3&&x.dataset.mode!=='plus';});
   if(h3){
     state.mode='plus';

@@ -1,5 +1,6 @@
 // Optional, read-only provider progress. Polling remains authoritative.
 // Binary preview frames, URLs, prompts, error text and credentials are ignored.
+import {AKATZ_REVISION,AKATZ_NODE_CLASSES} from './h3-akatz-motion.js';
 const BASE_NODES={1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',5:'LoraLoaderModelOnly',
   6:'LoraLoaderModelOnly',7:'LoraLoaderModelOnly',8:'MiniMaxH3SigmaShift',30:'LoadImage',
   31:'ImagePadForOutpaint',40:'KSamplerSelect',41:'BasicScheduler',49:'ImageBatchMulti',
@@ -8,6 +9,7 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'MiniMaxH3ReferenceToVideo','MiniMaxH3AddGuide','ImageFromBatch','MiniMaxH3AddGuide',
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
+  if(plan?.revision===AKATZ_REVISION)return AKATZ_NODE_CLASSES[String(node)]||null;
   if(!/^motion-transfer-native-1080-v[123456]$/.test(String(plan?.revision)))return null;
   if(plan.inferenceProfile==='native-photo-inventory-check')return ({30:'LoadImage',85:'CLIPLoader',86:'TextGenerate',495:'SaveText'})[node]||null;
   if(['native-fun-pose4-caption','native-fun-pose8-caption','native-fun-retarget4-caption','native-fun-retarget4-visual','native-fun-retarget4-face-performance','native-fun-retarget4-face-guard','native-fun-global4-face-attributes','native-fun-global8-face-attributes','native-fun-global4-warm-photo','native-fun-global4-face128','native-fun-global4-face128-keypoints'].includes(plan.inferenceProfile)){

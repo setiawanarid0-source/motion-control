@@ -6,7 +6,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
-const WAITING=new Set(['queued','analyzing','checking_account','preparing_motion','saving_references','uploading_inputs']);
+const WAITING=new Set(['queued','analyzing','checking_account','preparing_motion','saving_references','uploading_inputs','preparing_models']);
 const FINISHED=new Set(['accepted','error','uncertain']);
 const LABELS={
   queued:'Menunggu persiapan media',
@@ -15,6 +15,7 @@ const LABELS={
   preparing_motion:'Menyiapkan gerakan 35 FPS',
   saving_references:'Menyimpan media referensi',
   uploading_inputs:'Mengunggah input ke RunningHub',
+  preparing_models:'Menyiapkan model Akatz',
   submitting:'Mengirim task ke RunningHub',
   accepted:'Task diterima RunningHub',
   error:'Persiapan belum berhasil',

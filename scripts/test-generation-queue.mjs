@@ -53,6 +53,11 @@ try{
   const reboot=createGenerationQueue({dir:folder});
   reboot.resume();
   assert.equal(reboot.owned(other,device).stage,'queued','Unpaid preflight may be restarted');
+  reboot.update(other,{stage:'preparing_models'});
+  const modelRestart=createGenerationQueue({dir:folder});
+  modelRestart.resume();
+  assert.equal(modelRestart.owned(other,device).stage,'queued','Model setup remains unpaid and restartable');
+  assert.equal(modelRestart.owned(paid,device).stage,'uncertain','Model setup must not change paid-submission recovery');
   assert.ok(!JSON.stringify(queue.latest(device)).includes(folder),'Do not expose storage paths');
   console.log('PASS: durable async preflight queue, repeat-ID idempotence, restart safety, and client isolation');
 }finally{fs.rmSync(folder,{recursive:true,force:true});}
