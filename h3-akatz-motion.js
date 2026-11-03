@@ -1,13 +1,15 @@
 // Akatz's native Ref2VA image/video path, adapted to Vanta's final 1080 canvas.
-// Relay is unavailable on the inspected worker. This is explicitly the native
-// single-shot variant, not an imitation of Relay's mask/history implementation.
-import {prepareH3Input,probeH3Input,h3PhotoPlan,h3ModelFrames} from './minimax-h3-motion.js';
+// Relay is unavailable on the inspected worker. This is explicitly the
+// native bounded-window variant, not an imitation of Relay's mask implementation.
+import {prepareH3Input,probeH3Input,h3PhotoPlan,h3Segments} from './minimax-h3-motion.js';
 import {validUploadedH3Lora} from './h3-appearance-model.js';
 import {randomInt} from 'node:crypto';
 
 export const AKATZ_PROFILE='akatz-v1.5-native8';
-export const AKATZ_REVISION='akatz-native-1080-v1';
+export const AKATZ_REVISION='akatz-native-1080-v2';
 export const AKATZ_MAX_FRAMES=362;
+export const AKATZ_WINDOW_FRAMES=124;
+export const AKATZ_CONTEXT_FRAMES=22;
 export const AKATZ_ASSET=Object.freeze({
   name:'minimax_h3_akatz_character_swap_v1_5',
   url:'https://huggingface.co/akatz-ai/MiniMax-H3-Character-Swap-LoRA/resolve/0f409f0c2a18f123f3985041ec52982c813f5a9c/h3_character_swap_v1.5.safetensors',
@@ -18,7 +20,7 @@ export const AKATZ_TURBO_ASSET=Object.freeze({
   url:'https://huggingface.co/lightx2v/Minimax-h3-Turbo/resolve/3ec17a324ced54151364f24f8b5fb6bf7e26414f/minimax_h3_fl2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors',
   sha256:'08cfe946033af7d27719b964b6e0a0e50c32138daabbd6ce4137e23df6bf9980',size:1956193000
 });
-export const AKATZ_NODE_CLASSES=Object.freeze({
+const V1_NODE_CLASSES=Object.freeze({
   1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',6:'RHLoraLoader',7:'RHLoraLoader',
   8:'MiniMaxH3SigmaShift',9:'ModelAttentionBackend',10:'BlockSparseAttention',
   30:'LoadImage',31:'ImagePadForOutpaint',33:'VHS_LoadVideo',34:'ImageFromBatch',
@@ -27,10 +29,28 @@ export const AKATZ_NODE_CLASSES=Object.freeze({
   102:'RandomNoise',103:'CFGGuider',104:'SamplerCustomAdvanced',105:'LTXVSeparateAVLatent',
   106:'VAEDecode',107:'ImageFromBatch',108:'ImageCrop',490:'VHS_VideoCombine'
 });
+export const AKATZ_NODE_CLASSES=Object.freeze({
+  1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',6:'RHLoraLoader',7:'RHLoraLoader',
+  8:'MiniMaxH3SigmaShift',9:'ModelAttentionBackend',10:'BlockSparseAttention',
+  30:'LoadImage',31:'ImagePadForOutpaint',40:'KSamplerSelect',41:'BasicScheduler',49:'ImageBatchMulti',
+  50:'VHS_LoadAudioUpload',85:'CLIPLoader',86:'TextGenerate',87:'StringConcatenate',490:'VHS_VideoCombine'
+});
+const WINDOW_NODE_CLASSES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBatch',
+  'VHS_LoadAudioUpload','MiniMaxH3ReferenceToVideo','ImageFromBatch','MiniMaxH3AddGuide',
+  'MiniMaxH3AddGuide','RandomNoise','CFGGuider','SamplerCustomAdvanced','LTXVSeparateAVLatent',
+  'VAEDecode','ImageFromBatch','ImageCrop'];
+export function akatzNodeClass(node,plan){
+  if(plan?.revision==='akatz-native-1080-v1')return V1_NODE_CLASSES[String(node)]||null;
+  if(plan?.revision!==AKATZ_REVISION)return null;
+  if(AKATZ_NODE_CLASSES[String(node)])return AKATZ_NODE_CLASSES[String(node)];
+  const n=Number(node),index=Math.floor((n-1000)/40),offset=(n-1000)%40;
+  return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODE_CLASSES.length?
+    WINDOW_NODE_CLASSES[offset]||null:null;
+}
 export async function prepareAkatzInput(video,mode,image){
   const probe=await probeH3Input(video,mode);
   if(probe.totalFrames>AKATZ_MAX_FRAMES)
-    throw Error('Akatz Native menerima video 0,25–15 detik untuk satu render utuh. Video tidak dipotong otomatis.');
+    throw Error('Akatz Native menerima video 0,25–15 detik. Video tidak dipotong otomatis.');
   const source=await prepareH3Input(video,mode,image,{inferenceProfile:AKATZ_PROFILE,identityFocus:false,nativeDriver:true});
   return {...source,seed:randomInt(0,2**32)};
 }
@@ -42,20 +62,25 @@ function plan(source){
   if(Object.entries(expected).some(([k,v])=>source[k]!==v))throw Error('Canvas Akatz Native tidak valid.');
   const seed=source.seed??42;
   if(!Number.isSafeInteger(seed)||seed<0||seed>=2**32)throw Error('Seed Akatz harus berupa bilangan bulat yang valid.');
-  return {modelFrames:h3ModelFrames(source.totalFrames),seed};
+  const segments=h3Segments(source.totalFrames,source.sceneCuts||[],AKATZ_CONTEXT_FRAMES,AKATZ_WINDOW_FRAMES)
+    .map((seg,i)=>({...seg,seed:(seed+i)%2**32}));
+  return {segments,seed};
 }
 export function akatzExecutionPlan(source){
   const p=plan(source);
   return {revision:AKATZ_REVISION,inferenceProfile:AKATZ_PROFILE,frames:source.totalFrames,fps:24,
     sampling:{steps:8,sampler:'er_sde',scheduler:'normal',character:'Akatz V1.5',
       turbo:'FL2V Turbo 8-step',characterSha256:AKATZ_ASSET.sha256,turboSha256:AKATZ_TURBO_ASSET.sha256},
-    nativeWindowFrames:p.modelFrames,samplerCount:1,seed:p.seed,
+    nativeWindowFrames:AKATZ_WINDOW_FRAMES,samplerCount:p.segments.length,seed:p.seed,
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     driverCanvas:source.driverCanvas||null,driverGeometry:'original_pixels_with_grid_padding',
     referenceColor:source.referenceColor||null,guideAppearance:'akatz_native_video_reference',
     photoRole:'identity_hair_body_clothes_accessories_texture_and_scene_target',
     attentionConditioning:'sol_after_20pct_exact_reference_kv',
-    segments:[{start:0,frames:source.totalFrames,modelFrames:p.modelFrames,contextFrames:0}],
+    segments:p.segments.map(s=>({start:s.start,frames:s.length,inputFrames:s.inputFrames,
+      loadStart:s.loadStart,modelFrames:s.modelFrames,contextFrames:s.contextFrames,seed:s.seed})),
+    continuation:'generated_native_canvas_frames',continuationFrames:AKATZ_CONTEXT_FRAMES,
+    referenceVideoWindowed:true,peakWindowFrames:Math.max(...p.segments.map(s=>s.modelFrames)),
     relay:false,sourceBackplatePinned:false,postDecodeResize:false,postRefinement:false,
     visualAcceptance:'pending_owner_test'};
 }
@@ -84,13 +109,6 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
   add(30,'LoadImage',{image:imageName});
   add(31,'ImagePadForOutpaint',{image:['30',0],left:0,top:0,right:source.referencePadRight,
     bottom:source.referencePadBottom,feathering:0});
-  let driver=add(33,'VHS_LoadVideo',{video:videoName,force_rate:24,force_size:'Disabled',custom_width:0,custom_height:0,
-    frame_load_cap:source.totalFrames,skip_first_frames:0,select_every_nth:1,format:'None'});
-  if(p.modelFrames>source.totalFrames){
-    add(34,'ImageFromBatch',{image:driver,batch_index:source.totalFrames-1,length:1});
-    add(35,'RepeatImageBatch',{image:['34',0],amount:p.modelFrames-source.totalFrames});
-    driver=add(36,'ImageBatch',{image1:driver,image2:['35',0]});
-  }
   if(source.hasAudio)add(50,'VHS_LoadAudioUpload',{audio:videoName,start_time:0,duration:source.totalFrames/24});
   add(85,'CLIPLoader',{clip_name:'qwen3.5_9b_w4a8_gptq.safetensors',type:'minimax',device:'default'});
   add(86,'TextGenerate',{clip:['85',0],image:['30',0],max_length:512,sampling_mode:'off',thinking:false,
@@ -108,22 +126,44 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
     'keep a stationary source camera stationary. Do not stabilize, add drift or replace the moving pose with the photo pose. '+
     'Keep the same character and materials from the first frame to the last. Visible photo appearance: ';
   add(87,'StringConcatenate',{string_a:instructions,string_b:['86',0],delimiter:''});
-  add(100,'MiniMaxH3ReferenceToVideo',{clip:['2',0],vae:['3',0],audio_vae:['4',0],prompt:['87',0],
-    width:source.canvasWidth,height:source.canvasHeight,length:p.modelFrames,ref_image_size:'max',
-    'ref_images.ref_image_1':['31',0],'ref_videos.ref_video_1':driver,
-    ...(source.hasAudio?{'ref_video_audios.ref_video_audio_1':['50',0]}:{})});
-  const positive=source.hasAudio?add(101,'MiniMaxH3AddGuide',{positive:['100',0],latent:['100',1],
-    audio_vae:['4',0],audio:['50',0],frame_idx:0}):['100',0];
   add(40,'KSamplerSelect',{sampler_name:'er_sde'});
   add(41,'BasicScheduler',{model:['10',0],scheduler:'normal',steps:8,denoise:1});
-  add(102,'RandomNoise',{noise_seed:p.seed});
-  add(103,'CFGGuider',{model:['10',0],positive,negative:positive,cfg:1});
-  add(104,'SamplerCustomAdvanced',{noise:['102',0],guider:['103',0],sampler:['40',0],sigmas:['41',0],latent_image:['100',1]});
-  add(105,'LTXVSeparateAVLatent',{av_latent:['104',0]});
-  add(106,'VAEDecode',{samples:['105',0],vae:['3',0]});
-  add(107,'ImageFromBatch',{image:['106',0],batch_index:0,length:source.totalFrames});
-  add(108,'ImageCrop',{image:['107',0],width:source.outputWidth,height:source.outputHeight,x:source.padLeft,y:source.padTop});
-  add(490,'VHS_VideoCombine',{images:['108',0],...(source.hasAudio?{audio:['50',0]}:{}),frame_rate:24,loop_count:0,
+  const exports=[];let previous=null;
+  for(const [i,seg] of p.segments.entries()){
+    const b=1000+i*40,link=(offset,out=0)=>[String(b+offset),out];
+    let driver=add(b,'VHS_LoadVideo',{video:videoName,force_rate:24,force_size:'Disabled',custom_width:0,custom_height:0,
+      frame_load_cap:seg.inputFrames,skip_first_frames:seg.loadStart,select_every_nth:1,format:'None'});
+    if(seg.modelFrames>seg.inputFrames){
+      const last=add(b+1,'ImageFromBatch',{image:driver,batch_index:seg.inputFrames-1,length:1});
+      const pad=add(b+2,'RepeatImageBatch',{image:last,amount:seg.modelFrames-seg.inputFrames});
+      driver=add(b+3,'ImageBatch',{image1:driver,image2:pad});
+    }
+    const audio=source.hasAudio?add(b+4,'VHS_LoadAudioUpload',{audio:videoName,
+      start_time:seg.loadStart/24,duration:seg.inputFrames/24}):null;
+    let positive=add(b+5,'MiniMaxH3ReferenceToVideo',{clip:['2',0],vae:['3',0],audio_vae:['4',0],prompt:['87',0],
+      width:source.canvasWidth,height:source.canvasHeight,length:seg.modelFrames,ref_image_size:'max',
+      'ref_images.ref_image_1':['31',0],'ref_videos.ref_video_1':driver,
+      ...(audio?{'ref_video_audios.ref_video_audio_1':audio}:{})});
+    if(previous&&seg.contextFrames){
+      const history=add(b+6,'ImageFromBatch',{image:previous.image,
+        batch_index:previous.lastFrame-seg.contextFrames+1,length:seg.contextFrames});
+      // Only already-generated full-canvas frames anchor continuity. Never
+      // replace the photo appearance with hard guides from the source video.
+      positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:link(5,1),vae:['3',0],image:history,frame_idx:0});
+    }
+    if(audio)positive=add(b+8,'MiniMaxH3AddGuide',{positive,latent:link(5,1),audio_vae:['4',0],audio,frame_idx:0});
+    add(b+9,'RandomNoise',{noise_seed:seg.seed});
+    add(b+10,'CFGGuider',{model:['10',0],positive,negative:positive,cfg:1});
+    add(b+11,'SamplerCustomAdvanced',{noise:link(9),guider:link(10),sampler:['40',0],sigmas:['41',0],latent_image:link(5,1)});
+    add(b+12,'LTXVSeparateAVLatent',{av_latent:link(11)});
+    const decoded=add(b+13,'VAEDecode',{samples:link(12),vae:['3',0]});
+    previous={image:decoded,lastFrame:seg.inputFrames-1};
+    const trimmed=add(b+14,'ImageFromBatch',{image:decoded,batch_index:seg.contextFrames,length:seg.length});
+    exports.push(add(b+15,'ImageCrop',{image:trimmed,width:source.outputWidth,height:source.outputHeight,x:source.padLeft,y:source.padTop}));
+  }
+  const images=exports.length===1?exports[0]:add(49,'ImageBatchMulti',{inputcount:exports.length,
+    ...Object.fromEntries(exports.map((value,i)=>['image_'+(i+1),value]))});
+  add(490,'VHS_VideoCombine',{images,...(source.hasAudio?{audio:['50',0]}:{}),frame_rate:24,loop_count:0,
     filename_prefix:'VANTA-H3-AKATZ-V1_5-NATIVE1080',format:'video/h264-mp4',pix_fmt:'yuv420p',crf:16,
     save_metadata:true,trim_to_audio:false,pingpong:false,save_output:true,no_preview:false});
   return g;
