@@ -14,6 +14,8 @@ const port=await new Promise((resolve,reject)=>{
 const server=spawn(process.execPath,['server.js'],{
   cwd:new URL('..',import.meta.url).pathname,
   env:{...process.env,PORT:String(port),VANTA_DATA_DIR:dir,
+    VANTA_RESULTS_BUCKET_ENDPOINT:'',VANTA_RESULTS_BUCKET_NAME:'',
+    VANTA_RESULTS_BUCKET_ACCESS_KEY_ID:'',VANTA_RESULTS_BUCKET_SECRET_ACCESS_KEY:'',
     APP_MASTER_KEY:'integration-test-only-not-production',VANTA_REFERENCE_AUDIT_TASK:'',
     AGENT_INTERNAL_TOKEN:'integration-fixture-for-http-agent-private-network-123',
     VANTA_AGENT_OWNER_KEY:'integration-fixture-for-http-owner-login-1234'},

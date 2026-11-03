@@ -12,7 +12,9 @@ import { extractTaskFailure,auditFailedH3Tasks } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
 import {canGenerateWithAccount,rankGenerationAccounts} from './runninghub-account-priority.js';
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
-import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences } from './history-references.js';
+import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences,
+  configureReferenceMedia,resolvedReferenceAvailability,openRemoteReference,migrateReferences } from './history-references.js';
+import {createPrivateMediaBucket} from './private-media-bucket.js';
 import {createTaskRegistry} from './task-registry.js';
 import {createMotionResultArchive} from './motion-result-archive.js';
 import {createMotionResultBucket, MOTION_VIDEO_RETENTION_MS} from './motion-result-bucket.js';
@@ -145,6 +147,10 @@ function decrypt(token) {
 const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
 const motionResults=createMotionResultArchive({dir:path.join(DATA_DIR,'motion-results')});
 const bucketResults=createMotionResultBucket();
+const privateMedia=createPrivateMediaBucket();
+configureReferenceMedia(privateMedia);
+let mediaStorageReady=false;
+let mediaStorageCheck=null,mediaStorageRetryAt=0;
 console.log('Motion result storage:',bucketResults.ready?'Railway bucket (72h)':'legacy local only; bucket credentials not configured');
 const resultMirrorAttempts=new Map();
 function scheduleResultMirror(task){
@@ -176,7 +182,7 @@ function scheduleAccountResultArchiving(accountId){
       String(error.message||error).slice(0,130));
   }
 }
-const generationQueue=createGenerationQueue({dir:DATA_DIR,maxConcurrent:1});
+const generationQueue=createGenerationQueue({dir:DATA_DIR,maxConcurrent:1,mediaStore:privateMedia,startPaused:true});
 // The account volume is 256 MB. Keep the public 230 MB weights ephemeral; only
 // the tiny successful upload receipt persists across deploys.
 const h3AppearanceModel=createH3AppearanceModel({dir:path.join(os.tmpdir(),'vanta-h3-model-cache'),
@@ -1038,6 +1044,8 @@ app.post('/api/generate', upload.fields([
 ]), async(req,res)=>{
   const image=req.files?.referenceImage?.[0],video=req.files?.videoReference?.[0];
   try{
+    if(!mediaStorageReady){void prepareMediaStorage();
+      return res.status(503).json({error:'Penyimpanan media sedang disiapkan atau belum tersedia. Task belum dikirim; coba lagi sebentar.'});}
     const deviceId=getDeviceId(req);
     if(!deviceId)return res.status(400).json({error:'Sesi perangkat tidak tersedia. Muat ulang halaman.'});
     const videoOnly=String(req.body?.workflow||'r15')==='rife60';
@@ -1055,7 +1063,9 @@ app.post('/api/generate', upload.fields([
     res.status(202).json(staged);
   }catch(error){
     console.error('Generation upload preflight failed',String(error.message||error).slice(0,190));
-    res.status(503).json({error:'Referensi belum berhasil diterima server. Coba lagi setelah koneksi stabil.'});
+    const full=/ENOSPC|No space left on device/i.test(String(error.code||'')+' '+error.message);
+    res.status(503).json({error:full?'Penyimpanan server penuh. Task belum dikirim ke RunningHub.':
+      'Referensi belum berhasil disimpan server. Task belum dikirim; coba lagi setelah penyimpanan tersedia.'});
   }finally{
     for(const file of [image,video])if(file?.path)fs.promises.rm(file.path,{force:true}).catch(()=>{});
   }
@@ -1190,15 +1200,29 @@ function referenceAccess(req){
   if(!/^\d{10,25}$/.test(id))return false;
   return !!taskAccount(req,id,accountId);
 }
-app.get('/api/task-references/:taskId', (req,res)=>{
+app.get('/api/task-references/:taskId', async(req,res)=>{
   if(!referenceAccess(req))return res.status(404).json({error:'Referensi tidak tersedia untuk akun ini.'});
   res.setHeader('Cache-Control','private, no-store');
-  res.json(referenceAvailability(req.params.taskId));
+  try{res.json(await resolvedReferenceAvailability(req.params.taskId));}
+  catch{res.status(503).json({error:'Referensi sementara belum dapat dibaca.'});}
 });
-app.get('/api/task-references/:taskId/:kind', (req,res)=>{
+app.get('/api/task-references/:taskId/:kind', async(req,res)=>{
   if(!referenceAccess(req))return res.status(404).end();
   const kind=String(req.params.kind);
   if(!['image','video'].includes(kind))return res.status(404).end();
+  try{
+    const media=await openRemoteReference(req.params.taskId,kind,req.headers.range);
+    if(media){
+      res.status(media.status);res.setHeader('Cache-Control','private, no-store');
+      res.type(kind==='image'?'image/jpeg':'video/mp4');res.setHeader('Accept-Ranges','bytes');
+      if(media.contentLength!=null)res.setHeader('Content-Length',String(media.contentLength));
+      if(media.contentRange)res.setHeader('Content-Range',media.contentRange);
+      media.body.on('error',()=>res.destroy());media.body.pipe(res);return;
+    }
+  }catch(error){
+    if(error?.$metadata?.httpStatusCode===416)return res.status(416).end();
+    if(!referenceFile(req.params.taskId,kind))return res.status(503).end();
+  }
   const file=referenceFile(req.params.taskId,kind);
   if(!file)return res.status(404).end();
   res.setHeader('Cache-Control','private, no-store');
@@ -1350,14 +1374,40 @@ void (async()=>{
   console.info('H3 uploaded model cache readiness',JSON.stringify({accounts:accounts.length,readyAccounts,cacheOnly:true}));
 })().catch(()=>console.warn('H3 uploaded model cache check unavailable'));
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
-pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
-generationQueue.resume();
+// Free only completed/abandoned input copies, then migrate unexpired previews
+// with verified bucket receipts. Existing paid tasks never get resubmitted.
+function prepareMediaStorage(){
+  if(mediaStorageCheck)return mediaStorageCheck;
+  if(Date.now()<mediaStorageRetryAt)return Promise.resolve(false);
+  mediaStorageRetryAt=Date.now()+30000;
+  mediaStorageCheck=(async()=>{
+    const released=await generationQueue.cleanupFinished({includeSubmitting:true});
+    const verification=await privateMedia.verifyAccess();
+    await pruneReferences();const references=await migrateReferences();
+    const queues=await generationQueue.recoverMedia();
+    queues.freedBytes+=released.freedBytes;queues.removedFiles+=released.removedFiles;
+    const metadataProbe=path.join(DATA_DIR,'.media-write-check-'+crypto.randomUUID());
+    try{await fs.promises.writeFile(metadataProbe,Buffer.alloc(65536),{flag:'wx',mode:0o600});}
+    finally{await fs.promises.rm(metadataProbe,{force:true});}
+    const disk=await fs.promises.statfs(DATA_DIR);
+    console.info('Media storage readiness',JSON.stringify({bucket:privateMedia.ready,verification,metadataWritableBytes:65536,queues,references,
+      availableBytes:Number(disk.bavail)*Number(disk.bsize)}));
+    mediaStorageReady=true;generationQueue.resume();return true;
+  })().catch(error=>{console.warn('Media storage maintenance deferred',String(error.code||error.name||'Error').slice(0,50));return false;})
+    .finally(()=>{mediaStorageCheck=null;});
+  return mediaStorageCheck;
+}
+void prepareMediaStorage();
 void runLongH3Deployment({queue:generationQueue,rootDir:DATA_DIR,token:process.env.VANTA_H3_LONG_BENCHMARK||''})
   .then(job=>{if(job)console.info('H3 long benchmark staged',JSON.stringify({jobId:job.jobId,stage:job.stage,reused:job.reused||false}));})
   .catch(error=>console.warn('H3 long benchmark staging failed before submission',JSON.stringify({
     phase:error.fixtureStage||null,errorClass:['Error','AxiosError','TypeError'].includes(error.name)?error.name:'other',
     httpStatus:Number.isInteger(error.response?.status)?error.response.status:null})));
-setInterval(()=>generationQueue.purge(),60*60*1000).unref();
+setInterval(()=>{
+  generationQueue.purge();
+  void pruneReferences().catch(error=>console.warn('Reference cleanup',String(error.code||error.name)));
+  void privateMedia.prune().catch(error=>console.warn('Private media cleanup',String(error.name)));
+},60*60*1000).unref();
 try{taskRegistry.purgeExpired();}catch(error){console.error('Registry startup audit',error.message);}
 void motionResults.prune().catch(e=>console.warn('Result archive cleanup',e.message));
 void bucketResults.prune().catch(e=>console.warn('Bucket result cleanup',String(e.message||e).slice(0,120)));

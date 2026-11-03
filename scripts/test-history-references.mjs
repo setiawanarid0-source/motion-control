@@ -53,3 +53,4 @@ try{
 }finally{
   await fs.promises.rm(dir,{recursive:true,force:true});
 }
+await import('./test-private-media-storage.mjs');

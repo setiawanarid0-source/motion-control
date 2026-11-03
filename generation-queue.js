@@ -4,6 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
+import {PRIVATE_MEDIA_RETENTION,privateMediaKey,privateMediaOwner} from './private-media-bucket.js';
 
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const WAITING=new Set(['queued','analyzing','checking_account','preparing_motion','saving_references','uploading_inputs','preparing_models']);
@@ -30,11 +32,12 @@ const LABELS={
   uncertain:'Memeriksa apakah RunningHub menerima task'
 };
 const MAX_AGE=3*24*60*60*1000;
-export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
+export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1,mediaStore=null,startPaused=false}){
   const root=path.join(dir,'generation-submissions');
   const active=new Set();
   let scheduled=false;
   let executor=null;
+  let paused=startPaused;
   function folder(id){if(!UUID.test(String(id||'')))throw Error('ID pengiriman tidak valid');return path.join(root,id);}
   function filename(id){return path.join(folder(id),'state.json');}
   function read(id){try{
@@ -77,6 +80,70 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
       .sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0))
       .slice(0,12).map(view);
   }
+  async function releaseMedia(job,{includeRemote=true}={}){
+    let bytes=0,files=0,complete=true;
+    for(const [kind,file]of [['image',job.image],['video',job.video]]){
+      const expected=path.join(folder(job.jobId),kind==='image'?'reference.bin':'driving.bin');
+      if(file?.path===expected||(file?.object&&privateMediaOwner(file.object.key,'queue',job.jobId))){
+        try{const info=await fs.promises.stat(expected);await fs.promises.rm(expected,{force:true});bytes+=info.size;files++;}
+        catch(e){if(e.code!=='ENOENT')complete=false;}
+      }
+      if(includeRemote&&file?.object&&mediaStore?.ready&&privateMediaOwner(file.object.key,'queue',job.jobId))
+        try{await mediaStore.remove(file.object.key);}catch{complete=false;}
+    }
+    return {bytes,files,complete};
+  }
+  async function cleanupFinished({includeSubmitting=false}={}){
+    let freedBytes=0,removedFiles=0;
+    for(const job of enumerate()){
+      if(job.mediaReleased||(!FINISHED.has(job.stage)&&!(includeSubmitting&&job.stage==='submitting')))continue;
+      const r=await releaseMedia(job);freedBytes+=r.bytes;removedFiles+=r.files;
+      if(r.complete){const current=read(job.jobId);if(current)try{save({...current,mediaReleased:true});}catch{}}
+    }return {freedBytes,removedFiles};
+  }
+  async function storeInput(jobId,file,kind,expiresAt){
+    if(!file)return null;
+    const {path:sourcePath,...metadata}=file;
+    const object=await mediaStore.putFile(privateMediaKey('queue',jobId,expiresAt,kind==='image'?'reference.bin':'driving.bin'),sourcePath,file.mimetype);
+    return {...metadata,object};
+  }
+  async function recoverMedia(){
+    const released=await cleanupFinished({includeSubmitting:true});let migratedJobs=0,deferred=0;
+    for(const id of await fs.promises.readdir(root).catch(()=>[])){
+      if(!UUID.test(id)||active.has(id)||read(id))continue;
+      const dest=folder(id),info=await fs.promises.lstat(dest);
+      if(!info.isDirectory()||now()-info.mtimeMs<(fs.existsSync(filename(id))?MAX_AGE:4*60*60*1000))continue;
+      // Incomplete, never-acknowledged uploads have no recoverable state. Only
+      // remove our raw input names; unrelated files and symlinks stay intact.
+      const r=await releaseMedia({jobId:id,image:{path:path.join(dest,'reference.bin')},video:{path:path.join(dest,'driving.bin')}});
+      released.freedBytes+=r.bytes;released.removedFiles+=r.files;
+      await fs.promises.rmdir(dest).catch(()=>{});
+    }
+    if(mediaStore?.ready)for(const job of enumerate()){
+      if(!WAITING.has(job.stage)||active.has(job.jobId)||!job.video?.path)continue;
+      const patch={},receipts=[];
+      try{
+        const expiresAt=Date.parse(job.createdAt)+PRIVATE_MEDIA_RETENTION;
+        for(const kind of ['image','video'])if(job[kind]?.path){patch[kind]=await storeInput(job.jobId,job[kind],kind,expiresAt);receipts.push(patch[kind].object);}
+        update(job.jobId,patch);const r=await releaseMedia(job,{includeRemote:false});released.freedBytes+=r.bytes;released.removedFiles+=r.files;migratedJobs++;
+      }catch{deferred++;await Promise.allSettled(receipts.map(x=>mediaStore.remove(x.key)));}
+    }
+    return {...released,migratedJobs,deferred};
+  }
+  async function materialize(job){
+    if(!job.image?.object&&!job.video?.object)return {job,release:async()=>{}};
+    if(!mediaStore?.ready)throw Error('Penyimpanan media belum tersedia. Task belum dikirim.');
+    const temp=await fs.promises.mkdtemp(path.join(os.tmpdir(),'vanta-generation-input-'));
+    const release=()=>fs.promises.rm(temp,{recursive:true,force:true});
+    try{
+      const prepared={...job};
+      for(const kind of ['image','video'])if(job[kind]?.object){
+        if(!privateMediaOwner(job[kind].object.key,'queue',job.jobId))throw Error('Invalid queued media owner');
+        const file=path.join(temp,kind==='image'?'reference.bin':'driving.bin');
+        await mediaStore.download(job[kind].object,file);prepared[kind]={...job[kind],path:file};
+      }return {job:prepared,release};
+    }catch(e){await release();throw e;}
+  }
   async function stage({jobId,deviceId,body,image,video}){
     folder(jobId);
     const videoOnly=String(body?.workflow||'r15')==='rife60';
@@ -88,11 +155,20 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
     }
     const dest=folder(jobId);
     if(fs.existsSync(dest))throw Error('Penyimpanan pengiriman sebelumnya tidak lengkap; tidak aman mengulang otomatis');
+    let created=false;const receipts=[];
     try{
-      await fs.promises.mkdir(dest,{recursive:true,mode:0o700});
+      await cleanupFinished();await fs.promises.mkdir(root,{recursive:true,mode:0o700});
+      await fs.promises.mkdir(dest,{mode:0o700});created=true;
       const imageDest=path.join(dest,'reference.bin'),videoDest=path.join(dest,'driving.bin');
-      if(image?.path)await fs.promises.copyFile(image.path,imageDest);
-      await fs.promises.copyFile(video.path,videoDest);
+      let storedImage,storedVideo;
+      if(mediaStore?.ready){
+        const expiresAt=now()+PRIVATE_MEDIA_RETENTION;
+        storedImage=await storeInput(jobId,image,'image',expiresAt);if(storedImage)receipts.push(storedImage.object);
+        storedVideo=await storeInput(jobId,video,'video',expiresAt);receipts.push(storedVideo.object);
+      }else{
+        if(image?.path)await fs.promises.copyFile(image.path,imageDest);
+        await fs.promises.copyFile(video.path,videoDest);
+      }
       const createdAt=new Date(now()).toISOString();
       const data={jobId,deviceId,createdAt,updatedAt:createdAt,stage:'queued',
         message:LABELS.queued,body:{
@@ -101,20 +177,21 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
           accountId:String(body.accountId||'auto'),
           diagnosticTaskId:String(body.diagnosticTaskId||''),
           diagnosticAccountId:String(body.diagnosticAccountId||'')
-        },image:image?.path?{path:imageDest,originalname:String(image.originalname||'reference.jpg'),
-          mimetype:image.mimetype,size:image.size}:null,
-        video:{path:videoDest,originalname:String(video.originalname||'driving.mp4'),
+        },image:storedImage||(image?.path?{path:imageDest,originalname:String(image.originalname||'reference.jpg'),
+          mimetype:image.mimetype,size:image.size}:null),
+        video:storedVideo||{path:videoDest,originalname:String(video.originalname||'driving.mp4'),
           mimetype:video.mimetype,size:video.size}};
       save(data);
       schedule();
       return view(data);
     }catch(error){
-      await fs.promises.rm(dest,{recursive:true,force:true}).catch(()=>{});
+      if(created)await fs.promises.rm(dest,{recursive:true,force:true}).catch(()=>{});
+      if(mediaStore?.ready)await Promise.allSettled(receipts.map(x=>mediaStore.remove(x.key)));
       throw error;
     }
   }
   function schedule(){
-    if(scheduled||!executor)return;
+    if(paused||scheduled||!executor)return;
     scheduled=true;
     setImmediate(async()=>{
       scheduled=false;
@@ -130,8 +207,9 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
         if(modelPreparation)console.info('H3 model transfer',JSON.stringify({jobId:next.jobId,...modelPreparation}));
         else console.info('Media preflight stage',next.jobId,stage);
       };
+      let inputs;
       try{
-        await executor(read(next.jobId),report);
+        inputs=await materialize(read(next.jobId));await executor(inputs.job,report);
       }catch(error){
         console.error('Preflight background processing failed',next.jobId,String(error.message||error).slice(0,200));
         const last=read(next.jobId);
@@ -140,12 +218,11 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
             'Status penerimaan task belum bisa dipastikan. Periksa History sebelum mencoba lagi.':
             'Persiapan video terhenti. Kredit belum digunakan untuk tahap ini.'});
       }finally{
+        if(inputs)await inputs.release();
         active.delete(next.jobId);
         const last=read(next.jobId);
         if(last&&FINISHED.has(last.stage)){
-          for(const file of [last.image?.path,last.video?.path]){
-            if(file)fs.promises.rm(file,{force:true}).catch(()=>{});
-          }
+          await cleanupFinished().catch(()=>{});
         }
         schedule();
       }
@@ -158,6 +235,8 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
       else if(data.stage==='submitting')update(data.jobId,{stage:'uncertain',
         error:'Koneksi terputus ketika task dikirim. Periksa History sebelum mencoba lagi.'});
     }
+    paused=false;
+    void cleanupFinished().catch(()=>{});
     schedule();
   }
   function purge(){
@@ -167,5 +246,5 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1}){
         fs.rmSync(folder(data.jobId),{recursive:true,force:true});
     }
   }
-  return {stage,read,update,view,owned,latest,setExecutor,resume,purge,LABELS};
+  return {stage,read,update,view,owned,latest,setExecutor,resume,purge,recoverMedia,cleanupFinished,LABELS};
 }
