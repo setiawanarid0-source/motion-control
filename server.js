@@ -317,6 +317,10 @@ async function monitorRegisteredTasks(){
       const original=taskRegistry.get(task.taskId);
       if(!original?.key)throw Error('Task credential unavailable');
       return rhJson('/task/openapi/outputs',original.key,{apiKey:original.key,taskId:task.taskId},30000);
+    },queryV2:task=>{
+      const original=taskRegistry.get(task.taskId);
+      if(!original?.key)throw Error('Task credential unavailable');
+      return rhJson('/openapi/v2/query',original.key,{taskId:task.taskId},30000);
     },update:taskRegistry.update,log:report=>console.info('H3 terminal audit',JSON.stringify(report))});
     taskRegistry.purgeExpired();
   }catch(err){console.warn('Task lifecycle monitor',err.message);}

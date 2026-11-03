@@ -12,8 +12,8 @@ function readReason(raw){
 }
 export function extractTaskFailure(result){
   const payload=result?.data;
-  if(!payload||typeof payload!=='object'||Array.isArray(payload))return null;
-  const reason=readReason(payload.failedReason??payload.failed_reason);
+  const reason=readReason(payload?.failedReason??payload?.failed_reason??result?.failedReason??result?.failed_reason??
+    (result?.status==='FAILED'?{exception_type:result.errorCode,exception_message:result.errorMessage}:null));
   if(!reason)return null;
   const failure={
     nodeId:scalar(reason.node_id??reason.nodeId,40),
@@ -34,14 +34,24 @@ export function classifyH3Failure(result){
 }
 
 // Once-only terminal metadata lookup; no new render, retry or cancellation.
-export async function auditFailedH3Tasks({tasks,query,update,log=()=>{},now=()=>new Date().toISOString(),limit=1}){
+export async function auditFailedH3Tasks({tasks,query,queryV2,update,log=()=>{},now=()=>new Date().toISOString(),limit=1}){
   const candidates=tasks.filter(t=>t.status==='failed'&&
-    /^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native)(?: ·|$)/.test(String(t.workflow))&&!t.failureAuditCheckedAt).slice(0,limit);
+    /^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native)(?: ·|$)/.test(String(t.workflow))&&
+    (!t.failureAuditCheckedAt||queryV2&&t.failureCategory==='unclassified'&&!t.failureV2CheckedAt)).slice(0,limit);
   for(const task of candidates){
     let result=null,lookupSucceeded=false;
     try{result=await query(task);lookupSucceeded=true;}catch{}
-    const failure=extractTaskFailure(result),category=classifyH3Failure(result);
-    await update(task.taskId,{status:'failed',failureAuditCheckedAt:now(),failureCategory:category});
+    let failureV2CheckedAt=null;
+    if(!extractTaskFailure(result)&&queryV2){
+      try{
+        const modern=await queryV2(task),detail=extractTaskFailure(modern);
+        if(detail){result={...result,failure:detail};lookupSucceeded=true;}
+      }catch{} // A diagnostics outage never changes the terminal state.
+      failureV2CheckedAt=now();
+    }
+    const failure=result?.failure||extractTaskFailure(result),category=classifyH3Failure(result);
+    await update(task.taskId,{status:'failed',failureAuditCheckedAt:now(),failureCategory:category,
+      ...(failureV2CheckedAt?{failureV2CheckedAt}:{})});
     log({taskId:String(task.taskId),category,lookupSucceeded,
       providerCode:result?.code!==null&&result?.code!==undefined&&Number.isFinite(Number(result.code))?Number(result.code):null,
       nodeId:/^\d{1,7}$/.test(failure?.nodeId||'')?failure.nodeId:null,

@@ -5,7 +5,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,AKATZ_TURBO_ASSET,AKATZ_NODE_CLASSES,
+import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,AKATZ_TURBO_ASSET,
   prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan} from '../h3-akatz-motion.js';
 import {h3PhotoPlan,H3_DEFAULT_PROFILE} from '../minimax-h3-motion.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
@@ -21,30 +21,53 @@ for(let frames=6;frames<=362;frames++){
   const source=sourceFor(frames),plan=akatzExecutionPlan(source);
   const g=akatzGraphForInputs({imageName:'api/photo.jpg',videoName:'api/driver.mp4',source,
     characterLoraFile:character,turboLoraFile:turbo});
-  assert.equal(plan.revision,AKATZ_REVISION);assert.equal(plan.samplerCount,1);
-  assert.equal(plan.nativeWindowFrames%17,5);assert.ok(plan.nativeWindowFrames>=frames);
-  assert.equal(g['107'].inputs.length,frames,'Export every real frame, including a short tail');
-  const padding=g['35']?.inputs.amount||0;assert.equal(frames+padding,g['100'].inputs.length);
-  assert.deepEqual(g['100'].inputs['ref_images.ref_image_1'],['31',0]);
-  assert.deepEqual(g['100'].inputs['ref_videos.ref_video_1'],[padding?'36':'33',0]);
-  assert.equal(g['33'].inputs.frame_load_cap,frames);
-  assert.equal(g['33'].inputs.force_size,'Disabled');
+  assert.equal(plan.revision,AKATZ_REVISION);assert.equal(plan.nativeWindowFrames,124);
+  assert.ok(plan.peakWindowFrames<=124,'Both sampling and source reference must stay bounded');
+  assert.equal(plan.samplerCount,plan.segments.length);
+  if(frames<=124)assert.equal(plan.samplerCount,1,'Short clips must not be split');
+  const timeline=[];
+  for(const [i,seg] of plan.segments.entries()){
+    const b=1000+i*40,at=n=>g[String(b+n)]?.inputs,link=(n,out=0)=>[String(b+n),out];
+    assert.equal(seg.start,timeline.length);assert.equal(seg.modelFrames%17,5);
+    assert.ok(seg.modelFrames>=seg.inputFrames&&seg.modelFrames<=124);
+    assert.equal(at(0).frame_load_cap,seg.inputFrames);assert.equal(at(0).skip_first_frames,seg.loadStart);
+    assert.equal(at(0).force_size,'Disabled');
+    assert.equal(at(14).batch_index,seg.contextFrames);assert.equal(at(14).length,seg.frames);
+    for(let j=0;j<at(14).length;j++)timeline.push(at(0).skip_first_frames+at(14).batch_index+j);
+    const padding=at(2)?.amount||0;
+    assert.equal(seg.inputFrames+padding,at(5).length);
+    assert.deepEqual(at(5)['ref_images.ref_image_1'],['31',0]);
+    assert.deepEqual(at(5)['ref_videos.ref_video_1'],link(padding?3:0));
+    assert.equal(at(5).ref_image_size,'max','Never downsize the reference photo to speed up');
+    assert.deepEqual([at(5).width,at(5).height],[1088,1952]);
+    assert.deepEqual([at(15).width,at(15).height],[1080,1936]);
+    assert.deepEqual(at(15).image,link(14));assert.deepEqual(at(14).image,link(13));
+    assert.equal(typeof at(9).noise_seed,'number');assert.equal(at(9).noise_seed,seg.seed);
+    assert.equal(at(10).cfg,1);assert.deepEqual(at(10).model,g['41'].inputs.model);
+    if(i){
+      const prev=plan.segments[i-1],previousBase=b-40;
+      assert.equal(seg.contextFrames,22,'Native 17n+5 history clip');
+      assert.deepEqual(at(6).image,[String(previousBase+13),0]);
+      assert.equal(at(6).batch_index,prev.inputFrames-22);assert.equal(at(6).length,22);
+      assert.deepEqual(at(7).image,link(6),'Continuity may anchor only generated frames');
+      assert.deepEqual(at(7).latent,link(5,1));
+    }else assert.equal(at(7),undefined,'Do not pin the first source RGB frame');
+    assert.equal(at(4).start_time,seg.loadStart/24);assert.equal(at(4).duration,seg.inputFrames/24);
+  }
+  assert.deepEqual(timeline,Array.from({length:frames},(_,i)=>i),'All source times exported once, with no skipped or repeated real frames');
   assert.equal(g['6'].inputs.file_name,turbo);assert.equal(g['7'].inputs.file_name,character);
   assert.equal(g['40'].inputs.sampler_name,'er_sde');assert.equal(g['41'].inputs.scheduler,'normal');
-  assert.equal(g['41'].inputs.steps,8);assert.equal(g['103'].inputs.cfg,1);
-  assert.deepEqual(g['41'].inputs.model,g['103'].inputs.model);
-  assert.equal(typeof g['102'].inputs.noise_seed,'number');
-  assert.equal(g['100'].inputs.ref_image_size,'max');
-  assert.deepEqual([g['100'].inputs.width,g['100'].inputs.height],[1088,1952]);
-  assert.deepEqual([g['108'].inputs.width,g['108'].inputs.height],[1080,1936]);
-  assert.deepEqual(g['108'].inputs.image,['107',0]);assert.deepEqual(g['107'].inputs.image,['106',0]);
-  assert.deepEqual(g['490'].inputs.images,['108',0]);assert.equal(g['490'].inputs.frame_rate,24);
+  assert.equal(g['41'].inputs.steps,8);assert.equal(g['490'].inputs.frame_rate,24);
+  assert.deepEqual(g['490'].inputs.images,plan.samplerCount===1?['1015',0]:['49',0]);
+  assert.deepEqual(g['490'].inputs.audio,['50',0]);assert.equal(g['50'].inputs.duration,frames/24);
+  if(plan.samplerCount>1){
+    assert.equal(g['49'].inputs.inputcount,plan.samplerCount);
+    for(let i=0;i<plan.samplerCount;i++)assert.deepEqual(g['49'].inputs['image_'+(i+1)],[String(1015+i*40),0]);
+  }
   assert.ok(!Object.values(g).some(n=>/Upscale|ImageScale|Refine|Composite|FaceRestore|H3Relay|BodyRatio|SDPose/.test(n.class_type)));
-  assert.ok(Object.values(g).filter(n=>n.class_type==='MiniMaxH3AddGuide').every(n=>!n.inputs.image),
-    'Source RGB frames must not become hard appearance guides');
-  assert.equal(Object.values(g).filter(n=>n.class_type==='SamplerCustomAdvanced').length,1);
+  assert.equal(Object.values(g).filter(n=>n.class_type==='SamplerCustomAdvanced').length,plan.samplerCount);
   for(const [id,n] of Object.entries(g)){
-    assert.equal(AKATZ_NODE_CLASSES[id],n.class_type);assert.equal(h3NodeClass(id,plan),n.class_type);
+    assert.equal(h3NodeClass(id,plan),n.class_type);
     for(const value of Object.values(n.inputs))if(Array.isArray(value)&&value.length===2&&typeof value[0]==='string')
       assert.ok(g[value[0]],'No missing node dependency: '+id+' → '+value[0]);
   }
@@ -52,8 +75,9 @@ for(let frames=6;frames<=362;frames++){
 for(const frames of [0,5,363,1440])assert.throws(()=>akatzExecutionPlan(sourceFor(frames)));
 const args={imageName:'photo.jpg',videoName:'driver.mp4',source:sourceFor(361,false),characterLoraFile:character,turboLoraFile:turbo};
 const silent=akatzGraphForInputs(args);
-assert.equal(silent['50'],undefined);assert.equal(silent['101'],undefined);
-assert.equal(silent['490'].inputs.audio,undefined);assert.deepEqual(silent['103'].inputs.positive,['100',0]);
+assert.equal(silent['50'],undefined);assert.equal(silent['1004'],undefined);assert.equal(silent['1008'],undefined);
+assert.equal(silent['490'].inputs.audio,undefined);assert.deepEqual(silent['1010'].inputs.positive,['1005',0]);
+assert.equal(h3NodeClass('104',{revision:'akatz-native-1080-v1'}),'SamplerCustomAdvanced','Historical Akatz task IDs stay observable');
 assert.throws(()=>akatzGraphForInputs({...args,imageName:'../private'}));
 assert.throws(()=>akatzGraphForInputs({...args,turboLoraFile:'another-model.safetensors'}));
 assert.throws(()=>akatzGraphForInputs({...args,source:{...args.source,outputWidth:768}}));
@@ -79,7 +103,8 @@ assert.deepEqual(calls,['models','character','turbo','submit']);assert.equal(sub
 assert.equal(payload.instanceType,'plus');assert.deepEqual([...payload.nodeInfoList],[]);
 assert.equal(payload.retainSeconds,undefined);
 const sent=JSON.parse(payload.workflow);assert.equal(sent['7'].inputs.file_name,character);
-assert.equal(typeof sent['102'].inputs.noise_seed,'number');assert.equal(sent['107'].inputs.length,361);
+assert.equal(typeof sent['1009'].inputs.noise_seed,'number');
+assert.equal(Object.values(sent).filter(n=>n.class_type==='SamplerCustomAdvanced').length,4);
 await assert.rejects(context.createTask({...task,mode:'standard'}),/Plus/);assert.equal(submitted,1);
 context.h3AkatzModels.turbo.ensure=async()=>{throw Error('Model setup incomplete');};
 await assert.rejects(context.createTask(task),/Model setup incomplete/);assert.equal(submitted,1,
@@ -112,4 +137,4 @@ try{
   const mean=a.reduce((sum,v,i)=>sum+Math.abs(v-b[i]),0)/a.length;assert.ok(mean<4,'Native driver must not rotate or scale again');
   assert.equal(hash(),before,'The original reference photo bytes remain unchanged');
 }finally{if(prepared)await prepared.release();fs.rmSync(dir,{recursive:true,force:true});}
-console.log('PASS: single-shot Akatz 6–362 frame coverage, pinned two-model provisioning, native 1080 output, unscaled/rotated short input, no RGB hard guide or refinement, owner-only submission and truthful timing metadata');
+console.log('PASS: bounded Akatz windows, generated-only 22-frame continuity, exhaustive 6–362 frame timeline coverage, pinned models, native 1080, rotated short input, no resize/refinement and one owner-initiated provider submission');
