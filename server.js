@@ -34,6 +34,7 @@ import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} fr
 import {createH3AppearanceModel,CHARACTER_ASSET} from './h3-appearance-model.js';
 import {installNativePoseInspection,poseValidationSummary} from './h3-native-pose-inspect.js';
 import {installAkatzInspection} from './h3-akatz-inspect.js';
+import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan} from './h3-akatz-motion.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,9 +61,16 @@ const workflowGraphs = {
   r4Lab: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-full-controlled-api.json'), 'utf8')),
   rife60: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/rife60-api.json'), 'utf8')),
   minimaxH3: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/minimax-h3-motion-control.json'), 'utf8')),
+  minimaxH3Akatz: {revision:AKATZ_REVISION},
 };
 
 const workflowMeta = {
+  minimaxH3Akatz: {
+    id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz V1.5 Native · 1080p',
+    subtitle:'1080p · foto + video · 24 FPS · Plus · hingga 15 detik',
+    detail:'Foto menjadi acuan karakter, rambut, proporsi tubuh, pakaian dan tekstur; video memandu gerak dan kamera. Sampling langsung pada canvas 1080p, satu urutan utuh hingga 15 detik, dengan audio sumber. Tanpa resize atau refinement hasil. Versi uji untuk dinilai dari hasil generate Anda.',
+    outputKind:'video',experimental:true,requiredMode:'plus'
+  },
   minimaxH3: {
     id:'minimaxH3',name:'MiniMax H3 · Motion Control · 1080p',
     subtitle:'1080p · foto + panduan gerak video · 24 FPS · Plus',
@@ -175,6 +183,14 @@ const h3AppearanceModel=createH3AppearanceModel({dir:path.join(os.tmpdir(),'vant
   registryFile:path.join(DATA_DIR,'h3-appearance-loras.json'),request:rhJson});
 const h3CharacterModel=createH3AppearanceModel({dir:path.join(os.tmpdir(),'vanta-h3-character-cache'),
   registryFile:path.join(DATA_DIR,'h3-character-loras.json'),request:rhJson,asset:CHARACTER_ASSET});
+// Only owner-initiated generation downloads/uploads these pinned assets.
+// Large model bytes stay off the small account volume; receipts survive deploys.
+const h3AkatzModels={
+  character:createH3AppearanceModel({dir:path.join(os.tmpdir(),'vanta-h3-akatz-character-cache'),
+    registryFile:path.join(DATA_DIR,'h3-akatz-character-loras.json'),request:rhJson,asset:AKATZ_ASSET}),
+  turbo:createH3AppearanceModel({dir:path.join(os.tmpdir(),'vanta-h3-akatz-turbo-cache'),
+    registryFile:path.join(DATA_DIR,'h3-akatz-turbo-loras.json'),request:rhJson,asset:AKATZ_TURBO_ASSET})
+};
 function registeredAccount(taskId,accountId=''){
   const item=taskRegistry.get(String(taskId));
   if(!item)return null;
@@ -516,15 +532,22 @@ async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
     return {videoName,imageName};
   }finally{await fs.promises.rm(dir,{recursive:true,force:true});}
 }
-async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, diagnosticAccount, diagnosticTaskId, onBeforeSubmit }) {
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, diagnosticAccount, diagnosticTaskId, onBeforeSubmit, onModelPreparation }) {
+  const h3=['minimaxH3','minimaxH3Akatz'].includes(workflowKey);
   let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
-  if(workflowKey==='minimaxH3'&&!h3Source?.file)
+  if(h3&&!h3Source?.file)
     throw Error('Metadata video sumber H3 belum tervalidasi.');
-  if(workflowKey==='minimaxH3'&&mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus.');
+  if(h3&&mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus.');
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey,
-    workflowKey==='minimaxH3'?(h3Source.referenceFile||imageFile):imageFile);
-  const videoName = await uploadToRunningHub(apiKey, workflowKey==='minimaxH3'?h3Source.file:videoFile);
-  if(workflowKey==='minimaxH3'){
+    h3?(h3Source.referenceFile||imageFile):imageFile);
+  const videoName = await uploadToRunningHub(apiKey, h3?h3Source.file:videoFile);
+  if(workflowKey==='minimaxH3Akatz'){
+    if(h3Source.inferenceProfile!==AKATZ_PROFILE)throw Error('Profil Akatz belum tervalidasi.');
+    onModelPreparation?.();
+    const [characterLoraFile,turboLoraFile]=await Promise.all([
+      h3AkatzModels.character.ensure(apiKey),h3AkatzModels.turbo.ensure(apiKey)]);
+    selectedGraph=akatzGraphForInputs({imageName,videoName,source:h3Source,characterLoraFile,turboLoraFile});
+  }else if(workflowKey==='minimaxH3'){
     if(['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(h3Source.inferenceProfile))
       h3Source.appearanceLoraFile=await h3AppearanceModel.ensure(apiKey);
     if(h3Source.inferenceProfile==='guide-dmad4-character-caption')
@@ -537,7 +560,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     workflowId,
     // Keep RandomNoise values typed in workflow JSON. RunningHub's explicit
     // noise_seed override arrived as str at the final sampler (task 2117100444870602753).
-    nodeInfoList: workflowKey==='minimaxH3' ? [] : [
+    nodeInfoList: h3 ? [] : [
       ...(workflowKey==='rife60'
         ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName },
            { nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps },
@@ -550,7 +573,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     workflow: JSON.stringify(selectedGraph),
     addMetadata: true,
     // H3 and RIFE do not reserve a paid retained instance after completion.
-    ...(['rife60','minimaxH3'].includes(workflowKey)?{}:{retainSeconds:259200}),
+    ...(['rife60','minimaxH3','minimaxH3Akatz'].includes(workflowKey)?{}:{retainSeconds:259200}),
   };
   // Match the RunningHub instance selected by the user; keep queued legacy Lite unchanged.
   const instanceType=runningHubInstanceType(mode);
@@ -776,13 +799,14 @@ async function handleGeneration(req,res){
     const mode = String(req.body?.mode || 'standard');
     const requestedAccountId = String(req.body?.accountId || 'auto');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
-    if(workflowKey==='minimaxH3'){
+    if(['minimaxH3','minimaxH3Akatz'].includes(workflowKey)){
       req.progress?.('analyzing');
-      h3Source=await prepareH3Input(videoFile,mode,imageFile,{
-        inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
+      h3Source=workflowKey==='minimaxH3Akatz'?await prepareAkatzInput(videoFile,mode,imageFile):
+        await prepareH3Input(videoFile,mode,imageFile,{
+          inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
-      console.info('H3 media plan',JSON.stringify(h3ExecutionPlan(h3Source)));
+      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
       req.progress?.('analyzing');
@@ -853,6 +877,7 @@ async function handleGeneration(req,res){
           diagnosticAccount,
           diagnosticTaskId,
           onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting');},
+          onModelPreparation:()=>req.progress?.('preparing_models'),
         });
         // Task is accepted/paid: register it before any post-submit work.
         // A local persistence problem must NOT retry submission against another account.
@@ -863,7 +888,7 @@ async function handleGeneration(req,res){
             outputKind:workflowMeta[workflowKey].outputKind||'video',mode,
             video:videoFile.originalname,submittedAt:task.submittedAt,
             status:task.taskStatus==='RUNNING'?'running':'queued',
-            inputDiagnostics:h3Source?h3ExecutionPlan(h3Source):null});
+            inputDiagnostics:h3Source?(workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):null});
           trackingRegistered=true;
         }catch(registerError){
           console.error('Paid task accepted but registry write failed',String(task.taskId),registerError.message);

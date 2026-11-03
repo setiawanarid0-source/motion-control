@@ -154,7 +154,7 @@ export function h3Segments(totalFrames,sceneCuts=[],continuationFrames=1,windowF
 }
 
 export async function prepareH3Input(file,mode,imageFile,{
-  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor','guide-dmad4-ffp-focus'].includes(inferenceProfile),diagnosticOutputs=false
+  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor','guide-dmad4-ffp-focus'].includes(inferenceProfile),diagnosticOutputs=false,nativeDriver=false
 }={}){
   const source=await probeH3Input(file,mode);
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-motion-'));
@@ -165,11 +165,16 @@ export async function prepareH3Input(file,mode,imageFile,{
     const plan=h3PhotoPlan(reference.color.width,reference.color.height);
     const referenceFace=identityFocus?await detectIdentityFocus(reference.file,{
       width:reference.color.width,height:reference.color.height}):null;
-    // Fit ONLY the control video to the photo's aspect and H3 grid. Contain/pad
-    // keeps its geometry and camera. Original photo and generated pixels are not scaled.
-    const filter=`setpts=PTS-STARTPTS,fps=24,`+
-      `scale=${plan.outputWidth}:${plan.outputHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,`+
-      `pad=${plan.canvasWidth}:${plan.canvasHeight}:(ow-iw)/2:(oh-ih)/2:color=black`;
+    // Akatz keeps the driver's displayed pixel dimensions and only pads to grid.
+    // Existing H3 profiles contain/pad the driver to the photo canvas instead.
+    // Neither path scales the original photo or decoded output here.
+    const driverWidth=nativeDriver?Math.ceil(source.sourceWidth/32)*32:plan.canvasWidth;
+    const driverHeight=nativeDriver?Math.ceil(source.sourceHeight/32)*32:plan.canvasHeight;
+    const filter=nativeDriver
+      ?`setpts=PTS-STARTPTS,fps=24,setsar=1,pad=${driverWidth}:${driverHeight}:(ow-iw)/2:(oh-ih)/2:color=black`
+      :`setpts=PTS-STARTPTS,fps=24,`+
+        `scale=${plan.outputWidth}:${plan.outputHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,`+
+        `pad=${plan.canvasWidth}:${plan.canvasHeight}:(ow-iw)/2:(oh-ih)/2:color=black`;
     await run('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y','-threads','2','-i',file.path,
       '-map','0:v:0','-map','0:a:0?','-vf',filter,
       ...(source.hasAudio?['-af',`atrim=end=${source.totalFrames/24},asetpts=PTS-STARTPTS`]:[]),
@@ -180,7 +185,7 @@ export async function prepareH3Input(file,mode,imageFile,{
     const {stdout}=await run('ffprobe',['-v','error','-show_streams','-of','json',output],{timeout:30000,maxBuffer:65536});
     const tracks=JSON.parse(stdout).streams||[],v=tracks.find(s=>s.codec_type==='video'),frames=Number(v?.nb_frames);
     const bytes=(await fs.stat(output)).size;
-    if(v?.width!==plan.canvasWidth||v?.height!==plan.canvasHeight||v?.r_frame_rate!=='24/1'||
+    if(v?.width!==driverWidth||v?.height!==driverHeight||v?.r_frame_rate!=='24/1'||
       !Number.isSafeInteger(frames)||frames<6||Math.abs(frames-source.totalFrames)>1||bytes>100*1024*1024||
       source.hasAudio!==tracks.some(s=>s.codec_type==='audio'))
       throw Error('Guide Motion Control H3 gagal divalidasi. Task belum dikirim ke RunningHub.');
@@ -190,6 +195,7 @@ export async function prepareH3Input(file,mode,imageFile,{
     const sceneCuts=[...new Set([...stderr.matchAll(/pts_time:([0-9.]+)/g)]
       .map(m=>Math.round(Number(m[1])*24)))].filter(n=>n>0&&n<frames);
     return {...source,...plan,totalFrames:frames,sceneCuts,inferenceProfile,diagnosticOutputs:diagnosticOutputs===true,
+      ...(nativeDriver?{driverCanvas:[driverWidth,driverHeight]}:{}),
       referenceFile:reference.file,referenceColor:reference.color,referenceFace,
       file:{path:output,originalname:'motion-guide.mp4',mimetype:'video/mp4',size:bytes},release};
   }catch(error){await release();throw error;}
