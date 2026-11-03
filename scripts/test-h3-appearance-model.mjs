@@ -34,3 +34,4 @@ try{
   assert.equal(uploads,1,'Never PUT model bytes to an untrusted destination');
   console.log('PASS: checksum-pinned H3 weights, official authenticated upload, deduplication, verified MD5, no forwarded API credentials and upload-host guards');
 }finally{await fs.rm(dir,{recursive:true,force:true});}
+await import('./test-h3-model-transfer.mjs');

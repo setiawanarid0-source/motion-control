@@ -31,6 +31,15 @@ try{
     called++;
     progress('analyzing');await sleep(10);
     progress('preparing_motion');await sleep(20);
+    progress('preparing_models',null,{component:'accelerator',phase:'uploading',loaded:1024,total:4096,
+      url:'https://private.example/signed',apiKey:'private-account-key'});
+    const modelProgress={component:'accelerator',phase:'uploading',loaded:1024,total:4096};
+    assert.deepEqual(queue.owned(job.jobId,device).modelPreparation,modelProgress);
+    const durable=createGenerationQueue({dir:folder});
+    assert.deepEqual(durable.owned(job.jobId,device).modelPreparation,modelProgress,
+      'A reconnect reads the actual last transfer progress');
+    assert.ok(!JSON.stringify(durable.read(job.jobId)).includes('private-'),
+      'Credentials and signed URLs must not be persisted as model progress');
     progress('submitting');await sleep(10);
     queue.update(job.jobId,{stage:'accepted',task:{taskId:'2109000000000000001'}});
   });
@@ -38,6 +47,7 @@ try{
   assert.equal(called,1);
   assert.equal(queue.owned(id,device).stage,'accepted');
   assert.equal(queue.owned(id,device).task.taskId,'2109000000000000001');
+  assert.equal(queue.owned(id,device).modelPreparation,undefined,'Model progress ends before provider generation');
   const paid=crypto.randomUUID();
   const second=await queue.stage({jobId:paid,deviceId:device,body:{workflow:'r15'},
     image:file(img,'reference.jpg','image/jpeg'),video:file(vid,'motion.mp4','video/mp4')});

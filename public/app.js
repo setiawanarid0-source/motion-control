@@ -234,6 +234,7 @@ function clearFailureDetail(){
   if(el){el.textContent='';el.classList.add('hidden');}
 }
 function displaySubmissionFailure(data,{restored=false}={}){
+  modelProgressBar(null,true);
   const msg=String(data?.error||'Alasan kegagalan tidak dikembalikan provider.').trim().slice(0,950);
   const providerStage=data?.failureStage==='submitting';
   const ambiguous=data?.stage==='uncertain';
@@ -272,6 +273,7 @@ async function restoreRecentRifeFailure(){
   }catch(error){console.warn('RIFE failure recovery unavailable',error.message);}
 }
 function showStartingTask(){
+  modelProgressBar(null);
   clearFailureDetail();
   state.startedAt=null;
   clearInterval(state.elapsedTimer);
@@ -320,16 +322,41 @@ function clearSubmission(){
   clearInterval(state.elapsedTimer);
   updateGenerate();
 }
-function stageDescription(stage){
+function stageDescription(stage,info){
   // Internal preprocessing steps must not clutter the user's flow.
-  if(stage==='preparing_models')return 'Menyiapkan model Akatz…';
+  if(stage==='preparing_models'){
+    const label=info?.component==='accelerator'?'akselerator':'model karakter';
+    const percent=Number.isSafeInteger(info?.loaded)&&Number.isSafeInteger(info?.total)&&info.total>0?
+      ' · '+Math.min(100,Math.floor(info.loaded/info.total*100))+'%':'';
+    if(info?.phase==='downloading')return 'Mengunduh '+label+percent;
+    if(info?.phase==='uploading')return 'Mengunggah '+label+percent;
+    if(info?.phase==='waiting_confirmation')return 'Menunggu konfirmasi unggahan…';
+    if(info?.phase==='verifying')return 'Memeriksa '+label+'…';
+    if(info?.phase==='ready')return 'Model Akatz siap';
+    return 'Menyiapkan model Akatz…';
+  }
   return stage==='submitting'?'Mengirim task…':'Memulai generate…';
+}
+function modelProgressBar(info,stopped=false){
+  const track=$('#taskProgressTrack'),bar=$('#taskProgressBar');
+  track.hidden=stopped;
+  const known=info&&['downloading','uploading','waiting_confirmation'].includes(info.phase)&&
+    Number.isSafeInteger(info.loaded)&&info.loaded>=0&&Number.isSafeInteger(info.total)&&info.total>0;
+  track.classList.toggle('indeterminate',!known&&!stopped);
+  if(known){const percent=Math.min(100,info.loaded/info.total*100);
+    bar.style.width=percent+'%';track.setAttribute('aria-valuemin','0');
+    track.setAttribute('aria-valuemax','100');track.setAttribute('aria-valuenow',String(Math.floor(percent)));
+  }else{bar.style.width=stopped?'0%':'';track.removeAttribute('aria-valuenow');}
 }
 function showSubmissionStage(data){
   $('#taskSection').classList.remove('hidden');
-  $('#taskStatus').textContent=stageDescription(data.stage);
+  const model=data.stage==='preparing_models'?data.modelPreparation:null;
+  $('#taskStatus').textContent=stageDescription(data.stage,model);
   $('#taskId').textContent='Menunggu task ID';
-  $('#taskEstimate').textContent=data.stage==='submitting'?'Menunggu konfirmasi':'Sedang diproses';
+  $('#taskEstimate').textContent=Number.isSafeInteger(model?.loaded)&&Number.isSafeInteger(model?.total)&&model.total>0?
+    Math.round(model.loaded/1048576)+' / '+Math.round(model.total/1048576)+' MB':
+    data.stage==='submitting'?'Menunggu konfirmasi':'Sedang diproses';
+  modelProgressBar(model);
   $('#generateBtn').querySelector('span:first-child').textContent='Memproses…';
 }
 function completedSubmission(data){
@@ -474,6 +501,7 @@ async function generate(){
 }
 
 function showTask(data){
+  modelProgressBar(null);
   clearInterval(state.elapsedTimer);
   $('#taskSection').classList.remove('hidden');
   $('#resultSection').classList.add('hidden');

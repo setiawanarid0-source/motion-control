@@ -548,8 +548,19 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   if(workflowKey==='minimaxH3Akatz'){
     if(h3Source.inferenceProfile!==AKATZ_PROFILE)throw Error('Profil Akatz belum tervalidasi.');
     onModelPreparation?.();
-    const [characterLoraFile,turboLoraFile]=await Promise.all([
-      h3AkatzModels.character.ensure(apiKey),h3AkatzModels.turbo.ensure(apiKey)]);
+    const states={character:{phase:'checking_cache'},accelerator:{phase:'checking_cache'}};
+    const progress=component=>state=>{
+      states[component]=state;
+      const pending=Object.entries(states).filter(([,x])=>x.phase!=='ready');
+      const active=pending.find(([,x])=>['uploading','waiting_confirmation','downloading','verifying'].includes(x.phase))||pending[0]||['all',{phase:'ready'}];
+      onModelPreparation?.({component:active[0],...active[1]});
+    };
+    let characterLoraFile,turboLoraFile;
+    try{[characterLoraFile,turboLoraFile]=await Promise.all([
+      h3AkatzModels.character.ensure(apiKey,{onProgress:progress('character')}),
+      h3AkatzModels.turbo.ensure(apiKey,{onProgress:progress('accelerator')})]);}
+    catch(error){const failure=new Error(error?.message||'Persiapan model Akatz belum selesai.');
+      failure.code='H3_MODEL_PREPARATION_FAILED';throw failure;}
     selectedGraph=akatzGraphForInputs({imageName,videoName,source:h3Source,characterLoraFile,turboLoraFile});
   }else if(workflowKey==='minimaxH3'){
     if(['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(h3Source.inferenceProfile))
@@ -587,6 +598,10 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   if(onBeforeSubmit)onBeforeSubmit();
   const data = await rhJson('/task/openapi/create', apiKey, payload, 60000);
   if (!data || Number(data.code) !== 0 || !data.data?.taskId) {
+    if(!data?.data?.taskId&&!data?.taskId&&data?.msg==='NOT_ENOUGH_BALANCE'){
+      const error=new Error('RunningHub menolak task karena saldo akun tidak mencukupi. Task belum dibuat.');
+      error.code='RUNNINGHUB_INSUFFICIENT_BALANCE';throw error;
+    }
     // A structured provider rejection with TASK_QUEUE_MAXED and no taskId
     // confirms that THIS attempted create did not enter RunningHub's queue.
     // A timeout, missing response, or arbitrary error is never safe to retry.
@@ -881,7 +896,7 @@ async function handleGeneration(req,res){
           diagnosticAccount,
           diagnosticTaskId,
           onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting');},
-          onModelPreparation:()=>req.progress?.('preparing_models'),
+          onModelPreparation:details=>req.progress?.('preparing_models',null,details),
         });
         // Task is accepted/paid: register it before any post-submit work.
         // A local persistence problem must NOT retry submission against another account.
@@ -937,6 +952,9 @@ async function handleGeneration(req,res){
         });
       } catch (error) {
         lastError = error;
+        if(['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE'].includes(error.code)){
+          req.submissionAttempted=false;break;
+        }
         if(videoOnly)console.warn('RIFE task attempt failed',
           {stage:req.submissionAttempted?'provider_submission':'pre_submit',
            class:String(error.code||error.name||'unknown').slice(0,50)});
@@ -1318,6 +1336,19 @@ if (!fs.existsSync(GLOBAL_ACCOUNT_VAULT) && !startupGlobalAccounts.length && sta
   saveGlobalAccounts(startupLegacyAccounts);
 }
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
+// Cache-only reuse authorizes existing MD5 paths for the other pool accounts.
+// This cannot download weights, PUT bytes, create inference, retry or cancel.
+void (async()=>{
+  const accounts=loadGlobalAccounts();let readyAccounts=0;
+  for(let i=0;i<accounts.length;i+=3){
+    const results=await Promise.allSettled(accounts.slice(i,i+3).map(async account=>{
+      const files=await Promise.all([h3AkatzModels.character.primeCached(account.key),h3AkatzModels.turbo.primeCached(account.key)]);
+      return files.every(Boolean);
+    }));
+    readyAccounts+=results.filter(x=>x.status==='fulfilled'&&x.value).length;
+  }
+  console.info('H3 uploaded model cache readiness',JSON.stringify({accounts:accounts.length,readyAccounts,cacheOnly:true}));
+})().catch(()=>console.warn('H3 uploaded model cache check unavailable'));
 pruneOldJobs().catch(error=>console.warn('Camera job cleanup',error.message));
 pruneReferences().catch(error=>console.warn('Reference cleanup',error.message));
 generationQueue.resume();
