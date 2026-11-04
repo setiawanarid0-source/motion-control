@@ -5,7 +5,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,AKATZ_TURBO_ASSET,
+import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,
   prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from '../h3-akatz-motion.js';
 import {h3PhotoPlan,H3_DEFAULT_PROFILE} from '../minimax-h3-motion.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
@@ -19,8 +19,8 @@ assert.ok(AKATZ_ASSET.url.includes('/resolve/0f409f0c2a18f123f3985041ec52982c813
 assert.ok(AKATZ_TURBO_ASSET.url.includes('/resolve/30f485ed874aa44c8183348ad361c5eabad318da/'));
 assert.ok(AKATZ_TURBO_ASSET.url.endsWith('/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors'));
 assert.equal(AKATZ_TURBO_ASSET.sha256,'5b9ab5ade15d0775676d01a907268a69a1468dc6033b3b0d3ded5502f3ebb84c');
-for(let frames=6;frames<=362;frames++){
-  const source=sourceFor(frames),plan=akatzExecutionPlan(source);
+for(const hasAudio of [true,false])for(let frames=6;frames<=362;frames++){
+  const source=sourceFor(frames,hasAudio),plan=akatzExecutionPlan(source);
   const g=akatzGraphForInputs({imageName:'api/photo.jpg',videoName:'api/driver.mp4',source,
     characterLoraFile:character,turboLoraFile:turbo});
   assert.equal(plan.revision,AKATZ_REVISION);assert.equal(plan.nativeWindowFrames,124);
@@ -30,6 +30,8 @@ for(let frames=6;frames<=362;frames++){
   assert.ok(plan.workBudget.totalSteps<=12);assert.equal(plan.workBudget.providerHardLimitSeconds,2400);
   assert.equal(plan.workBudget.measuredRuntimeSeconds,null,'A budget is not a measured runtime');
   assert.equal(plan.attentionConditioning,'dense_target_and_reference_all_steps');
+  assert.equal(plan.continuation,'sampler_av_latent_tail');
+  assert.equal(plan.continuationVaeRoundTrips,0);
   assert.equal(g['10'],undefined,'The four-step detail reconstruction must never enter sparse target attention');
   assert.deepEqual(g['41'].inputs.model,['8',0]);
   assert.equal(g['490'].inputs.crf,12,'Preserve generated detail in the final video encoder');
@@ -62,12 +64,25 @@ for(let frames=6;frames<=362;frames++){
     if(i){
       const prev=plan.segments[i-1],previousBase=b-40;
       assert.equal(seg.contextFrames,5,'Native 17n+5 history clip without a fourth window');
-      assert.deepEqual(at(6).image,[String(previousBase+13),0]);
-      assert.equal(at(6).batch_index,prev.inputFrames-5);assert.equal(at(6).length,5);
-      assert.deepEqual(at(7).image,link(6),'Continuity may anchor only generated frames');
+      assert.equal(prev.inputFrames,124,'The raw tail must end in real input, never padding');
+      assert.equal(prev.modelFrames,prev.inputFrames);
+      assert.equal(prev.loadStart+prev.modelFrames-5,seg.loadStart,
+        'The exact five predecessor tail frames align with the next source prefix');
+      assert.equal(at(6),undefined,'Decoded RGB must never feed the next window');
+      assert.equal(g[String(b+7)].class_type,'MiniMaxH3MotionContext');
+      assert.deepEqual(at(7).context_latent,[String(previousBase+11),0]);
+      assert.deepEqual(at(7).conditioning,link(5));
+      assert.equal(at(7).context_length,'5');assert.equal(at(7).audio_context_length,0);
       assert.deepEqual(at(7).latent,link(5,1));
     }else assert.equal(at(7),undefined,'Do not pin the first source RGB frame');
-    assert.equal(at(4).start_time,seg.loadStart/24);assert.equal(at(4).duration,seg.inputFrames/24);
+    if(hasAudio){
+      assert.equal(at(4).start_time,seg.loadStart/24);assert.equal(at(4).duration,seg.inputFrames/24);
+      assert.equal(at(8).frame_idx,seg.contextFrames);
+      assert.deepEqual(at(8).audio,link(i?17:4));
+      if(i){assert.equal(at(17).start_time,seg.start/24);assert.equal(at(17).duration,seg.frames/24);}
+      else assert.equal(at(17),undefined);
+    }
+    else assert.equal(at(4),undefined);
   }
   assert.deepEqual(timeline,Array.from({length:frames},(_,i)=>i),'All source times exported once, with no skipped or repeated real frames');
   assert.equal(g['6'].inputs.file_name,turbo);assert.equal(g['7'].inputs.file_name,character);
@@ -75,7 +90,10 @@ for(let frames=6;frames<=362;frames++){
   assert.equal(g['41'].inputs.steps,4);assert.equal(g['490'].inputs.frame_rate,24);
   assert.deepEqual([g['8'].inputs.shift_video,g['8'].inputs.shift_audio],[12,3]);
   assert.deepEqual(g['490'].inputs.images,plan.samplerCount===1?['1015',0]:['49',0]);
-  assert.deepEqual(g['490'].inputs.audio,['50',0]);assert.equal(g['50'].inputs.duration,frames/24);
+  if(hasAudio){assert.deepEqual(g['490'].inputs.audio,['50',0]);assert.equal(g['50'].inputs.duration,frames/24);}
+  else {assert.equal(g['50'],undefined);assert.equal(g['490'].inputs.audio,undefined);}
+  assert.ok(!Object.values(g).some(n=>n.class_type==='MiniMaxH3AddGuide'&&n.inputs.image),
+    'No generated appearance is decoded and re-encoded as a later guide');
   if(plan.samplerCount>1){
     assert.equal(g['49'].inputs.inputcount,plan.samplerCount);
     for(let i=0;i<plan.samplerCount;i++)assert.deepEqual(g['49'].inputs['image_'+(i+1)],[String(1015+i*40),0]);
@@ -100,6 +118,12 @@ assert.equal(h3NodeClass('10',akatzExecutionPlan(sourceFor(361))),null);
 assert.equal(h3NodeClass('10',{revision:'akatz-native-1080-v4',samplerCount:3}),null,
   'Dense v4 history must not be relabelled as sparse after the seed repair');
 assert.equal(h3NodeClass('1016',{revision:'akatz-native-1080-v4',samplerCount:3}),null);
+assert.equal(h3NodeClass('1046',{revision:'akatz-native-1080-v5',samplerCount:3}),'ImageFromBatch');
+assert.equal(h3NodeClass('1047',{revision:'akatz-native-1080-v5',samplerCount:3}),'MiniMaxH3AddGuide');
+assert.equal(h3NodeClass('1016',{revision:'akatz-native-1080-v5',samplerCount:3}),'MathExpression|pysssss');
+assert.equal(h3NodeClass('1057',{revision:'akatz-native-1080-v5',samplerCount:3}),null);
+assert.equal(h3NodeClass('1046',akatzExecutionPlan(sourceFor(361))),null);
+assert.equal(h3NodeClass('1047',akatzExecutionPlan(sourceFor(361))),'MiniMaxH3MotionContext');
 assert.equal(h3NodeClass('1016',akatzExecutionPlan(sourceFor(361))),'MathExpression|pysssss');
 assert.equal(h3NodeClass('1131',{revision:'akatz-native-1080-v2',samplerCount:4}),'SamplerCustomAdvanced');
 assert.equal(h3NodeClass('1131',akatzExecutionPlan(sourceFor(361))),null,'The new profile must have no fourth window');
@@ -107,30 +131,41 @@ assert.throws(()=>akatzGraphForInputs({...args,imageName:'../private'}));
 assert.throws(()=>akatzGraphForInputs({...args,turboLoraFile:'another-model.safetensors'}));
 assert.throws(()=>akatzGraphForInputs({...args,source:{...args.source,outputWidth:768}}));
 assert.throws(()=>akatzExecutionPlan({...args.source,seed:'42'}));
+assert.throws(()=>akatzExecutionPlan({...args.source,sceneCuts:[361]}));
+for(const [frames,wanted] of [[125,[124,1]],[346,[124,119,103]],[361,[124,119,118]],[362,[124,119,119]]])
+  assert.deepEqual(akatzExecutionPlan(sourceFor(frames)).segments.map(s=>s.frames),wanted);
 
 // Execute the real provider boundary with fake uploads and fake model receipts.
 // This verifies payload typing and that no submission happens before setup.
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
-const calls=[];let payload,submitted=0;
-const context={AKATZ_PROFILE,akatzGraphForInputs,akatzSeedNodeInfo,runningHubInstanceType,
+const calls=[];let payload,submitted=0,uploaded=0;
+const context={AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,akatzGraphForInputs,akatzSeedNodeInfo,runningHubInstanceType,
+  DATA_DIR:'/fixture-only',assertH3MotionContextSchema:async()=>{calls.push('schema');},
   workflowGraphs:{minimaxH3Akatz:{revision:AKATZ_REVISION}},
   h3AkatzModels:{character:{ensure:async()=>{calls.push('character');return character;}},
     turbo:{ensure:async()=>{calls.push('turbo');return turbo;}}},
-  uploadToRunningHub:async(_key,file)=>'api/'+file.originalname,
+  uploadToRunningHub:async(_key,file)=>{uploaded++;return 'api/'+file.originalname;},
   rhJson:async(_route,_key,data)=>{payload=data;submitted++;return {code:0,data:{taskId:'2118000000000000001'}};}};
 vm.createContext(context);vm.runInContext(server.slice(begin,end)+'\nthis.createTask=createTask;',context);
 const task={apiKey:'fixture-only',workflowId:'owner-workflow',workflowKey:'minimaxH3Akatz',mode:'plus',
   imageFile:{originalname:'photo.jpg'},h3Source:{...sourceFor(361),file:{originalname:'driver.mp4'}},
   onBeforeSubmit:()=>calls.push('submit'),onModelPreparation:()=>calls.push('models')};
 await context.createTask(task);
-assert.deepEqual(calls,['models','character','turbo','submit']);assert.equal(submitted,1);
+assert.deepEqual(calls,['schema','models','character','turbo','submit']);assert.equal(submitted,1);
 assert.equal(payload.instanceType,'plus');assert.deepEqual([...payload.nodeInfoList],akatzSeedNodeInfo(task.h3Source));
 assert.equal(payload.retainSeconds,undefined);
 const sent=JSON.parse(payload.workflow);assert.equal(sent['7'].inputs.file_name,character);
 assert.deepEqual(sent['1009'].inputs.noise_seed,['1016',0]);
 assert.equal(Object.values(sent).filter(n=>n.class_type==='SamplerCustomAdvanced').length,3);
 assert.equal(sent['41'].inputs.steps,4);
+const passedGate=context.assertH3MotionContextSchema;
+context.assertH3MotionContextSchema=async()=>{throw Error('Schema proof missing');};
+const beforeUploads=uploaded;
+await assert.rejects(context.createTask(task),/Schema proof missing/);
+assert.equal(uploaded,beforeUploads,'Missing raw-latent proof must stop before media uploads');
+assert.equal(submitted,1,'Missing raw-latent proof cannot submit a paid task');
+context.assertH3MotionContextSchema=passedGate;
 await assert.rejects(context.createTask({...task,mode:'standard'}),/Plus/);assert.equal(submitted,1);
 context.h3AkatzModels.turbo.ensure=async()=>{throw Error('Model setup incomplete');};
 await assert.rejects(context.createTask(task),e=>e.code==='H3_MODEL_PREPARATION_FAILED'&&/Model setup incomplete/.test(e.message));assert.equal(submitted,1,
@@ -218,5 +253,5 @@ try{
   assert.ok(newMse<oldMse*.85,`Driver detail regressed: new MSE ${newMse}, old ${oldMse}`);
   console.log('PASS: actual low-resolution driver pixel error reduced '+Math.round((1-newMse/oldMse)*100)+'% at identical frame count, pixels and orientation; no inference');
 }finally{if(detail)await detail.release();fs.rmSync(detailDir,{recursive:true,force:true});}
-console.log('PASS: provider-safe INT seed links with string API overrides, dense four-step Ref2VA, at most 12 total steps, exhaustive 6–362 frame timeline, native 1080 and one owner-initiated provider submission; GPU appearance remains unverified');
+console.log('PASS: 714 native duration/audio cases, raw AV latent continuity with real aligned tails, dense four-step Ref2VA, at most 12 total steps, historical traces and mocked provider boundary; no GPU inference');
 

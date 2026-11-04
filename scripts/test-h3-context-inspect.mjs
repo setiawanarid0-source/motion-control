@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {CONTEXT_INSPECT_ROUTE,CONTEXT_NODE,CONTEXT_GUARD,CONTEXT_NEGATIVE,
   MOTION_CONTEXT_NODE,MOTION_INSPECT_ROUTE,contextInspectionGraph,contextInspectionSummary,
-  installH3ContextInspection,selectContextInspectionTask} from '../h3-context-inspect.js';
+  installH3ContextInspection,selectContextInspectionTask,assertH3MotionContextSchema} from '../h3-context-inspect.js';
 
 for(const check of ['negative-control','registration','signature']){
   const g=contextInspectionGraph(check);
@@ -36,8 +36,26 @@ const rawGraph=contextInspectionGraph('signature','motion');
 assert.equal(rawGraph.context.class_type,MOTION_CONTEXT_NODE);
 assert.deepEqual(rawGraph.context.inputs.context_latent,['conditioning',1]);
 assert.deepEqual(rawGraph.guider.inputs.positive,['context',0]);
+assert.deepEqual(rawGraph.trim.inputs.batch_index,['context',1]);
 assert.deepEqual(rawGraph.conditioning.inputs['ref_images.ref_image_1'],['guard',0]);
 assert.ok(!Object.values(rawGraph).some(n=>/Sampler|Save|VideoCombine/.test(n.class_type)));
+const typedRejection=rejected({type:'prompt_outputs_failed_validation'},{
+  guard:{class_type:'LoadImage',errors:[{type:'custom_validation_failed'}]},
+  context:{class_type:MOTION_CONTEXT_NODE,errors:[{type:'return_type_mismatch',extra_info:{input_name:'context_latent'}}]}
+});
+assert.equal(contextInspectionSummary(typedRejection,'latent-contract','motion').status,'latent_contract_recognized');
+assert.equal(contextInspectionSummary(guarded,'latent-contract','motion').status,'schema_incompatible',
+  'An ignored optional latent field must never count as compatibility');
+assert.deepEqual(contextInspectionGraph('latent-contract','motion').context.inputs.context_latent,['clip',0]);
+for(const check of ['latent-contract','signature']){
+  const g=contextInspectionGraph(check,'motion');
+  for(const id of Object.keys(g).filter(id=>/^Preview/.test(g[id].class_type))){
+    const reachable=new Set();
+    const visit=n=>{if(reachable.has(n))return;reachable.add(n);
+      for(const input of Object.values(g[n].inputs))if(Array.isArray(input)&&g[input[0]])visit(input[0]);};
+    visit(id);assert.ok(reachable.has('guard'),'Each output must require the nonexistent image');
+  }
+}
 assert.throws(()=>contextInspectionGraph('signature','arbitrary'));
 assert.equal(contextInspectionSummary(missing(CONTEXT_NEGATIVE),'negative-control').status,'negative_control_passed');
 assert.equal(contextInspectionSummary(guarded,'registration').status,'registered');
@@ -106,8 +124,13 @@ try{
   await accepted('POST');assert.equal(calls,7);assert.deepEqual(cancellations,['2118000000000000009']);
   const same=build('same-source',{probe:()=>({code:0,data:{taskId}})});
   await same('POST');assert.equal(calls,8);assert.equal(cancellations.length,1,'Never cancel the source task');
-  const motion=build('raw-motion',{mode:'motion',probe:g=>g.catalog?.class_type===CONTEXT_NEGATIVE?missing(CONTEXT_NEGATIVE):guarded});
-  await motion('POST');assert.equal(calls,11);
+  const motion=build('raw-motion',{mode:'motion',probe:g=>g.catalog?.class_type===CONTEXT_NEGATIVE?missing(CONTEXT_NEGATIVE):
+    g.context?.inputs.context_latent?.[0]==='clip'?typedRejection:guarded});
+  await assert.rejects(assertH3MotionContextSchema(path.join(root,'raw-motion')),/Task belum dikirim/);
+  await motion('POST');assert.equal(calls,12);
+  await assertH3MotionContextSchema(path.join(root,'raw-motion'));
+  await assert.rejects(assertH3MotionContextSchema(path.join(root,'supported')),/Task belum dikirim/,
+    'The old context-window signature cannot unlock the raw-latent route');
   assert.match((await motion('GET')).body,/MiniMaxH3MotionContext/);
   const server=await fs.readFile(new URL('../server.js',import.meta.url),'utf8');
   assert.ok(server.indexOf('app.use(ownerAuth.requireOwner);')<server.indexOf('installH3ContextInspection({'));

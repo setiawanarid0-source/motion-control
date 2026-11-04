@@ -36,8 +36,8 @@ import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} fr
 import {createH3AppearanceModel,CHARACTER_ASSET} from './h3-appearance-model.js';
 import {installNativePoseInspection,poseValidationSummary} from './h3-native-pose-inspect.js';
 import {installAkatzInspection} from './h3-akatz-inspect.js';
-import {installH3ContextInspection,selectContextInspectionTask} from './h3-context-inspect.js';
-import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
+import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionContextSchema} from './h3-context-inspect.js';
+import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -549,6 +549,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   if(h3&&!h3Source?.file)
     throw Error('Metadata video sumber H3 belum tervalidasi.');
   if(h3&&mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus.');
+  if(workflowKey==='minimaxH3Akatz'&&h3Source.totalFrames>AKATZ_WINDOW_FRAMES)
+    await assertH3MotionContextSchema(DATA_DIR);
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey,
     h3?(h3Source.referenceFile||imageFile):imageFile);
   const videoName = await uploadToRunningHub(apiKey, h3?h3Source.file:videoFile);

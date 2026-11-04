@@ -1,12 +1,12 @@
 // Akatz's native Ref2VA image/video path, adapted to Vanta's final 1080 canvas.
 // Relay is unavailable on the inspected worker. This is explicitly the
 // native bounded-window variant, not an imitation of Relay's mask implementation.
-import {prepareH3Input,probeH3Input,h3PhotoPlan,h3Segments} from './minimax-h3-motion.js';
+import {prepareH3Input,probeH3Input,h3PhotoPlan,h3ModelFrames} from './minimax-h3-motion.js';
 import {validUploadedH3Lora} from './h3-appearance-model.js';
 import {randomInt} from 'node:crypto';
 
 export const AKATZ_PROFILE='akatz-v1.5-native4-ref2v';
-export const AKATZ_REVISION='akatz-native-1080-v5';
+export const AKATZ_REVISION='akatz-native-1080-v6';
 export const AKATZ_MAX_FRAMES=362;
 export const AKATZ_WINDOW_FRAMES=124;
 export const AKATZ_CONTEXT_FRAMES=5;
@@ -40,14 +40,17 @@ export const AKATZ_NODE_CLASSES=Object.freeze({
 const WINDOW_NODE_CLASSES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBatch',
   'VHS_LoadAudioUpload','MiniMaxH3ReferenceToVideo','ImageFromBatch','MiniMaxH3AddGuide',
   'MiniMaxH3AddGuide','RandomNoise','CFGGuider','SamplerCustomAdvanced','LTXVSeparateAVLatent',
-  'VAEDecode','ImageFromBatch','ImageCrop','MathExpression|pysssss'];
+  'VAEDecode','ImageFromBatch','ImageCrop','MathExpression|pysssss','VHS_LoadAudioUpload'];
 export function akatzNodeClass(node,plan){
   if(plan?.revision==='akatz-native-1080-v1')return V1_NODE_CLASSES[String(node)]||null;
-  if(!['akatz-native-1080-v2','akatz-native-1080-v3','akatz-native-1080-v4',AKATZ_REVISION].includes(plan?.revision))return null;
+  if(!['akatz-native-1080-v2','akatz-native-1080-v3','akatz-native-1080-v4','akatz-native-1080-v5',AKATZ_REVISION].includes(plan?.revision))return null;
   if(String(node)==='10'&&['akatz-native-1080-v2','akatz-native-1080-v3'].includes(plan.revision))return 'BlockSparseAttention';
   if(AKATZ_NODE_CLASSES[String(node)])return AKATZ_NODE_CLASSES[String(node)];
   const n=Number(node),index=Math.floor((n-1000)/40),offset=(n-1000)%40;
-  if(offset===16&&plan.revision!==AKATZ_REVISION)return null;
+  if(offset===16&&!['akatz-native-1080-v5',AKATZ_REVISION].includes(plan.revision))return null;
+  if(offset===17&&plan.revision!==AKATZ_REVISION)return null;
+  if(plan.revision===AKATZ_REVISION&&offset===6)return null;
+  if(plan.revision===AKATZ_REVISION&&offset===7)return index>0&&index<plan.samplerCount?'MiniMaxH3MotionContext':null;
   return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODE_CLASSES.length?
     WINDOW_NODE_CLASSES[offset]||null:null;
 }
@@ -66,8 +69,21 @@ function plan(source){
   if(Object.entries(expected).some(([k,v])=>source[k]!==v))throw Error('Canvas Akatz Native tidak valid.');
   const seed=source.seed??42;
   if(!Number.isSafeInteger(seed)||seed<0||seed>=2**32)throw Error('Seed Akatz harus berupa bilangan bulat yang valid.');
-  const segments=h3Segments(source.totalFrames,source.sceneCuts||[],AKATZ_CONTEXT_FRAMES,AKATZ_WINDOW_FRAMES)
-    .map((seg,i)=>({...seg,seed:(seed+i)%2**32}));
+  const cuts=source.sceneCuts||[];
+  if(!Array.isArray(cuts)||cuts.some(n=>!Number.isSafeInteger(n)||n<=0||n>=source.totalFrames))
+    throw Error('Batas scene Akatz tidak valid.');
+  const segments=[];
+  // The raw latent tail always ends at the MODEL end, not at inputFrames.
+  // Fill every predecessor to the legal 124-frame grid. Only the final
+  // window may have padding; it is never fed into another window.
+  for(let start=0;start<source.totalFrames;){
+    const contextFrames=start?AKATZ_CONTEXT_FRAMES:0;
+    const length=Math.min(source.totalFrames-start,AKATZ_WINDOW_FRAMES-contextFrames);
+    const inputFrames=length+contextFrames;
+    segments.push({start,length,contextFrames,loadStart:start-contextFrames,inputFrames,
+      modelFrames:h3ModelFrames(inputFrames),seed:(seed+segments.length)%2**32});
+    start+=length;
+  }
   if(segments.length*AKATZ_SAMPLING.steps>12)throw Error('Beban Akatz melampaui batas profil 15 detik. Task belum dikirim.');
   return {segments,seed};
 }
@@ -90,7 +106,10 @@ export function akatzExecutionPlan(source){
     expressionConditioning:'source_video_timing_and_intensity_photo_identity_only',
     segments:p.segments.map(s=>({start:s.start,frames:s.length,inputFrames:s.inputFrames,
       loadStart:s.loadStart,modelFrames:s.modelFrames,contextFrames:s.contextFrames,seed:s.seed})),
-    continuation:'generated_native_canvas_frames',continuationFrames:AKATZ_CONTEXT_FRAMES,
+    continuation:'sampler_av_latent_tail',continuationFrames:AKATZ_CONTEXT_FRAMES,
+    continuationNode:'MiniMaxH3MotionContext',continuationVaeRoundTrips:0,
+    predecessorPaddingFrames:0,workerSchemaGate:'typed_raw_latent_and_trim_output_required',
+    gpuExecutionQualified:false,
     referenceVideoWindowed:true,peakWindowFrames:Math.max(...p.segments.map(s=>s.modelFrames)),
     relay:false,sourceBackplatePinned:false,postDecodeResize:false,postRefinement:false,
     visualAcceptance:'pending_owner_test'};
@@ -170,20 +189,30 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
       'ref_images.ref_image_1':['31',0],'ref_videos.ref_video_1':driver,
       ...(audio?{'ref_video_audios.ref_video_audio_1':audio}:{})});
     if(previous&&seg.contextFrames){
-      const history=add(b+6,'ImageFromBatch',{image:previous.image,
-        batch_index:previous.lastFrame-seg.contextFrames+1,length:seg.contextFrames});
-      // Only already-generated full-canvas frames anchor continuity. Never
-      // replace the photo appearance with hard guides from the source video.
-      positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:link(5,1),vae:['3',0],image:history,frame_idx:0});
+      // Carry the original sampler AV latent, including the real temporal
+      // phase. No decoded-image selection, resizing or VAE re-encoding.
+      // Native reference conditioning (including the original photo) stays
+      // on the incoming conditioning; source performance remains Video 1.
+      positive=add(b+7,'MiniMaxH3MotionContext',{conditioning:positive,vae:['3',0],
+        latent:link(5,1),context_latent:previous.latent,
+        context_length:String(seg.contextFrames),audio_context_length:0});
     }
-    if(audio)positive=add(b+8,'MiniMaxH3AddGuide',{positive,latent:link(5,1),audio_vae:['4',0],audio,frame_idx:0});
+    if(audio){
+      // Motion Context supplies the pinned head's audio with its AV tail.
+      // Anchor original source audio only after that head, without laying
+      // a second, different audio keyframe over those same five frames.
+      const guideAudio=seg.contextFrames?add(b+17,'VHS_LoadAudioUpload',{audio:videoName,
+        start_time:seg.start/24,duration:seg.length/24}):audio;
+      positive=add(b+8,'MiniMaxH3AddGuide',{positive,latent:link(5,1),audio_vae:['4',0],
+        audio:guideAudio,frame_idx:seg.contextFrames});
+    }
     add(b+16,'MathExpression|pysssss',{expression:String(seg.seed)});
     add(b+9,'RandomNoise',{noise_seed:link(16)});
     add(b+10,'CFGGuider',{model:['8',0],positive,negative:positive,cfg:1});
     add(b+11,'SamplerCustomAdvanced',{noise:link(9),guider:link(10),sampler:['40',0],sigmas:['41',0],latent_image:link(5,1)});
     add(b+12,'LTXVSeparateAVLatent',{av_latent:link(11)});
     const decoded=add(b+13,'VAEDecode',{samples:link(12),vae:['3',0]});
-    previous={image:decoded,lastFrame:seg.inputFrames-1};
+    previous={latent:link(11)};
     const trimmed=add(b+14,'ImageFromBatch',{image:decoded,batch_index:seg.contextFrames,length:seg.length});
     exports.push(add(b+15,'ImageCrop',{image:trimmed,width:source.outputWidth,height:source.outputHeight,x:source.padLeft,y:source.padTop}));
   }
