@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,AKATZ_TURBO_ASSET,
-  prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan} from '../h3-akatz-motion.js';
+  prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from '../h3-akatz-motion.js';
 import {h3PhotoPlan,H3_DEFAULT_PROFILE} from '../minimax-h3-motion.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
@@ -55,7 +55,9 @@ for(let frames=6;frames<=362;frames++){
     assert.deepEqual([at(5).width,at(5).height],[1088,1952]);
     assert.deepEqual([at(15).width,at(15).height],[1080,1936]);
     assert.deepEqual(at(15).image,link(14));assert.deepEqual(at(14).image,link(13));
-    assert.equal(typeof at(9).noise_seed,'number');assert.equal(at(9).noise_seed,seg.seed);
+    assert.deepEqual(at(9).noise_seed,link(16));
+    assert.equal(g[String(b+16)].class_type,'MathExpression|pysssss');
+    assert.equal(at(16).expression,String(seg.seed));
     assert.equal(at(10).cfg,1);assert.deepEqual(at(10).model,g['41'].inputs.model);
     if(i){
       const prev=plan.segments[i-1],previousBase=b-40;
@@ -95,6 +97,10 @@ assert.equal(h3NodeClass('104',{revision:'akatz-native-1080-v1'}),'SamplerCustom
 for(const revision of ['akatz-native-1080-v1','akatz-native-1080-v2','akatz-native-1080-v3'])
   assert.equal(h3NodeClass('10',{revision}),'BlockSparseAttention','Old in-flight tasks keep their original trace schema');
 assert.equal(h3NodeClass('10',akatzExecutionPlan(sourceFor(361))),null);
+assert.equal(h3NodeClass('10',{revision:'akatz-native-1080-v4',samplerCount:3}),null,
+  'Dense v4 history must not be relabelled as sparse after the seed repair');
+assert.equal(h3NodeClass('1016',{revision:'akatz-native-1080-v4',samplerCount:3}),null);
+assert.equal(h3NodeClass('1016',akatzExecutionPlan(sourceFor(361))),'MathExpression|pysssss');
 assert.equal(h3NodeClass('1131',{revision:'akatz-native-1080-v2',samplerCount:4}),'SamplerCustomAdvanced');
 assert.equal(h3NodeClass('1131',akatzExecutionPlan(sourceFor(361))),null,'The new profile must have no fourth window');
 assert.throws(()=>akatzGraphForInputs({...args,imageName:'../private'}));
@@ -107,7 +113,7 @@ assert.throws(()=>akatzExecutionPlan({...args.source,seed:'42'}));
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
 const calls=[];let payload,submitted=0;
-const context={AKATZ_PROFILE,akatzGraphForInputs,runningHubInstanceType,
+const context={AKATZ_PROFILE,akatzGraphForInputs,akatzSeedNodeInfo,runningHubInstanceType,
   workflowGraphs:{minimaxH3Akatz:{revision:AKATZ_REVISION}},
   h3AkatzModels:{character:{ensure:async()=>{calls.push('character');return character;}},
     turbo:{ensure:async()=>{calls.push('turbo');return turbo;}}},
@@ -119,16 +125,46 @@ const task={apiKey:'fixture-only',workflowId:'owner-workflow',workflowKey:'minim
   onBeforeSubmit:()=>calls.push('submit'),onModelPreparation:()=>calls.push('models')};
 await context.createTask(task);
 assert.deepEqual(calls,['models','character','turbo','submit']);assert.equal(submitted,1);
-assert.equal(payload.instanceType,'plus');assert.deepEqual([...payload.nodeInfoList],[]);
+assert.equal(payload.instanceType,'plus');assert.deepEqual([...payload.nodeInfoList],akatzSeedNodeInfo(task.h3Source));
 assert.equal(payload.retainSeconds,undefined);
 const sent=JSON.parse(payload.workflow);assert.equal(sent['7'].inputs.file_name,character);
-assert.equal(typeof sent['1009'].inputs.noise_seed,'number');
+assert.deepEqual(sent['1009'].inputs.noise_seed,['1016',0]);
 assert.equal(Object.values(sent).filter(n=>n.class_type==='SamplerCustomAdvanced').length,3);
 assert.equal(sent['41'].inputs.steps,4);
 await assert.rejects(context.createTask({...task,mode:'standard'}),/Plus/);assert.equal(submitted,1);
 context.h3AkatzModels.turbo.ensure=async()=>{throw Error('Model setup incomplete');};
 await assert.rejects(context.createTask(task),e=>e.code==='H3_MODEL_PREPARATION_FAILED'&&/Model setup incomplete/.test(e.message));assert.equal(submitted,1,
   'Failed model setup cannot submit a paid task');
+
+// Provider contract regression: RH resets literal seed widgets, and its API
+// overrides can arrive as strings. Neither operation may turn a linked Akatz
+// seed into an unrelated random value or the string that broke the GPU sampler.
+for(const frames of [6,124,125,346,361,362])for(const seed of [0,104757304,2**32-1]){
+  const source={...sourceFor(frames),seed},plan=akatzExecutionPlan(source);
+  const providerGraph=akatzGraphForInputs({...args,source});
+  for(const n of Object.values(providerGraph))if(n.class_type==='RandomNoise'&&!Array.isArray(n.inputs.noise_seed))
+    n.inputs.noise_seed=777; // documented default reset for seed widgets
+  const overrides=akatzSeedNodeInfo(source);
+  assert.equal(overrides.length,plan.samplerCount);
+  for(const override of overrides){
+    assert.equal(override.fieldName,'expression','Never override noise_seed directly');
+    assert.match(override.fieldValue,/^(0|[1-9][0-9]*)$/);
+    providerGraph[override.nodeId].inputs[override.fieldName]=String(override.fieldValue);
+  }
+  const expressions=plan.segments.map((seg,i)=>{
+    const b=1000+i*40,ref=providerGraph[String(b+9)].inputs.noise_seed;
+    assert.deepEqual(ref,[String(b+16),0]);
+    assert.equal(providerGraph[ref[0]].class_type,'MathExpression|pysssss');
+    return providerGraph[ref[0]].inputs.expression;
+  });
+  // Numeric strings are evaluated on the INT output, not passed to Noise_RandomNoise.
+  const values=JSON.parse(execFileSync('python3',['-c',
+    'import ast,json,sys; v=[ast.literal_eval(s) for s in json.loads(sys.argv[1])]; assert all(type(n) is int for n in v); print(json.dumps(v))',
+    JSON.stringify(expressions)],{encoding:'utf8'}));
+  assert.deepEqual(values,plan.segments.map(s=>s.seed));
+  assert.equal(providerGraph['41'].inputs.steps,4);
+  assert.equal(providerGraph['490'].inputs.crf,12);
+}
 
 // Actual short, rotated media preprocessing; compare against FFmpeg's own
 // autorotated source frame to catch a second rotation or a geometry change.
@@ -182,4 +218,5 @@ try{
   assert.ok(newMse<oldMse*.85,`Driver detail regressed: new MSE ${newMse}, old ${oldMse}`);
   console.log('PASS: actual low-resolution driver pixel error reduced '+Math.round((1-newMse/oldMse)*100)+'% at identical frame count, pixels and orientation; no inference');
 }finally{if(detail)await detail.release();fs.rmSync(detailDir,{recursive:true,force:true});}
-console.log('PASS: dense four-step Ref2VA, explicit source expression timing, at most 12 total steps, generated-only five-frame continuity, exhaustive 6–362 frame timeline, native 1080, rotated short input and one owner-initiated provider submission');
+console.log('PASS: provider-safe INT seed links with string API overrides, dense four-step Ref2VA, at most 12 total steps, exhaustive 6–362 frame timeline, native 1080 and one owner-initiated provider submission; GPU appearance remains unverified');
+

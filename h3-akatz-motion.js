@@ -6,7 +6,7 @@ import {validUploadedH3Lora} from './h3-appearance-model.js';
 import {randomInt} from 'node:crypto';
 
 export const AKATZ_PROFILE='akatz-v1.5-native4-ref2v';
-export const AKATZ_REVISION='akatz-native-1080-v4';
+export const AKATZ_REVISION='akatz-native-1080-v5';
 export const AKATZ_MAX_FRAMES=362;
 export const AKATZ_WINDOW_FRAMES=124;
 export const AKATZ_CONTEXT_FRAMES=5;
@@ -40,13 +40,14 @@ export const AKATZ_NODE_CLASSES=Object.freeze({
 const WINDOW_NODE_CLASSES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBatch',
   'VHS_LoadAudioUpload','MiniMaxH3ReferenceToVideo','ImageFromBatch','MiniMaxH3AddGuide',
   'MiniMaxH3AddGuide','RandomNoise','CFGGuider','SamplerCustomAdvanced','LTXVSeparateAVLatent',
-  'VAEDecode','ImageFromBatch','ImageCrop'];
+  'VAEDecode','ImageFromBatch','ImageCrop','MathExpression|pysssss'];
 export function akatzNodeClass(node,plan){
   if(plan?.revision==='akatz-native-1080-v1')return V1_NODE_CLASSES[String(node)]||null;
-  if(!['akatz-native-1080-v2','akatz-native-1080-v3',AKATZ_REVISION].includes(plan?.revision))return null;
-  if(String(node)==='10'&&plan.revision!==AKATZ_REVISION)return 'BlockSparseAttention';
+  if(!['akatz-native-1080-v2','akatz-native-1080-v3','akatz-native-1080-v4',AKATZ_REVISION].includes(plan?.revision))return null;
+  if(String(node)==='10'&&['akatz-native-1080-v2','akatz-native-1080-v3'].includes(plan.revision))return 'BlockSparseAttention';
   if(AKATZ_NODE_CLASSES[String(node)])return AKATZ_NODE_CLASSES[String(node)];
   const n=Number(node),index=Math.floor((n-1000)/40),offset=(n-1000)%40;
+  if(offset===16&&plan.revision!==AKATZ_REVISION)return null;
   return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODE_CLASSES.length?
     WINDOW_NODE_CLASSES[offset]||null:null;
 }
@@ -76,6 +77,8 @@ export function akatzExecutionPlan(source){
     sampling:{...AKATZ_SAMPLING,character:'Akatz V1.5',turbo:'Ref2VA Turbo 4-step v0.1',
       characterSha256:AKATZ_ASSET.sha256,turboSha256:AKATZ_TURBO_ASSET.sha256},
     nativeWindowFrames:AKATZ_WINDOW_FRAMES,samplerCount:p.segments.length,seed:p.seed,
+    seedTransport:'linked_int_expression_with_api_override',
+    providerSeedVerification:'pending_output_metadata',
     workBudget:{totalSteps:p.segments.length*AKATZ_SAMPLING.steps,maxTotalSteps:12,
       targetSeconds:1500,providerHardLimitSeconds:2400,measuredRuntimeSeconds:null},
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
@@ -95,6 +98,16 @@ export function akatzExecutionPlan(source){
 function inputName(value){
   if(typeof value!=='string'||!value||value.length>500||/[\u0000-\u001f\\]/.test(value)||
     value.startsWith('/')||value.includes('://')||value.split('/').includes('..'))throw Error('File Akatz tidak valid.');
+}
+// RunningHub resets seed widgets unless nodeInfoList preserves them. Its
+// override of noise_seed previously arrived at RandomNoise as a string and
+// failed inside the final sampler. Override a decimal STRING instead, then
+// use MathExpression's INT output for the seed. Never replace this link with
+// an API noise_seed override. This node already executes on the Vanta worker.
+export function akatzSeedNodeInfo(source){
+  return plan(source).segments.map((seg,i)=>({
+    nodeId:String(1016+i*40),fieldName:'expression',fieldValue:String(seg.seed)
+  }));
 }
 export function akatzGraphForInputs({imageName,videoName,source,characterLoraFile,turboLoraFile}){
   inputName(imageName);inputName(videoName);const p=plan(source);
@@ -164,7 +177,8 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
       positive=add(b+7,'MiniMaxH3AddGuide',{positive,latent:link(5,1),vae:['3',0],image:history,frame_idx:0});
     }
     if(audio)positive=add(b+8,'MiniMaxH3AddGuide',{positive,latent:link(5,1),audio_vae:['4',0],audio,frame_idx:0});
-    add(b+9,'RandomNoise',{noise_seed:seg.seed});
+    add(b+16,'MathExpression|pysssss',{expression:String(seg.seed)});
+    add(b+9,'RandomNoise',{noise_seed:link(16)});
     add(b+10,'CFGGuider',{model:['8',0],positive,negative:positive,cfg:1});
     add(b+11,'SamplerCustomAdvanced',{noise:link(9),guider:link(10),sampler:['40',0],sigmas:['41',0],latent_image:link(5,1)});
     add(b+12,'LTXVSeparateAVLatent',{av_latent:link(11)});
@@ -180,3 +194,4 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
     save_metadata:true,trim_to_audio:false,pingpong:false,save_output:true,no_preview:false});
   return g;
 }
+

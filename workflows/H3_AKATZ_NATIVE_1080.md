@@ -84,6 +84,14 @@ Automatic paid H3 benchmark flags are disabled for owner testing. The temporary 
 
 The owner will evaluate v4 outputs for native-looking detail, detail stability throughout the clip and source facial expressions, with regression checks for the already acceptable identity/hair, body proportions, clothes/accessories, lighting and source motion/camera. V3 has completed native 1080 owner renders; v4's memory, visual quality and requested runtime target of at most 25 minutes for 15 seconds remain unverified until the owner tests it.
 
+## Provider seed transport repair, 2026-11-04
+
+Revision `akatz-native-1080-v5` retains the v4 visual recipe and fixes a confirmed provider-boundary mismatch. The attached output from task `2117619542444568578` contains seeds 5574/192/8806, while its Vanta plan records 104757304/104757305/104757306. RunningHub documents automatic seed reset when nodeInfoList does not preserve the seed. A direct noise_seed override previously arrived as a string and failed inside a sampler.
+
+Each Akatz noise seed now links to the INT output of a numeric-literal `MathExpression|pysssss`; the API overrides only that node's STRING expression. This already-supported worker node explicitly returns an integer. Sampling, LoRAs, photo/video conditioning, original audio, frame counts, five-frame continuation, dense attention and CRF 12 remain the v4 settings. Historical trace schemas remain readable. The owner's next output metadata must confirm the live provider preserves these links and values; local contract tests are not a provider attestation or proof of improved texture.
+
+See [the texture/seed audit](../docs/H3_TEXTURE_AND_SEED_AUDIT_2026-11-04.md) for frame findings, KOH comparison, evidence boundaries and acceptance requirements. A separate 346-frame v4 task completed at 1042 provider seconds, but its video has not been visually assessed here. No new GPU inference is initiated by this repair or its tests.
+
 ## Primary sources
 
 - [Akatz model and examples](https://huggingface.co/akatz-ai/MiniMax-H3-Character-Swap-LoRA)
@@ -96,3 +104,4 @@ The owner will evaluate v4 outputs for native-looking detail, detail stability t
 - [Native H3 reference and guide implementation](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_minimax_h3.py)
 - [Native sparse-attention documentation](https://github.com/Comfy-Org/embedded-docs/blob/main/comfyui_embedded_docs/docs/BlockSparseAttention/en.md)
 - [Native sparse-attention implementation](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_sparse_attention.py)
+
