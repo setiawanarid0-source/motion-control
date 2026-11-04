@@ -66,8 +66,9 @@ memory or runtime. Those measurements and visible quality remain unqualified.
   candidate cover duration boundaries and audio states. The v7 graph must
   match these pre-activation contracts; expected hashes were not generated
   from the new production implementation.
-- Historical v1–v6 task-progress mappings remain valid. Existing context-window
-  candidate and execution-trace tests still pass.
+- Historical v1–v6 task-progress mappings remain valid and execution-trace
+  regression checks pass. The unrelated context-window research stays isolated
+  in its earlier draft branch.
 - Existing raw-latent schema proof remains required before normal multiwindow
   media/model upload. No new schema probe or inference is invoked by deployment.
 - The unused four-sampler comparison from draft PR56 is not imported or shipped
