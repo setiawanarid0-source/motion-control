@@ -6,7 +6,7 @@ import {
   mayTryNextAccountAfterCreate
 } from '../runninghub-capacity.js';
 import {rankGenerationAccounts} from '../runninghub-account-priority.js';
-import {graphValidationError} from '../runninghub-graph-validation.js';
+import {graphValidationError,isDefinitelyRejectedGraph} from '../runninghub-graph-validation.js';
 import {rifeGraphForSourceFps,RIFE_TARGET_FPS} from '../rife-video.js';
 
 assert.equal(explicitQueueMaxed({code:500,msg:'TASK_QUEUE_MAXED'}),true);
@@ -56,7 +56,8 @@ const context={
   runningHubInstanceType:mode=>mode==='plus'?'plus':'default',
   workflowGraphs:{current:{nodes:'unchanged'},rife60:JSON.parse(fs.readFileSync(new URL('../workflows/rife60-api.json',import.meta.url),'utf8'))},
   rifeGraphForSourceFps,RIFE_TARGET_FPS,
-  explicitQueueMaxed,queueCapacityError,graphValidationError,
+  explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,mayTryNextAccountAfterCreate,
+  graphValidationError,isDefinitelyRejectedGraph,
   rhJson:async(path,key,payload)=>{
     requests.push({path,key,payload});
     return responses[nextReply++];
@@ -110,13 +111,13 @@ for(const reply of [{code:402,msg:paidMessage},{code:500,message:paidMessage},
   responses.push(reply);
   await assert.rejects(context.createTask({...rifeArgs,apiKey:'fixture-consumer'}),
     e=>e.code==='RUNNINGHUB_PAID_BALANCE_REQUIRED'&&e.definitelyRejected===true&&
-      /kredit RH berbayar/.test(e.message)&&/Task belum dibuat/.test(e.message));
+      /Insufficient paid RH coins/.test(e.message)&&/Task belum dibuat/.test(e.message));
   const sent=requests.at(-1).payload;
   assert.equal(sent.nodeInfoList.find(x=>x.nodeId==='2'&&x.fieldName==='source_fps').fieldValue,40);
   assert.equal(sent.nodeInfoList.find(x=>x.nodeId==='2'&&x.fieldName==='target_fps').fieldValue,60);
   assert.equal(sent.retainSeconds,undefined);
 }
-for(const reply of [{code:0,msg:paidMessage},
+for(const reply of [{msg:paidMessage},{code:'unknown',msg:paidMessage},{code:true,msg:paidMessage},{code:0,msg:paidMessage},
   {code:402,msg:paidMessage,taskId:'2109126366731984999'},
   {code:402,msg:paidMessage,data:{taskId:'2109126366731984999'}},
   {code:500,msg:'Insufficient balance'},
@@ -137,14 +138,19 @@ context.rhJson=normalRequest;
 const handlerStart=server.indexOf('async function handleGeneration(');
 const handlerEnd=server.indexOf('generationQueue.setExecutor(runQueuedGeneration);',handlerStart);
 let attempts=0,saved,refusal,discarded=0;
+const registered=[];
+let pool=[{id:'one',name:'Account 01',key:'fixture-one'},{id:'two',name:'Account 02',key:'fixture-two'}];
 const worker={...context,IMAGE_MAX:20e6,VIDEO_MAX:100e6,MIN_POOL_CREDITS:100,LOCKED_WORKFLOW_ID:'fixture-workflow',
-  workflowGraphs:{current:{},rife60:context.workflowGraphs.rife60},console:{info(){},warn(){},error(){}},
+  workflowGraphs:{current:{},rife60:context.workflowGraphs.rife60},
+  workflowMeta:{current:{name:'Current'},rife60:{name:'RIFE',outputKind:'video'}},
+  console:{info(){},warn(){},error(){}},
   verifyRifeInput:async()=>({sourceFps:40}),
   prepareAdaptiveRifeVideo:async file=>({file,sourceFps:40,adaptive:false,async release(){}}),
-  getPersistentAccounts:()=>({deviceId:'fixture-device',accounts:[{id:'one',key:'fixture-one'},{id:'two',key:'fixture-two'}]}),
+  getPersistentAccounts:()=>({deviceId:'fixture-device',accounts:pool}),
   accountStatus:async()=>({remainCoins:500}),canGenerateWithAccount:()=>true,rankGenerationAccounts,
   stageReferences:async()=>({staged:true}),discardReferences:async()=>{discarded++;},
-  taskRegistry:{ensureWritable(){}},
+  taskRegistry:{ensureWritable(){},add(task){registered.push(task);}},
+  observeH3Progress(){},commitReferences:async()=>({video:true,image:true}),loadGlobalAccounts:()=>[],
   createTask:async args=>{attempts++;
     if(refusal==='RUNNINGHUB_PAID_BALANCE_REQUIRED')return context.createTask(args);
     if(refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE')args.onBeforeSubmit();
@@ -157,13 +163,13 @@ for(refusal of ['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE',
   attempts=0;saved={stage:'queued'};
   const paid=refusal==='RUNNINGHUB_PAID_BALANCE_REQUIRED';
   if(paid)responses.push({code:402,msg:paidMessage});
-  await worker.run({jobId:'fixture-job',deviceId:'fixture-device',body:{workflow:paid?'rife60':'current',mode:'plus',accountId:'auto'},
+  await worker.run({jobId:'fixture-job',deviceId:'fixture-device',body:{workflow:paid?'rife60':'current',mode:'plus',accountId:paid?'one':'auto'},
     image:{mimetype:'image/jpeg',originalname:'photo.jpg',size:1},video:{mimetype:'video/mp4',originalname:'driver.mp4',size:1}},
     stage=>{saved.stage=stage;});
   assert.equal(attempts,1,'A definite refusal must not repeat model setup or submit through other accounts');
   assert.equal(saved.stage,'error','The UI must receive a terminal failure, not poll indefinitely');
   assert.equal(saved.failureStage,refusal==='H3_MODEL_PREPARATION_FAILED'?'uploading_inputs':'submitting');
-  assert.match(saved.error,paid?/kredit RH berbayar/:refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE'?/Saldo tidak mencukupi/:/Transfer model terhenti/);
+  assert.match(saved.error,paid?/Insufficient paid RH coins/:refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE'?/Saldo tidak mencukupi/:/Transfer model terhenti/);
   if(paid)assert.equal(saved.failureCode,'RUNNINGHUB_PAID_BALANCE_REQUIRED');
 }
 assert.equal(discarded,3,'Rejected submissions release staged media');
@@ -176,12 +182,78 @@ const ui={data:saved,modelProgressBar(){},$:selector=>{
 vm.createContext(ui);
 vm.runInContext(app.slice(app.indexOf('function displaySubmissionFailure('),
   app.indexOf('async function restoreRecentRifeFailure('))+'\ndisplaySubmissionFailure(data);',ui);
-assert.equal(fields.get('#taskStatus').textContent,'Kredit RH berbayar diperlukan');
-assert.match(fields.get('#taskFailureDetail').textContent,/kredit RH berbayar.*kredit RH gratis/);
+assert.equal(fields.get('#taskStatus').textContent,'Pengiriman ditolak RunningHub');
+assert.match(fields.get('#taskFailureDetail').textContent,/API RunningHub.*Insufficient paid RH coins/);
 ui.data={stage:'uncertain',error:'Acknowledgement lost'};
 vm.runInContext('displaySubmissionFailure(data);',ui);
 assert.equal(fields.get('#taskStatus').textContent,'Status penerimaan belum pasti',
   'Real acknowledgement loss must retain its duplicate-submission warning');
+
+// Actual RIFE create + account loop + durable worker: only explicit, taskless
+// refusals may move an Automatic request to another account. No live APIs.
+async function runRifeReplies(replies,{accountId='auto',workflow='rife60',accountCount=2}={}){
+  responses.push(...replies);attempts=0;registered.length=0;saved={stage:'queued'};
+  pool=[{id:'one',name:'Account 01',key:'fixture-one'},
+    {id:'two',name:'Account 02',key:'fixture-two'},
+    ...(accountCount===3?[{id:'zzz',name:'Account 03',key:'fixture-three'}]:[])];
+  refusal='RUNNINGHUB_PAID_BALANCE_REQUIRED';
+  const before=requests.length;
+  await worker.run({jobId:'fixture-job',deviceId:'fixture-device',body:{workflow,mode:'plus',accountId},
+    image:{mimetype:'image/jpeg',originalname:'photo.jpg',size:1},
+    video:{mimetype:'video/mp4',originalname:'two-second-source.mp4',size:1}},
+    (stage,_message,details)=>{saved.stage=stage;if(details?.account)saved.submissionAccount=details.account;});
+  return requests.slice(before);
+}
+const refused={code:402,msg:paidMessage};
+const accepted={code:0,msg:'success',data:{taskId:'2119000000000000001',taskStatus:'RUNNING'}};
+const rerouted=await runRifeReplies([refused,accepted]);
+assert.equal(attempts,2);assert.equal(saved.stage,'accepted');
+assert.equal(registered.length,1,'Exactly one accepted task is registered');
+assert.equal(registered[0].accountId,'two');
+assert.equal(saved.task.accountId,'two');
+assert.deepEqual(JSON.parse(JSON.stringify(saved.submissionAccount)),{id:'two',name:'Account 02',mode:'plus'});
+assert.equal(rerouted[0].payload.workflow,rerouted[1].payload.workflow);
+assert.equal(rerouted[1].payload.instanceType,'plus');
+assert.equal(rerouted[1].payload.nodeInfoList.find(x=>x.fieldName==='source_fps').fieldValue,40);
+assert.equal(rerouted[1].payload.nodeInfoList.find(x=>x.fieldName==='target_fps').fieldValue,60);
+
+await runRifeReplies([refused,refused]);
+assert.equal(attempts,2);assert.equal(saved.stage,'error');
+assert.equal(saved.failureStage,'submitting');assert.equal(registered.length,0);
+assert.match(saved.error,/menolak 2 akun.*Tidak ada task yang dibuat/);
+
+await runRifeReplies([accepted],{accountCount:3});
+assert.equal(attempts,1);assert.equal(saved.stage,'accepted');assert.equal(registered.length,1);
+await runRifeReplies([refused,{code:421,msg:'TASK_QUEUE_MAXED'},accepted],{accountCount:3});
+assert.equal(attempts,3);assert.equal(saved.stage,'accepted');assert.equal(registered.length,1);
+
+await runRifeReplies([refused,null],{accountCount:3});
+assert.equal(attempts,2);assert.equal(saved.stage,'uncertain');assert.equal(registered.length,0);
+for(const response of [null,{msg:paidMessage},{code:'unknown',msg:paidMessage},{code:true,msg:paidMessage},{code:0,msg:paidMessage},
+  {code:402,msg:paidMessage,taskId:'2119000000000000001'},
+  {code:402,msg:paidMessage,data:{taskId:'2119000000000000001'}}]){
+  await runRifeReplies([response],{accountCount:3});
+  assert.equal(attempts,1,'Unknown or contradictory acknowledgement cannot reach another account');
+  assert.equal(saved.stage,'uncertain');assert.equal(registered.length,0);
+}
+context.rhJson=async()=>{throw Object.assign(new Error('ETIMEDOUT'),{code:'ETIMEDOUT'});};
+await runRifeReplies([],{accountCount:3});
+assert.equal(attempts,1);assert.equal(saved.stage,'uncertain','A transport timeout cannot reroute');
+context.rhJson=normalRequest;
+const originalAdd=worker.taskRegistry.add;
+worker.taskRegistry.add=()=>{throw Error('registry unavailable');};
+await runRifeReplies([accepted],{accountCount:3});
+assert.equal(attempts,1);assert.equal(saved.stage,'accepted');
+assert.equal(saved.task.trackingRegistered,false,'A local registry failure cannot reroute an accepted create');
+worker.taskRegistry.add=originalAdd;
+await runRifeReplies([refused],{accountId:'one',accountCount:3});
+assert.equal(attempts,1);assert.equal(saved.stage,'error','Manual account choice stays fixed');
+await runRifeReplies([refused],{workflow:'current',accountCount:3});
+assert.equal(attempts,1);assert.equal(saved.stage,'error','Other workflow billing behavior stays fixed');
+ui.data={stage:'uncertain',failureStage:'submitting',error:'Acknowledgement lost',
+  submissionAccount:{id:'two',name:'Account 02',mode:'plus'}};
+vm.runInContext('displaySubmissionFailure(data);',ui);
+assert.equal(fields.get('#taskAccount').textContent,'Account 02');
 
 const accounts=[
   {account:{id:'unusable',addedAt:'2026-10-20T12:00:00Z'},status:{remainCoins:700}},
@@ -209,4 +281,4 @@ assert.ok(queue.includes("maxConcurrent=1"),
   'One preflight at a time continues protecting uploads without serializing completed paid tasks');
 assert.ok(/app\.js\?v=20\d{6}-[a-z0-9-]+/.test(html),
   'Browser cache bust is required for user-visible queue error text');
-console.log('PASS: capacity rerouting, definite paid-credit rejection through actual create/worker/UI, no retry for billing or unknown acceptance, and unchanged RIFE 40 to 60 payload');
+console.log('PASS: RIFE Automatic reroutes exact taskless billing refusals, stops after acceptance or uncertainty, preserves manual/other workflow choices and 40-to-60 payload, and attributes the selected account');

@@ -11,6 +11,10 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]
 const WAITING=new Set(['queued','analyzing','checking_account','preparing_motion','saving_references','uploading_inputs','preparing_models']);
 const FINISHED=new Set(['accepted','error','uncertain']);
 const MODEL_PHASES=new Set(['checking_cache','downloading','verifying','uploading','waiting_confirmation','ready']);
+function safeSubmissionAccount(value){
+  if(!value||!UUID.test(String(value.id||''))||!['standard','plus','lite'].includes(value.mode))return null;
+  return {id:value.id,name:/^Account \d{2,4}$/.test(String(value.name||''))?value.name:'Akun RunningHub',mode:value.mode};
+}
 function safeModelPreparation(value){
   if(!value||!MODEL_PHASES.has(value.phase)||!['character','accelerator','all'].includes(value.component))return null;
   const result={phase:value.phase,component:value.component};
@@ -60,11 +64,13 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1,me
   }
   function view(x){
     const modelPreparation=x.stage==='preparing_models'?safeModelPreparation(x.modelPreparation):null;
+    const submissionAccount=safeSubmissionAccount(x.submissionAccount);
     return {jobId:x.jobId,stage:x.stage,message:x.message||LABELS[x.stage]||'Menyiapkan',
       createdAt:x.createdAt,updatedAt:x.updatedAt,
       workflow:x.body?.workflow||null,failureStage:x.failureStage||null,
       task:x.stage==='accepted'?x.task||null:null,error:x.error||null,
       ...(x.failureCode==='RUNNINGHUB_PAID_BALANCE_REQUIRED'?{failureCode:x.failureCode}:{}),
+      ...(submissionAccount?{submissionAccount}:{}),
       ...(modelPreparation?{modelPreparation}:{})};
   }
   function owned(id,deviceId){
@@ -204,7 +210,9 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1,me
       const report=(stage,message,details)=>{
         if(!LABELS[stage])throw Error('Unknown generation state '+stage);
         const modelPreparation=stage==='preparing_models'?safeModelPreparation(details):null;
-        update(next.jobId,{stage,message:message||LABELS[stage],modelPreparation});
+        const submissionAccount=stage==='submitting'?safeSubmissionAccount(details?.account):null;
+        update(next.jobId,{stage,message:message||LABELS[stage],modelPreparation,
+          ...(submissionAccount?{submissionAccount}:{})});
         if(modelPreparation)console.info('H3 model transfer',JSON.stringify({jobId:next.jobId,...modelPreparation}));
         else console.info('Media preflight stage',next.jobId,stage);
       };

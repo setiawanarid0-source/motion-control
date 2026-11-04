@@ -1,5 +1,10 @@
 # RIFE: surface a confirmed paid-credit refusal
 
+This records the earlier message-only release. Its RIFE Automatic stop-on-first-
+refusal behavior is superseded by [the account fallback repair](RIFE_AUTOMATIC_ACCOUNT_REPAIR_2026-11-04.md).
+The provider message is evidence of a refusal, not proof of a global paid-credit
+policy change or of the selected account's paid/free balance.
+
 4 November 2026. This fixes submission error reporting, not provider billing
 eligibility or RIFE model output.
 
@@ -61,8 +66,8 @@ complete application checks remain part of CI.
 
 No new RunningHub task, model/media upload, schema probe
 or paid comparison is performed for this repair. The original interpolation
-output is not claimed successful: the provider's paid-credit requirement must
-be satisfied separately before the owner can run that task through this key.
+output is not claimed successful. The cause of the provider's account-eligibility
+decision remains unverified; a total RH balance does not resolve that question.
 
 Primary API context: [RunningHub account status](https://www.runninghub.ai/runninghub-api-doc-en/api-425761030)
 documents `remainCoins` and `apiType`; [key types](https://www.runninghub.ai/runninghub-api-doc-en/)

@@ -613,11 +613,12 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     // Any task ID or an explicit success code keeps the response ambiguous.
     const paidRefusal=/^Insufficient paid RH coins\. Consumer API keys can only spend paid RH coins; free RH coins are not accepted\.$/i;
     const messages=[data?.msg,data?.message,data?.data?.message,data?.data?.error];
-    if(data&&typeof data==='object'&&Number(data.code)!==0&&!data?.data?.taskId&&!data?.taskId&&
+    if(data&&typeof data==='object'&&['number','string'].includes(typeof data.code)&&
+      Number.isFinite(Number(data.code))&&Number(data.code)!==0&&!data?.data?.taskId&&!data?.taskId&&
       messages.some(message=>typeof message==='string'&&paidRefusal.test(message.replace(/\s+/g,' ').trim()))){
-      const error=new Error('RunningHub menolak task: kredit RH berbayar pada akun ini tidak mencukupi. '+
-        'API key consumer tidak dapat memakai kredit RH gratis. Task belum dibuat.');
-      error.code='RUNNINGHUB_PAID_BALANCE_REQUIRED';error.definitelyRejected=true;throw error;
+      const error=new Error('API RunningHub menolak akun ini dengan alasan "Insufficient paid RH coins". Task belum dibuat.');
+      error.code='RUNNINGHUB_PAID_BALANCE_REQUIRED';error.definitelyRejected=true;
+      error.providerCode=Number(data.code);throw error;
     }
     if(!data?.data?.taskId&&!data?.taskId&&data?.msg==='NOT_ENOUGH_BALANCE'){
       const error=new Error('RunningHub menolak task karena saldo akun tidak mencukupi. Task belum dibuat.');
@@ -923,6 +924,7 @@ async function handleGeneration(req,res){
     taskRegistry.ensureWritable();
     let lastError = null;
     let rejectedAtCapacity=0;
+    let rejectedByBilling=0;
     for (const account of candidates) {
       try {
         req.progress?.('uploading_inputs');
@@ -939,7 +941,8 @@ async function handleGeneration(req,res){
           h3Source,
           diagnosticAccount,
           diagnosticTaskId,
-          onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting');},
+          onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting',null,
+            {account:{id:account.id,name:account.name,mode}});},
           onModelPreparation:details=>req.progress?.('preparing_models',null,details),
         });
         // Task is accepted/paid: register it before any post-submit work.
@@ -996,6 +999,18 @@ async function handleGeneration(req,res){
         });
       } catch (error) {
         lastError = error;
+        if(videoOnly&&error.code==='RUNNINGHUB_PAID_BALANCE_REQUIRED'&&error.definitelyRejected===true){
+          // Only the exact structured provider refusal without any task ID is
+          // eligible. Automatic may continue; a manual choice never moves.
+          console.warn('RIFE account explicitly rejected before task creation',
+            {accountId:account.id,providerCode:error.providerCode});
+          if(requestedAccountId==='auto'){
+            rejectedByBilling++;
+            req.submissionAttempted=false;
+            if(account!==candidates.at(-1))req.progress?.('checking_account');
+            continue;
+          }
+        }
         if(['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE','RUNNINGHUB_PAID_BALANCE_REQUIRED'].includes(error.code)){
           req.submissionAttempted=false;break;
         }
@@ -1025,6 +1040,9 @@ async function handleGeneration(req,res){
     }
     if(rejectedAtCapacity===candidates.length)
       throw new Error('Semua akun RunningHub yang memenuhi syarat sedang penuh (TASK_QUEUE_MAXED). Task belum diterima; tunggu slot akun tersedia.');
+    if(rejectedByBilling===candidates.length&&lastError){
+      lastError.message='API RunningHub menolak '+rejectedByBilling+' akun yang diperiksa dengan alasan "Insufficient paid RH coins". Tidak ada task yang dibuat.';
+    }
     throw lastError || new Error('Tidak ada akun RunningHub yang dapat membuat task.');
   } catch (error) {
     cleanup();
