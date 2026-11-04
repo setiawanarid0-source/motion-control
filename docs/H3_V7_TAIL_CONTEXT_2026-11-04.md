@@ -1,5 +1,11 @@
 # H3 v7: longer native history in the final window
 
+**Status: rejected and rolled back to the v6 generation graph after the owner
+reported no improvement and worse quality. This file records the historical
+v7 experiment, not the active configuration.** See
+H3_REGRESSION_ROLLBACK_2026-11-04.md. Historical candidate contracts are retained
+in docs/fixtures/h3-v7-rejected-contract.json; they are not visual acceptance.
+
 4 November 2026. The owner will run generation tests. No paid comparison,
 model upload, RunningHub task submission or automatic test route is part of
 this release.
