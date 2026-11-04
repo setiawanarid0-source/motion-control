@@ -7,6 +7,7 @@ import {
 } from '../runninghub-capacity.js';
 import {rankGenerationAccounts} from '../runninghub-account-priority.js';
 import {graphValidationError} from '../runninghub-graph-validation.js';
+import {rifeGraphForSourceFps,RIFE_TARGET_FPS} from '../rife-video.js';
 
 assert.equal(explicitQueueMaxed({code:500,msg:'TASK_QUEUE_MAXED'}),true);
 assert.equal(explicitQueueMaxed({code:403,data:{message:'TASK_QUEUE_MAXED: no task slots'}}),true);
@@ -53,7 +54,8 @@ const context={
   uploadToRunningHub:async(key,file)=>{uploads.push([key,file.originalname]);return 'uploaded-'+file.originalname;},
   prepareDiagnosticAssets:()=>null,
   runningHubInstanceType:mode=>mode==='plus'?'plus':'default',
-  workflowGraphs:{current:{nodes:'unchanged'}},
+  workflowGraphs:{current:{nodes:'unchanged'},rife60:JSON.parse(fs.readFileSync(new URL('../workflows/rife60-api.json',import.meta.url),'utf8'))},
+  rifeGraphForSourceFps,RIFE_TARGET_FPS,
   explicitQueueMaxed,queueCapacityError,graphValidationError,
   rhJson:async(path,key,payload)=>{
     requests.push({path,key,payload});
@@ -100,34 +102,86 @@ for(const reply of [{code:500,msg:'NOT_ENOUGH_BALANCE',taskId:'21091263667319849
 }
 
 // Run the actual account loop and durable worker with mocked provider refusals.
+const paidMessage='Insufficient paid RH coins. Consumer API keys can only spend paid RH coins; free RH coins are not accepted.';
+const rifeArgs={...args,workflowKey:'rife60',imageFile:undefined,sourceFps:40,
+  videoFile:{originalname:'two-seconds-40fps.mp4'}};
+for(const reply of [{code:402,msg:paidMessage},{code:500,message:paidMessage},
+  {code:500,data:{message:paidMessage.replaceAll(' ','\n')}}]){
+  responses.push(reply);
+  await assert.rejects(context.createTask({...rifeArgs,apiKey:'fixture-consumer'}),
+    e=>e.code==='RUNNINGHUB_PAID_BALANCE_REQUIRED'&&e.definitelyRejected===true&&
+      /kredit RH berbayar/.test(e.message)&&/Task belum dibuat/.test(e.message));
+  const sent=requests.at(-1).payload;
+  assert.equal(sent.nodeInfoList.find(x=>x.nodeId==='2'&&x.fieldName==='source_fps').fieldValue,40);
+  assert.equal(sent.nodeInfoList.find(x=>x.nodeId==='2'&&x.fieldName==='target_fps').fieldValue,60);
+  assert.equal(sent.retainSeconds,undefined);
+}
+for(const reply of [{code:0,msg:paidMessage},
+  {code:402,msg:paidMessage,taskId:'2109126366731984999'},
+  {code:402,msg:paidMessage,data:{taskId:'2109126366731984999'}},
+  {code:500,msg:'Insufficient balance'},
+  {code:500,msg:'Connection lost after '+paidMessage}]){
+  responses.push(reply);
+  await assert.rejects(context.createTask({...rifeArgs,apiKey:'fixture-unconfirmed'}),
+    e=>e.code!=='RUNNINGHUB_PAID_BALANCE_REQUIRED',
+    'A task ID, contradictory success or arbitrary prose is never an unaccepted billing proof');
+}
+const normalRequest=context.rhJson;
+context.rhJson=async()=>{throw new Error(paidMessage);};
+await assert.rejects(context.createTask({...rifeArgs,apiKey:'fixture-transport'}),
+  e=>e.code!=='RUNNINGHUB_PAID_BALANCE_REQUIRED','A thrown transport error is not a structured provider refusal');
+context.rhJson=normalRequest;
+
 // Neither a failed shared model transfer nor a definite balance rejection may
 // loop through accounts or leave the browser polling an uncertain acceptance.
 const handlerStart=server.indexOf('async function handleGeneration(');
 const handlerEnd=server.indexOf('generationQueue.setExecutor(runQueuedGeneration);',handlerStart);
 let attempts=0,saved,refusal,discarded=0;
 const worker={...context,IMAGE_MAX:20e6,VIDEO_MAX:100e6,MIN_POOL_CREDITS:100,LOCKED_WORKFLOW_ID:'fixture-workflow',
-  workflowGraphs:{current:{}},console:{info(){},warn(){},error(){}},
+  workflowGraphs:{current:{},rife60:context.workflowGraphs.rife60},console:{info(){},warn(){},error(){}},
+  verifyRifeInput:async()=>({sourceFps:40}),
+  prepareAdaptiveRifeVideo:async file=>({file,sourceFps:40,adaptive:false,async release(){}}),
   getPersistentAccounts:()=>({deviceId:'fixture-device',accounts:[{id:'one',key:'fixture-one'},{id:'two',key:'fixture-two'}]}),
   accountStatus:async()=>({remainCoins:500}),canGenerateWithAccount:()=>true,rankGenerationAccounts,
   stageReferences:async()=>({staged:true}),discardReferences:async()=>{discarded++;},
   taskRegistry:{ensureWritable(){}},
-  createTask:async args=>{attempts++;if(refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE')args.onBeforeSubmit();
+  createTask:async args=>{attempts++;
+    if(refusal==='RUNNINGHUB_PAID_BALANCE_REQUIRED')return context.createTask(args);
+    if(refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE')args.onBeforeSubmit();
     throw Object.assign(new Error(refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE'?'Saldo tidak mencukupi. Task belum dibuat.':'Transfer model terhenti.'),{code:refusal});},
   safeH3Profile:()=>null,longH3Profile:()=>null,consistencyH3Profile:()=>null,
   safeH3FaceFocus:()=>null,safeH3Conditioning:()=>null,
   generationQueue:{read:()=>saved,update:(_id,patch)=>{saved={...saved,...patch};}}};
 vm.createContext(worker);vm.runInContext(server.slice(handlerStart,handlerEnd)+'\nthis.run=runQueuedGeneration;',worker);
-for(refusal of ['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE']){
+for(refusal of ['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE','RUNNINGHUB_PAID_BALANCE_REQUIRED']){
   attempts=0;saved={stage:'queued'};
-  await worker.run({jobId:'fixture-job',deviceId:'fixture-device',body:{workflow:'current',mode:'plus',accountId:'auto'},
+  const paid=refusal==='RUNNINGHUB_PAID_BALANCE_REQUIRED';
+  if(paid)responses.push({code:402,msg:paidMessage});
+  await worker.run({jobId:'fixture-job',deviceId:'fixture-device',body:{workflow:paid?'rife60':'current',mode:'plus',accountId:'auto'},
     image:{mimetype:'image/jpeg',originalname:'photo.jpg',size:1},video:{mimetype:'video/mp4',originalname:'driver.mp4',size:1}},
     stage=>{saved.stage=stage;});
   assert.equal(attempts,1,'A definite refusal must not repeat model setup or submit through other accounts');
   assert.equal(saved.stage,'error','The UI must receive a terminal failure, not poll indefinitely');
-  assert.equal(saved.failureStage,refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE'?'submitting':'uploading_inputs');
-  assert.match(saved.error,refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE'?/Saldo tidak mencukupi/:/Transfer model terhenti/);
+  assert.equal(saved.failureStage,refusal==='H3_MODEL_PREPARATION_FAILED'?'uploading_inputs':'submitting');
+  assert.match(saved.error,paid?/kredit RH berbayar/:refusal==='RUNNINGHUB_INSUFFICIENT_BALANCE'?/Saldo tidak mencukupi/:/Transfer model terhenti/);
+  if(paid)assert.equal(saved.failureCode,'RUNNINGHUB_PAID_BALANCE_REQUIRED');
 }
-assert.equal(discarded,2,'Rejected submissions release staged media');
+assert.equal(discarded,3,'Rejected submissions release staged media');
+// Render the actual Live Task failure function with the durable worker result.
+const fields=new Map();
+const ui={data:saved,modelProgressBar(){},$:selector=>{
+  if(!fields.has(selector))fields.set(selector,{textContent:'',classList:{add(){},remove(){}}});
+  return fields.get(selector);
+}};
+vm.createContext(ui);
+vm.runInContext(app.slice(app.indexOf('function displaySubmissionFailure('),
+  app.indexOf('async function restoreRecentRifeFailure('))+'\ndisplaySubmissionFailure(data);',ui);
+assert.equal(fields.get('#taskStatus').textContent,'Kredit RH berbayar diperlukan');
+assert.match(fields.get('#taskFailureDetail').textContent,/kredit RH berbayar.*kredit RH gratis/);
+ui.data={stage:'uncertain',error:'Acknowledgement lost'};
+vm.runInContext('displaySubmissionFailure(data);',ui);
+assert.equal(fields.get('#taskStatus').textContent,'Status penerimaan belum pasti',
+  'Real acknowledgement loss must retain its duplicate-submission warning');
 
 const accounts=[
   {account:{id:'unusable',addedAt:'2026-10-20T12:00:00Z'},status:{remainCoins:700}},
@@ -155,4 +209,4 @@ assert.ok(queue.includes("maxConcurrent=1"),
   'One preflight at a time continues protecting uploads without serializing completed paid tasks');
 assert.ok(/app\.js\?v=20\d{6}-[a-z0-9-]+/.test(html),
   'Browser cache bust is required for user-visible queue error text');
-console.log('PASS: explicit TASK_QUEUE_MAXED reroutes to next eligible 100+ RH account, manual choice honored, null/timeout never double charges, real createTask payload/workflow preserved, truthful status');
+console.log('PASS: capacity rerouting, definite paid-credit rejection through actual create/worker/UI, no retry for billing or unknown acceptance, and unchanged RIFE 40 to 60 payload');

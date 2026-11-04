@@ -64,6 +64,7 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1,me
       createdAt:x.createdAt,updatedAt:x.updatedAt,
       workflow:x.body?.workflow||null,failureStage:x.failureStage||null,
       task:x.stage==='accepted'?x.task||null:null,error:x.error||null,
+      ...(x.failureCode==='RUNNINGHUB_PAID_BALANCE_REQUIRED'?{failureCode:x.failureCode}:{}),
       ...(modelPreparation?{modelPreparation}:{})};
   }
   function owned(id,deviceId){
@@ -248,3 +249,4 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1,me
   }
   return {stage,read,update,view,owned,latest,setExecutor,resume,purge,recoverMedia,cleanupFinished,LABELS};
 }
+
