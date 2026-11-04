@@ -22,7 +22,7 @@ The plan logged at 2026-11-03 14:06:49 UTC and the attached output have the foll
 
 [RunningHub's nodeInfoList documentation](https://www.runninghub.ai/runninghub-api-doc-en/doc-8287464) explicitly states that API calls reset seeds unless they are preserved through nodeInfoList. Previously Akatz sent an empty list. Merely placing numeric seeds in workflow JSON therefore did not establish reproducibility. A previous direct `noise_seed` override reached a sampler as a string and failed task `2117100444870602753`; reintroducing that form is unsafe.
 
-Revision `akatz-native-1080-v5` routes each seed through a numeric-literal `MathExpression|pysssss` node's **INT** output and uses `nodeInfoList` only to override its STRING `expression`. No `noise_seed` API override is sent. The expression is constructed exclusively from a validated unsigned 32-bit integer. The installed worker has already executed this exact node class in tasks `2117504677084225537`, `2117504600521400322` and `2117509752015904770`. [Its upstream implementation](https://github.com/pythongosssss/ComfyUI-Custom-Scripts/blob/main/py/math_expression.py) returns `int(result)` on output zero. The new payload still needs output-metadata confirmation on the owner's next generation; local tests are not a live-provider seed attestation.
+Revision `akatz-native-1080-v5` routes each seed through a numeric-literal `MathExpression|pysssss` node's **INT** output and uses `nodeInfoList` only to override its STRING `expression`. No `noise_seed` API override is sent. The expression is constructed exclusively from a validated unsigned 32-bit integer. The installed worker has already executed this exact node class in tasks `2117504677084225537`, `2117504600521400322` and `2117509752015904770`. [Its upstream implementation](https://github.com/pythongosssss/ComfyUI-Custom-Scripts/blob/main/py/math_expression.py) returns `int(result)` on output zero. The subsequent owner-initiated v5 run failed the output-metadata seed check described below; local tests did not establish that RunningHub preserves this link.
 
 The LoRAs, native canvas, four-step schedule, three-window budget, five-frame history, input geometry, audio and expression path remain the v4 recipe. Other H3 profiles retain their existing submission contract. Historical v1–v4 progress schemas remain recognizable. No automatic render, replay, cancellation or replacement result is introduced.
 
@@ -35,3 +35,21 @@ The current website maps KOH (1) to `workflows/current-api.json`. That graph con
 Tests exercise all admitted 6–362-frame graphs, the real submission function with fake provider/model boundaries, seed rollover, API string coercion, simulated literal-seed reset, integer expression results, historical progress mapping and actual short/rotated CPU preprocessing. They do not run diffusion or qualify texture.
 
 For the next owner test, compare the executed output graph's seeds with the recorded plan, then inspect the complete video and native crops for skin, hair and garment stability, identity, source performance and runtime. Preserve native 1080, no upscale/downscale/refinement, and the accepted photo/motion roles. No new temporal-overlap or sampler change should be represented as visually qualified by this seed transport repair.
+
+## Follow-up: actual v5 output fails the seed check
+
+This supersedes the earlier pending-provider status. Railway successfully deployed commit `51b61f0b8511e7911c4d4f9354057dc8d7642ab6`, and task `2117790807000178689` ran `akatz-native-1080-v5` on 4 November 2026 at 08:27 WIB. Runtime was 1156 provider seconds and 1172.01 observed seconds. The owner reports no visible improvement; texture acceptance therefore remains failed. No additional render was submitted for this follow-up.
+
+The downloaded output contains 361 frames at 24 FPS, 1080×1936, lasting 15.041667 seconds. Its SHA-256 is `b1bafce7ed93893b254f103b5ae59d290539126c79c8d335a7dd3e1701ccedf3`. Metadata retains dense attention and CRF 12, confirming this is the newer graph rather than the attached sparse/CRF-16 output.
+
+| Noise node | Planned seed / expression | Noise seed in output metadata |
+| --- | ---: | ---: |
+| 1009 | 2194034757 | 2688 |
+| 1049 | 2194034758 | 1217 |
+| 1089 | 2194034759 | 1885 |
+
+Expression nodes 1016, 1056 and 1096 retain the planned decimal strings, but each RandomNoise input in the output graph is a new numeric literal rather than the submitted INT link. The v5 approach thus fails the provider metadata contract. Seeing the expression nodes execute does not prove the samplers consumed their values: the upstream MathExpression class declares `OUTPUT_NODE = True`, so disconnected expression nodes can still execute independently.
+
+The local provider simulation covered literal seed reset and string coercion, but did not model replacement of connected seed inputs. Passing those tests and successful deployment were insufficient evidence of a working seed repair. The v5 change also left the v4 temporal generation method unchanged: three independent samplers with five generated continuation frames. This review does not establish that seed reset or that continuation method causes the reported texture defect, and KOH's distinct context fusion was not implemented in v5.
+
+There is no verified texture fix or verified seed preservation in the current live v5 workflow. Do not represent an unchanged rerun as a demonstrated visual remedy. Further visual qualification must use non-explicit test media and actual provider-output evidence; no paid task or speculative sampler change is introduced by this documentation update.
