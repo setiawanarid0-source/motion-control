@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {CONTEXT_INSPECT_ROUTE,CONTEXT_NODE,CONTEXT_GUARD,CONTEXT_NEGATIVE,
-  contextInspectionGraph,contextInspectionSummary,installH3ContextInspection} from '../h3-context-inspect.js';
+  contextInspectionGraph,contextInspectionSummary,installH3ContextInspection,selectContextInspectionTask} from '../h3-context-inspect.js';
 
 for(const check of ['negative-control','registration','signature']){
   const g=contextInspectionGraph(check);
@@ -42,6 +42,19 @@ assert.equal(contextInspectionSummary(rejected({type:'prompt_outputs_failed_vali
 const root=await fs.mkdtemp(path.join(os.tmpdir(),'context-inspect-'));
 const taskId='2117861200645943298',secret='must-never-appear-on-the-page';
 const task={workflow:'MiniMax H3 Akatz',key:secret};
+const preflightCalls=[];
+const selected=await selectContextInspectionTask(task,[{key:secret},{key:'active-fixture'},{key:'banned-fixture'}],async key=>{
+  preflightCalls.push(key);
+  if(key==='banned-fixture')throw Error('USER_BANNED');
+  return {remainCoins:key===secret?0:200};
+});
+assert.equal(selected.task.key,'active-fixture');
+assert.equal(selected.summary.sourceCredentialStatus,'below_pool_minimum');
+assert.equal(selected.summary.selection,'active_pool');
+assert.deepEqual(preflightCalls,[secret,'active-fixture','banned-fixture']);
+assert.equal(task.key,secret,'Inspection key selection must not rewrite archived task credentials');
+const noAccount=await selectContextInspectionTask(task,[],async()=>{throw Error('USER_BANNED');});
+assert.equal(noAccount.task,null);assert.equal(noAccount.summary.sourceCredentialStatus,'USER_BANNED');
 let calls=0,cancellations=[];
 const build=(name,{probe,owner=true,now=()=>Date.parse('2026-11-04T07:00:00Z')}={})=>{
   const handlers={};
