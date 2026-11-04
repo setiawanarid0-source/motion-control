@@ -7,7 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,
   prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from '../h3-akatz-motion.js';
-import {h3PhotoPlan,H3_DEFAULT_PROFILE} from '../minimax-h3-motion.js';
+import {h3PhotoPlan,h3ModelFrames,H3_DEFAULT_PROFILE} from '../minimax-h3-motion.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
 
@@ -19,6 +19,8 @@ assert.ok(AKATZ_ASSET.url.includes('/resolve/0f409f0c2a18f123f3985041ec52982c813
 assert.ok(AKATZ_TURBO_ASSET.url.includes('/resolve/30f485ed874aa44c8183348ad361c5eabad318da/'));
 assert.ok(AKATZ_TURBO_ASSET.url.endsWith('/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors'));
 assert.equal(AKATZ_TURBO_ASSET.sha256,'5b9ab5ade15d0775676d01a907268a69a1468dc6033b3b0d3ded5502f3ebb84c');
+const baselineContract=JSON.parse(fs.readFileSync(new URL('./fixtures/h3-v6-short-tail-baseline.json',import.meta.url),'utf8'));
+const unchangedGraphs=createHash('sha256'),unchangedEarlyWindows=createHash('sha256');
 for(const hasAudio of [true,false])for(let frames=6;frames<=362;frames++){
   const source=sourceFor(frames,hasAudio),plan=akatzExecutionPlan(source);
   const g=akatzGraphForInputs({imageName:'api/photo.jpg',videoName:'api/driver.mp4',source,
@@ -26,8 +28,24 @@ for(const hasAudio of [true,false])for(let frames=6;frames<=362;frames++){
   assert.equal(plan.revision,AKATZ_REVISION);assert.equal(plan.nativeWindowFrames,124);
   assert.ok(plan.peakWindowFrames<=124,'Both sampling and source reference must stay bounded');
   assert.equal(plan.samplerCount,plan.segments.length);
-  assert.ok(plan.samplerCount<=3);assert.equal(plan.workBudget.totalSteps,plan.samplerCount*4);
-  assert.ok(plan.workBudget.totalSteps<=12);assert.equal(plan.workBudget.providerHardLimitSeconds,2400);
+  assert.ok(plan.samplerCount<=4);assert.equal(plan.workBudget.totalSteps,plan.samplerCount*4);
+  assert.ok(plan.workBudget.totalSteps<=16);assert.equal(plan.workBudget.maxTotalSteps,16);
+  assert.equal(plan.workBudget.providerHardLimitSeconds,2400);
+  if(frames<=333)unchangedGraphs.update(JSON.stringify(g)+'\n');
+  else unchangedEarlyWindows.update(JSON.stringify(Object.fromEntries(Object.entries(g).filter(([id])=>
+    Number(id)<1080&&!['49','490'].includes(id))))+'\n');
+  assert.equal(plan.tailSegmentation.applied,frames>333);
+  assert.equal(plan.samplerCount===4,frames>333);
+  assert.equal(plan.totalModelFrames,plan.segments.reduce((n,s)=>n+s.modelFrames,0));
+  if(frames>333){
+    assert.deepEqual(plan.segments.slice(0,2).map(s=>[s.start,s.frames,s.modelFrames]),[[0,124,124],[124,119,124]]);
+    assert.equal(plan.segments[2].modelFrames,73);
+    assert.equal(plan.segments[3].start,311);
+    assert.ok(plan.segments[3].modelFrames<=56);
+    assert.equal(plan.tailSegmentation.unchangedPrefixFrames,243);
+    assert.equal(plan.totalModelFrames,248+h3ModelFrames(frames-238)+5,
+      'The extra history adds five model frames, not another full-size window');
+  }
   assert.equal(plan.workBudget.measuredRuntimeSeconds,null,'A budget is not a measured runtime');
   assert.equal(plan.attentionConditioning,'dense_target_and_reference_all_steps');
   assert.equal(plan.continuation,'sampler_av_latent_tail');
@@ -64,7 +82,7 @@ for(const hasAudio of [true,false])for(let frames=6;frames<=362;frames++){
     if(i){
       const prev=plan.segments[i-1],previousBase=b-40;
       assert.equal(seg.contextFrames,5,'Native 17n+5 history clip without a fourth window');
-      assert.equal(prev.inputFrames,124,'The raw tail must end in real input, never padding');
+      assert.ok([73,124].includes(prev.inputFrames),'Each predecessor ends on a real legal native frame grid');
       assert.equal(prev.modelFrames,prev.inputFrames);
       assert.equal(prev.loadStart+prev.modelFrames-5,seg.loadStart,
         'The exact five predecessor tail frames align with the next source prefix');
@@ -106,6 +124,10 @@ for(const hasAudio of [true,false])for(let frames=6;frames<=362;frames++){
       assert.ok(g[value[0]],'No missing node dependency: '+id+' → '+value[0]);
   }
 }
+assert.equal(unchangedGraphs.digest('hex'),baselineContract.fullGraphSha256,
+  'All 656 short-duration/audio graphs stay byte-identical to the accepted v6 generation recipe');
+assert.equal(unchangedEarlyWindows.digest('hex'),baselineContract.sharedPrefixSha256,
+  'The first two windows and all their inputs stay byte-identical to v6 for all 58 affected cases');
 for(const frames of [0,5,363,1440])assert.throws(()=>akatzExecutionPlan(sourceFor(frames)));
 const args={imageName:'photo.jpg',videoName:'driver.mp4',source:sourceFor(361,false),characterLoraFile:character,turboLoraFile:turbo};
 const silent=akatzGraphForInputs(args);
@@ -130,13 +152,19 @@ assert.equal(h3NodeClass('1046',akatzExecutionPlan(sourceFor(361))),null);
 assert.equal(h3NodeClass('1047',akatzExecutionPlan(sourceFor(361))),'MiniMaxH3MotionContext');
 assert.equal(h3NodeClass('1016',akatzExecutionPlan(sourceFor(361))),'MathExpression|pysssss');
 assert.equal(h3NodeClass('1131',{revision:'akatz-native-1080-v2',samplerCount:4}),'SamplerCustomAdvanced');
-assert.equal(h3NodeClass('1131',akatzExecutionPlan(sourceFor(361))),null,'The new profile must have no fourth window');
+assert.equal(h3NodeClass('1131',akatzExecutionPlan(sourceFor(361))),'SamplerCustomAdvanced');
+assert.equal(h3NodeClass('1171',akatzExecutionPlan(sourceFor(361))),null,'No fifth window');
+for(const revision of ['akatz-native-1080-v6','akatz-native-1080-v7']){
+  assert.equal(h3NodeClass('1047',{revision,samplerCount:3}),'MiniMaxH3MotionContext');
+  assert.equal(h3NodeClass('1057',{revision,samplerCount:3}),'VHS_LoadAudioUpload');
+}
 assert.throws(()=>akatzGraphForInputs({...args,imageName:'../private'}));
 assert.throws(()=>akatzGraphForInputs({...args,turboLoraFile:'another-model.safetensors'}));
 assert.throws(()=>akatzGraphForInputs({...args,source:{...args.source,outputWidth:768}}));
 assert.throws(()=>akatzExecutionPlan({...args.source,seed:'42'}));
 assert.throws(()=>akatzExecutionPlan({...args.source,sceneCuts:[361]}));
-for(const [frames,wanted] of [[125,[124,1]],[346,[124,119,103]],[361,[124,119,118]],[362,[124,119,119]]])
+for(const [frames,wanted] of [[125,[124,1]],[333,[124,119,90]],[334,[124,119,68,23]],
+  [346,[124,119,68,35]],[361,[124,119,68,50]],[362,[124,119,68,51]]])
   assert.deepEqual(akatzExecutionPlan(sourceFor(frames)).segments.map(s=>s.frames),wanted);
 
 // Execute the real provider boundary with fake uploads and fake model receipts.
@@ -161,7 +189,7 @@ assert.equal(payload.instanceType,'plus');assert.deepEqual([...payload.nodeInfoL
 assert.equal(payload.retainSeconds,undefined);
 const sent=JSON.parse(payload.workflow);assert.equal(sent['7'].inputs.file_name,character);
 assert.deepEqual(sent['1009'].inputs.noise_seed,['1016',0]);
-assert.equal(Object.values(sent).filter(n=>n.class_type==='SamplerCustomAdvanced').length,3);
+assert.equal(Object.values(sent).filter(n=>n.class_type==='SamplerCustomAdvanced').length,4);
 assert.equal(sent['41'].inputs.steps,4);
 const passedGate=context.assertH3MotionContextSchema;
 context.assertH3MotionContextSchema=async()=>{throw Error('Schema proof missing');};
@@ -257,5 +285,5 @@ try{
   assert.ok(newMse<oldMse*.85,`Driver detail regressed: new MSE ${newMse}, old ${oldMse}`);
   console.log('PASS: actual low-resolution driver pixel error reduced '+Math.round((1-newMse/oldMse)*100)+'% at identical frame count, pixels and orientation; no inference');
 }finally{if(detail)await detail.release();fs.rmSync(detailDir,{recursive:true,force:true});}
-console.log('PASS: 714 native duration/audio cases, raw AV latent continuity with real aligned tails, dense four-step Ref2VA, at most 12 total steps, historical traces and mocked provider boundary; no GPU inference');
+console.log('PASS: 714 native duration/audio cases, frozen v6 graphs/early windows, short tail segments, raw aligned five-frame continuity, at most 16 total steps, historical traces and mocked provider boundary; no GPU inference');
 

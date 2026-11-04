@@ -6,10 +6,14 @@ import {validUploadedH3Lora} from './h3-appearance-model.js';
 import {randomInt} from 'node:crypto';
 
 export const AKATZ_PROFILE='akatz-v1.5-native4-ref2v';
-export const AKATZ_REVISION='akatz-native-1080-v6';
+export const AKATZ_REVISION='akatz-native-1080-v8';
 export const AKATZ_MAX_FRAMES=362;
 export const AKATZ_WINDOW_FRAMES=124;
 export const AKATZ_CONTEXT_FRAMES=5;
+// Split only a long third-window tail. Keep the first 243 delivered frames
+// on the accepted v6 path; never lengthen the generated-history pin.
+export const AKATZ_TAIL_SPLIT_AFTER=90;
+export const AKATZ_TAIL_WINDOW_FRAMES=73;
 export const AKATZ_SAMPLING=Object.freeze({steps:4,sampler:'euler',scheduler:'simple',videoShift:12,audioShift:3});
 export const AKATZ_OUTPUT_CRF=12;
 export const AKATZ_ASSET=Object.freeze({
@@ -43,12 +47,12 @@ const WINDOW_NODE_CLASSES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','
   'VAEDecode','ImageFromBatch','ImageCrop','MathExpression|pysssss','VHS_LoadAudioUpload'];
 export function akatzNodeClass(node,plan){
   if(plan?.revision==='akatz-native-1080-v1')return V1_NODE_CLASSES[String(node)]||null;
-  if(!['akatz-native-1080-v2','akatz-native-1080-v3','akatz-native-1080-v4','akatz-native-1080-v5','akatz-native-1080-v7',AKATZ_REVISION].includes(plan?.revision))return null;
+  if(!['akatz-native-1080-v2','akatz-native-1080-v3','akatz-native-1080-v4','akatz-native-1080-v5','akatz-native-1080-v6','akatz-native-1080-v7',AKATZ_REVISION].includes(plan?.revision))return null;
   if(String(node)==='10'&&['akatz-native-1080-v2','akatz-native-1080-v3'].includes(plan.revision))return 'BlockSparseAttention';
   if(AKATZ_NODE_CLASSES[String(node)])return AKATZ_NODE_CLASSES[String(node)];
   const n=Number(node),index=Math.floor((n-1000)/40),offset=(n-1000)%40;
-  const rawHistory=[AKATZ_REVISION,'akatz-native-1080-v7'].includes(plan.revision);
-  if(offset===16&&!['akatz-native-1080-v5',AKATZ_REVISION,'akatz-native-1080-v7'].includes(plan.revision))return null;
+  const rawHistory=['akatz-native-1080-v6','akatz-native-1080-v7',AKATZ_REVISION].includes(plan.revision);
+  if(offset===16&&!['akatz-native-1080-v5','akatz-native-1080-v6','akatz-native-1080-v7',AKATZ_REVISION].includes(plan.revision))return null;
   if(offset===17&&!rawHistory)return null;
   if(rawHistory&&offset===6)return null;
   if(rawHistory&&offset===7)return index>0&&index<plan.samplerCount?'MiniMaxH3MotionContext':null;
@@ -75,17 +79,20 @@ function plan(source){
     throw Error('Batas scene Akatz tidak valid.');
   const segments=[];
   // The raw latent tail always ends at the MODEL end, not at inputFrames.
-  // Fill every predecessor to the legal 124-frame grid. Only the final
+  // Fill every predecessor to a legal 17n+5 frame grid. Only the final
   // window may have padding; it is never fed into another window.
   for(let start=0;start<source.totalFrames;){
     const contextFrames=start?AKATZ_CONTEXT_FRAMES:0;
-    const length=Math.min(source.totalFrames-start,AKATZ_WINDOW_FRAMES-contextFrames);
+    const remaining=source.totalFrames-start;
+    const windowFrames=segments.length===2&&remaining>AKATZ_TAIL_SPLIT_AFTER
+      ?AKATZ_TAIL_WINDOW_FRAMES:AKATZ_WINDOW_FRAMES;
+    const length=Math.min(remaining,windowFrames-contextFrames);
     const inputFrames=length+contextFrames;
     segments.push({start,length,contextFrames,loadStart:start-contextFrames,inputFrames,
       modelFrames:h3ModelFrames(inputFrames),seed:(seed+segments.length)%2**32});
     start+=length;
   }
-  if(segments.length*AKATZ_SAMPLING.steps>12)throw Error('Beban Akatz melampaui batas profil 15 detik. Task belum dikirim.');
+  if(segments.length*AKATZ_SAMPLING.steps>16)throw Error('Beban Akatz melampaui batas profil 15 detik. Task belum dikirim.');
   return {segments,seed};
 }
 export function akatzExecutionPlan(source){
@@ -96,7 +103,7 @@ export function akatzExecutionPlan(source){
     nativeWindowFrames:AKATZ_WINDOW_FRAMES,samplerCount:p.segments.length,seed:p.seed,
     seedTransport:'linked_int_expression_with_api_override',
     providerSeedVerification:'pending_output_metadata',
-    workBudget:{totalSteps:p.segments.length*AKATZ_SAMPLING.steps,maxTotalSteps:12,
+    workBudget:{totalSteps:p.segments.length*AKATZ_SAMPLING.steps,maxTotalSteps:16,
       targetSeconds:1500,providerHardLimitSeconds:2400,measuredRuntimeSeconds:null},
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     driverCanvas:source.driverCanvas||null,driverGeometry:'original_pixels_with_grid_padding',
@@ -109,6 +116,9 @@ export function akatzExecutionPlan(source){
       loadStart:s.loadStart,modelFrames:s.modelFrames,contextFrames:s.contextFrames,seed:s.seed})),
     continuation:'sampler_av_latent_tail',continuationFrames:AKATZ_CONTEXT_FRAMES,
     continuationNode:'MiniMaxH3MotionContext',continuationVaeRoundTrips:0,
+    tailSegmentation:{applied:p.segments.length===4,splitAfterNewFrames:AKATZ_TAIL_SPLIT_AFTER,
+      firstTailModelFrames:AKATZ_TAIL_WINDOW_FRAMES,unchangedPrefixFrames:p.segments.length===4?243:source.totalFrames},
+    totalModelFrames:p.segments.reduce((n,s)=>n+s.modelFrames,0),
     predecessorPaddingFrames:0,workerSchemaGate:'typed_raw_latent_and_trim_output_required',
     gpuExecutionQualified:false,
     referenceVideoWindowed:true,peakWindowFrames:Math.max(...p.segments.map(s=>s.modelFrames)),
