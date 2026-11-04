@@ -95,7 +95,7 @@ for(let frames=6;frames<=362;frames++)for(const audio of [false,true]){
 const baseline=akatzGraphForInputs(argsFor(361,true));
 assert.equal(Object.values(baseline).filter(n=>n.class_type==='SamplerCustomAdvanced').length,3);
 assert.equal(baseline['12'],undefined);
-assert.equal(AKATZ_REVISION,'akatz-native-1080-v6');
+assert.equal(AKATZ_REVISION,'akatz-native-1080-v7');
 assert.equal(H3_CONTEXT_REQUIREMENT.coreCommit,'6651247a8b50cefd1436c834f704bdf7767722e9');
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 assert.ok(!server.includes('h3-akatz-context-candidate'),'Candidate must remain outside the production route');

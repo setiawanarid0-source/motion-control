@@ -6,10 +6,12 @@ import {validUploadedH3Lora} from './h3-appearance-model.js';
 import {randomInt} from 'node:crypto';
 
 export const AKATZ_PROFILE='akatz-v1.5-native4-ref2v';
-export const AKATZ_REVISION='akatz-native-1080-v6';
+export const AKATZ_REVISION='akatz-native-1080-v7';
 export const AKATZ_MAX_FRAMES=362;
 export const AKATZ_WINDOW_FRAMES=124;
 export const AKATZ_CONTEXT_FRAMES=5;
+export const AKATZ_TAIL_CONTEXT_FRAMES=22;
+export const AKATZ_TAIL_WINDOW_FRAMES=141;
 export const AKATZ_SAMPLING=Object.freeze({steps:4,sampler:'euler',scheduler:'simple',videoShift:12,audioShift:3});
 export const AKATZ_OUTPUT_CRF=12;
 export const AKATZ_ASSET=Object.freeze({
@@ -43,14 +45,15 @@ const WINDOW_NODE_CLASSES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','
   'VAEDecode','ImageFromBatch','ImageCrop','MathExpression|pysssss','VHS_LoadAudioUpload'];
 export function akatzNodeClass(node,plan){
   if(plan?.revision==='akatz-native-1080-v1')return V1_NODE_CLASSES[String(node)]||null;
-  if(!['akatz-native-1080-v2','akatz-native-1080-v3','akatz-native-1080-v4','akatz-native-1080-v5',AKATZ_REVISION].includes(plan?.revision))return null;
+  if(!['akatz-native-1080-v2','akatz-native-1080-v3','akatz-native-1080-v4','akatz-native-1080-v5','akatz-native-1080-v6',AKATZ_REVISION].includes(plan?.revision))return null;
   if(String(node)==='10'&&['akatz-native-1080-v2','akatz-native-1080-v3'].includes(plan.revision))return 'BlockSparseAttention';
   if(AKATZ_NODE_CLASSES[String(node)])return AKATZ_NODE_CLASSES[String(node)];
   const n=Number(node),index=Math.floor((n-1000)/40),offset=(n-1000)%40;
-  if(offset===16&&!['akatz-native-1080-v5',AKATZ_REVISION].includes(plan.revision))return null;
-  if(offset===17&&plan.revision!==AKATZ_REVISION)return null;
-  if(plan.revision===AKATZ_REVISION&&offset===6)return null;
-  if(plan.revision===AKATZ_REVISION&&offset===7)return index>0&&index<plan.samplerCount?'MiniMaxH3MotionContext':null;
+  const rawHistory=['akatz-native-1080-v6',AKATZ_REVISION].includes(plan.revision);
+  if(offset===16&&!['akatz-native-1080-v5','akatz-native-1080-v6',AKATZ_REVISION].includes(plan.revision))return null;
+  if(offset===17&&!rawHistory)return null;
+  if(rawHistory&&offset===6)return null;
+  if(rawHistory&&offset===7)return index>0&&index<plan.samplerCount?'MiniMaxH3MotionContext':null;
   return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODE_CLASSES.length?
     WINDOW_NODE_CLASSES[offset]||null:null;
 }
@@ -84,6 +87,16 @@ function plan(source){
       modelFrames:h3ModelFrames(inputFrames),seed:(seed+segments.length)%2**32});
     start+=length;
   }
+  if(segments.length===3){
+    // Preserve the accepted first two windows exactly. The last window gets
+    // one additional native cycle of real history from the same raw latent.
+    // 17 pixel frames = 5 latent steps, so source/VAE phase and padding agree.
+    const tail=segments[2],extra=AKATZ_TAIL_CONTEXT_FRAMES-AKATZ_CONTEXT_FRAMES;
+    tail.contextFrames=AKATZ_TAIL_CONTEXT_FRAMES;
+    tail.loadStart-=extra;tail.inputFrames+=extra;
+    tail.modelFrames=h3ModelFrames(tail.inputFrames);
+    if(tail.modelFrames>AKATZ_TAIL_WINDOW_FRAMES)throw Error('Konteks akhir Akatz melampaui batas native.');
+  }
   if(segments.length*AKATZ_SAMPLING.steps>12)throw Error('Beban Akatz melampaui batas profil 15 detik. Task belum dikirim.');
   return {segments,seed};
 }
@@ -92,11 +105,13 @@ export function akatzExecutionPlan(source){
   return {revision:AKATZ_REVISION,inferenceProfile:AKATZ_PROFILE,frames:source.totalFrames,fps:24,
     sampling:{...AKATZ_SAMPLING,character:'Akatz V1.5',turbo:'Ref2VA Turbo 4-step v0.1',
       characterSha256:AKATZ_ASSET.sha256,turboSha256:AKATZ_TURBO_ASSET.sha256},
-    nativeWindowFrames:AKATZ_WINDOW_FRAMES,samplerCount:p.segments.length,seed:p.seed,
+    nativeWindowFrames:AKATZ_WINDOW_FRAMES,tailWindowFrames:AKATZ_TAIL_WINDOW_FRAMES,
+    samplerCount:p.segments.length,seed:p.seed,
     seedTransport:'linked_int_expression_with_api_override',
     providerSeedVerification:'pending_output_metadata',
     workBudget:{totalSteps:p.segments.length*AKATZ_SAMPLING.steps,maxTotalSteps:12,
-      targetSeconds:1500,providerHardLimitSeconds:2400,measuredRuntimeSeconds:null},
+      targetSeconds:1500,providerHardLimitSeconds:2400,measuredRuntimeSeconds:null,
+      sampledModelFrames:p.segments.reduce((n,s)=>n+s.modelFrames,0),measuredPeakMemory:null},
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     driverCanvas:source.driverCanvas||null,driverGeometry:'original_pixels_with_grid_padding',
     referenceColor:source.referenceColor||null,guideAppearance:'akatz_native_video_reference',
@@ -106,7 +121,9 @@ export function akatzExecutionPlan(source){
     expressionConditioning:'source_video_timing_and_intensity_photo_identity_only',
     segments:p.segments.map(s=>({start:s.start,frames:s.length,inputFrames:s.inputFrames,
       loadStart:s.loadStart,modelFrames:s.modelFrames,contextFrames:s.contextFrames,seed:s.seed})),
-    continuation:'sampler_av_latent_tail',continuationFrames:AKATZ_CONTEXT_FRAMES,
+    continuation:'sampler_av_latent_tail',
+    continuationFrames:p.segments.length===3?null:AKATZ_CONTEXT_FRAMES,
+    continuationFramesPerWindow:p.segments.map(s=>s.contextFrames),
     continuationNode:'MiniMaxH3MotionContext',continuationVaeRoundTrips:0,
     predecessorPaddingFrames:0,workerSchemaGate:'typed_raw_latent_and_trim_output_required',
     gpuExecutionQualified:false,
@@ -200,7 +217,7 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
     if(audio){
       // Motion Context supplies the pinned head's audio with its AV tail.
       // Anchor original source audio only after that head, without laying
-      // a second, different audio keyframe over those same five frames.
+      // a second, different audio keyframe over the carried head.
       const guideAudio=seg.contextFrames?add(b+17,'VHS_LoadAudioUpload',{audio:videoName,
         start_time:seg.start/24,duration:seg.length/24}):audio;
       positive=add(b+8,'MiniMaxH3AddGuide',{positive,latent:link(5,1),audio_vae:['4',0],
