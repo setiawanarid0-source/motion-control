@@ -59,7 +59,7 @@ resolution change or mutation. Durable queue tests verify that the billing
 code survives storage and the public view. Existing RIFE rotation/cadence and
 complete application checks remain part of CI.
 
-No new RunningHub task, model/media upload, schema probe, account-status scan
+No new RunningHub task, model/media upload, schema probe
 or paid comparison is performed for this repair. The original interpolation
 output is not claimed successful: the provider's paid-credit requirement must
 be satisfied separately before the owner can run that task through this key.
