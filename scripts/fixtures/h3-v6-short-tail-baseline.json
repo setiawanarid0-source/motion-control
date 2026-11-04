@@ -1,0 +1,20 @@
+{
+  "baselineCommit": "d6817a9510690bc408705d83d041389c1368b699",
+  "reference": [
+    1143,
+    2048
+  ],
+  "seed": 42,
+  "fullGraphFrames": [
+    6,
+    333
+  ],
+  "fullGraphCases": 656,
+  "fullGraphSha256": "a08f1842fc9f15efd71c707e5f21270abeb06ca36775e824ebbd3ce0b410ab55",
+  "sharedPrefixFrames": [
+    334,
+    362
+  ],
+  "sharedPrefixCases": 58,
+  "sharedPrefixSha256": "e68fc7be97258858dd257c07999ecf9b51cba96320a88dccbf5f9dc59f86a8ec"
+}
