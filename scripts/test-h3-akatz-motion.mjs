@@ -24,7 +24,8 @@ for(const hasAudio of [true,false])for(let frames=6;frames<=362;frames++){
   const g=akatzGraphForInputs({imageName:'api/photo.jpg',videoName:'api/driver.mp4',source,
     characterLoraFile:character,turboLoraFile:turbo});
   assert.equal(plan.revision,AKATZ_REVISION);assert.equal(plan.nativeWindowFrames,124);
-  assert.ok(plan.peakWindowFrames<=124,'Both sampling and source reference must stay bounded');
+  assert.ok(plan.peakWindowFrames<=141,'The final native window is bounded at 141 frames');
+  assert.deepEqual(plan.continuationFramesPerWindow,plan.segments.map(s=>s.contextFrames));
   assert.equal(plan.samplerCount,plan.segments.length);
   assert.ok(plan.samplerCount<=3);assert.equal(plan.workBudget.totalSteps,plan.samplerCount*4);
   assert.ok(plan.workBudget.totalSteps<=12);assert.equal(plan.workBudget.providerHardLimitSeconds,2400);
@@ -44,7 +45,7 @@ for(const hasAudio of [true,false])for(let frames=6;frames<=362;frames++){
   for(const [i,seg] of plan.segments.entries()){
     const b=1000+i*40,at=n=>g[String(b+n)]?.inputs,link=(n,out=0)=>[String(b+n),out];
     assert.equal(seg.start,timeline.length);assert.equal(seg.modelFrames%17,5);
-    assert.ok(seg.modelFrames>=seg.inputFrames&&seg.modelFrames<=124);
+    assert.ok(seg.modelFrames>=seg.inputFrames&&seg.modelFrames<=(i===2?141:124));
     assert.equal(at(0).frame_load_cap,seg.inputFrames);assert.equal(at(0).skip_first_frames,seg.loadStart);
     assert.equal(at(0).force_size,'Disabled');
     assert.equal(at(14).batch_index,seg.contextFrames);assert.equal(at(14).length,seg.frames);
@@ -63,16 +64,16 @@ for(const hasAudio of [true,false])for(let frames=6;frames<=362;frames++){
     assert.equal(at(10).cfg,1);assert.deepEqual(at(10).model,g['41'].inputs.model);
     if(i){
       const prev=plan.segments[i-1],previousBase=b-40;
-      assert.equal(seg.contextFrames,5,'Native 17n+5 history clip without a fourth window');
+      assert.equal(seg.contextFrames,i===2?22:5,'Only the third window receives longer raw history');
       assert.equal(prev.inputFrames,124,'The raw tail must end in real input, never padding');
       assert.equal(prev.modelFrames,prev.inputFrames);
-      assert.equal(prev.loadStart+prev.modelFrames-5,seg.loadStart,
-        'The exact five predecessor tail frames align with the next source prefix');
+      assert.equal(prev.loadStart+prev.modelFrames-seg.contextFrames,seg.loadStart,
+        'The exact predecessor latent tail aligns with the source prefix');
       assert.equal(at(6),undefined,'Decoded RGB must never feed the next window');
       assert.equal(g[String(b+7)].class_type,'MiniMaxH3MotionContext');
       assert.deepEqual(at(7).context_latent,[String(previousBase+11),0]);
       assert.deepEqual(at(7).conditioning,link(5));
-      assert.equal(at(7).context_length,'5');assert.equal(at(7).audio_context_length,0);
+      assert.equal(at(7).context_length,String(seg.contextFrames));assert.equal(at(7).audio_context_length,0);
       assert.deepEqual(at(7).latent,link(5,1));
     }else assert.equal(at(7),undefined,'Do not pin the first source RGB frame');
     if(hasAudio){
@@ -122,6 +123,9 @@ assert.equal(h3NodeClass('1046',{revision:'akatz-native-1080-v5',samplerCount:3}
 assert.equal(h3NodeClass('1047',{revision:'akatz-native-1080-v5',samplerCount:3}),'MiniMaxH3AddGuide');
 assert.equal(h3NodeClass('1016',{revision:'akatz-native-1080-v5',samplerCount:3}),'MathExpression|pysssss');
 assert.equal(h3NodeClass('1057',{revision:'akatz-native-1080-v5',samplerCount:3}),null);
+assert.equal(h3NodeClass('1046',{revision:'akatz-native-1080-v6',samplerCount:3}),null);
+assert.equal(h3NodeClass('1047',{revision:'akatz-native-1080-v6',samplerCount:3}),'MiniMaxH3MotionContext');
+assert.equal(h3NodeClass('1057',{revision:'akatz-native-1080-v6',samplerCount:3}),'VHS_LoadAudioUpload');
 assert.equal(h3NodeClass('1046',akatzExecutionPlan(sourceFor(361))),null);
 assert.equal(h3NodeClass('1047',akatzExecutionPlan(sourceFor(361))),'MiniMaxH3MotionContext');
 assert.equal(h3NodeClass('1016',akatzExecutionPlan(sourceFor(361))),'MathExpression|pysssss');
