@@ -30,6 +30,9 @@ Context remains five frames to retain at most three native four-step samplers.
 The original photo, source-performance reference, native canvas/crop,
 source soundtrack, models/LoRAs, dense attention, scheduler and CRF remain
 unchanged. No scaling, refinement, sharpening or seed change was added.
+The source audio remains a full-window reference. Its hard guide starts after
+the five-frame carried AV head so two different audio guides do not overlap
+that head. Final output still muxes the complete original source soundtrack.
 
 ## Provider evidence and gate
 

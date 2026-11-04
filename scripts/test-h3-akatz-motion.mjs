@@ -75,7 +75,13 @@ for(const hasAudio of [true,false])for(let frames=6;frames<=362;frames++){
       assert.equal(at(7).context_length,'5');assert.equal(at(7).audio_context_length,0);
       assert.deepEqual(at(7).latent,link(5,1));
     }else assert.equal(at(7),undefined,'Do not pin the first source RGB frame');
-    if(hasAudio){assert.equal(at(4).start_time,seg.loadStart/24);assert.equal(at(4).duration,seg.inputFrames/24);}
+    if(hasAudio){
+      assert.equal(at(4).start_time,seg.loadStart/24);assert.equal(at(4).duration,seg.inputFrames/24);
+      assert.equal(at(8).frame_idx,seg.contextFrames);
+      assert.deepEqual(at(8).audio,link(i?17:4));
+      if(i){assert.equal(at(17).start_time,seg.start/24);assert.equal(at(17).duration,seg.frames/24);}
+      else assert.equal(at(17),undefined);
+    }
     else assert.equal(at(4),undefined);
   }
   assert.deepEqual(timeline,Array.from({length:frames},(_,i)=>i),'All source times exported once, with no skipped or repeated real frames');
@@ -115,6 +121,7 @@ assert.equal(h3NodeClass('1016',{revision:'akatz-native-1080-v4',samplerCount:3}
 assert.equal(h3NodeClass('1046',{revision:'akatz-native-1080-v5',samplerCount:3}),'ImageFromBatch');
 assert.equal(h3NodeClass('1047',{revision:'akatz-native-1080-v5',samplerCount:3}),'MiniMaxH3AddGuide');
 assert.equal(h3NodeClass('1016',{revision:'akatz-native-1080-v5',samplerCount:3}),'MathExpression|pysssss');
+assert.equal(h3NodeClass('1057',{revision:'akatz-native-1080-v5',samplerCount:3}),null);
 assert.equal(h3NodeClass('1046',akatzExecutionPlan(sourceFor(361))),null);
 assert.equal(h3NodeClass('1047',akatzExecutionPlan(sourceFor(361))),'MiniMaxH3MotionContext');
 assert.equal(h3NodeClass('1016',akatzExecutionPlan(sourceFor(361))),'MathExpression|pysssss');

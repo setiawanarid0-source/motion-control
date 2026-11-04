@@ -40,7 +40,7 @@ export const AKATZ_NODE_CLASSES=Object.freeze({
 const WINDOW_NODE_CLASSES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBatch',
   'VHS_LoadAudioUpload','MiniMaxH3ReferenceToVideo','ImageFromBatch','MiniMaxH3AddGuide',
   'MiniMaxH3AddGuide','RandomNoise','CFGGuider','SamplerCustomAdvanced','LTXVSeparateAVLatent',
-  'VAEDecode','ImageFromBatch','ImageCrop','MathExpression|pysssss'];
+  'VAEDecode','ImageFromBatch','ImageCrop','MathExpression|pysssss','VHS_LoadAudioUpload'];
 export function akatzNodeClass(node,plan){
   if(plan?.revision==='akatz-native-1080-v1')return V1_NODE_CLASSES[String(node)]||null;
   if(!['akatz-native-1080-v2','akatz-native-1080-v3','akatz-native-1080-v4','akatz-native-1080-v5',AKATZ_REVISION].includes(plan?.revision))return null;
@@ -48,6 +48,7 @@ export function akatzNodeClass(node,plan){
   if(AKATZ_NODE_CLASSES[String(node)])return AKATZ_NODE_CLASSES[String(node)];
   const n=Number(node),index=Math.floor((n-1000)/40),offset=(n-1000)%40;
   if(offset===16&&!['akatz-native-1080-v5',AKATZ_REVISION].includes(plan.revision))return null;
+  if(offset===17&&plan.revision!==AKATZ_REVISION)return null;
   if(plan.revision===AKATZ_REVISION&&offset===6)return null;
   if(plan.revision===AKATZ_REVISION&&offset===7)return index>0&&index<plan.samplerCount?'MiniMaxH3MotionContext':null;
   return Number.isSafeInteger(n)&&n>=1000&&index<plan.samplerCount&&offset<WINDOW_NODE_CLASSES.length?
@@ -196,7 +197,15 @@ export function akatzGraphForInputs({imageName,videoName,source,characterLoraFil
         latent:link(5,1),context_latent:previous.latent,
         context_length:String(seg.contextFrames),audio_context_length:0});
     }
-    if(audio)positive=add(b+8,'MiniMaxH3AddGuide',{positive,latent:link(5,1),audio_vae:['4',0],audio,frame_idx:0});
+    if(audio){
+      // Motion Context supplies the pinned head's audio with its AV tail.
+      // Anchor original source audio only after that head, without laying
+      // a second, different audio keyframe over those same five frames.
+      const guideAudio=seg.contextFrames?add(b+17,'VHS_LoadAudioUpload',{audio:videoName,
+        start_time:seg.start/24,duration:seg.length/24}):audio;
+      positive=add(b+8,'MiniMaxH3AddGuide',{positive,latent:link(5,1),audio_vae:['4',0],
+        audio:guideAudio,frame_idx:seg.contextFrames});
+    }
     add(b+16,'MathExpression|pysssss',{expression:String(seg.seed)});
     add(b+9,'RandomNoise',{noise_seed:link(16)});
     add(b+10,'CFGGuider',{model:['8',0],positive,negative:positive,cfg:1});
