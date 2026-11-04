@@ -11,6 +11,7 @@ import { Transform } from 'node:stream';
 import { extractTaskFailure,auditFailedH3Tasks } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
 import {canGenerateWithAccount,rankGenerationAccounts} from './runninghub-account-priority.js';
+import {auditRunningHubAccounts} from './runninghub-account-audit.js';
 import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences,
   configureReferenceMedia,resolvedReferenceAvailability,openRemoteReference,migrateReferences } from './history-references.js';
@@ -825,6 +826,13 @@ async function refreshPool(req){
 app.post('/api/accounts/refresh',async(req,res)=>{
   try{res.json(await refreshPool(req));}
   catch(error){res.status(502).json({error:'Tidak dapat memperbarui Account Pool saat ini.'});}
+});
+
+// Read provider balance fields without a create probe or Account Pool mutation.
+// Authentication is inherited from ownerAuth.requireOwner above.
+app.get('/api/runninghub/account-audit',async(_req,res)=>{
+  res.setHeader('Cache-Control','private, no-store');
+  res.json(await auditRunningHubAccounts({accounts:loadGlobalAccounts(),request:rhJson}));
 });
 
 async function handleGeneration(req,res){
