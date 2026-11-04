@@ -8,11 +8,13 @@ export const CONTEXT_INSPECT_ROUTE='/api/internal/h3-context-inspect';
 export const CONTEXT_INSPECT_TASK='2117861200645943298';
 export const CONTEXT_INSPECT_EXPIRES='2026-11-05T07:00:00Z';
 export const CONTEXT_NODE='MiniMaxH3ContextWindows';
+export const MOTION_CONTEXT_NODE='MiniMaxH3MotionContext';
+export const MOTION_INSPECT_ROUTE='/api/internal/h3-motion-context-inspect';
 export const CONTEXT_GUARD='VANTA_H3_CONTEXT_SCHEMA_ONLY_DO_NOT_EXECUTE.invalid';
 export const CONTEXT_NEGATIVE='VANTA_H3_CONTEXT_UNREGISTERED_NEGATIVE.invalid';
 const checks=['negative-control','registration','signature'];
 const allowedClasses=new Set(['LoadImage','PreviewImage','PreviewAny','UNETLoader',
-  'CLIPLoader','MiniMaxH3ReferenceToVideo','CFGGuider',CONTEXT_NODE,CONTEXT_NEGATIVE]);
+  'CLIPLoader','VAELoader','MiniMaxH3ReferenceToVideo','CFGGuider',CONTEXT_NODE,MOTION_CONTEXT_NODE,CONTEXT_NEGATIVE]);
 const allowedErrors=new Set(['custom_validation_failed','required_input_missing',
   'value_not_in_list','return_type_mismatch','invalid_input_type','exception_during_validation']);
 const providerMessages=new Set(['USER_BANNED','NOT_ENOUGH_BALANCE','TASK_QUEUE_MAXED',
@@ -38,14 +40,16 @@ export async function selectContextInspectionTask(source,accounts,readStatus){
   summary.selection=chosen?'active_pool':'none';
   return {task:chosen?{...source,key:chosen.account.key}:null,summary};
 }
-export function contextInspectionGraph(check){
+export function contextInspectionGraph(check,mode='window'){
+  if(!['window','motion'].includes(mode))throw Error('Unknown fixed context recipe');
+  const target=mode==='motion'?MOTION_CONTEXT_NODE:CONTEXT_NODE;
   if(!checks.includes(check))throw Error('Unknown fixed context check');
   if(check!=='signature')return {
     guard:{class_type:'LoadImage',inputs:{image:CONTEXT_GUARD}},
     output:{class_type:'PreviewImage',inputs:{images:['guard',0]}},
-    catalog:{class_type:check==='negative-control'?CONTEXT_NEGATIVE:CONTEXT_NODE,inputs:{}}
+    catalog:{class_type:check==='negative-control'?CONTEXT_NEGATIVE:target,inputs:{}}
   };
-  return {
+  const graph={
     guard:{class_type:'LoadImage',inputs:{image:CONTEXT_GUARD}},
     model:{class_type:'UNETLoader',inputs:{
       unet_name:'minimax_h3_ref2va_pruned_int8_convrot.safetensors',weight_dtype:'default'}},
@@ -60,8 +64,17 @@ export function contextInspectionGraph(check){
       positive:['conditioning',0],negative:['conditioning',0],cfg:1}},
     output:{class_type:'PreviewAny',inputs:{source:['guider',0]}}
   };
+  if(mode==='motion'){
+    graph.vae={class_type:'VAELoader',inputs:{vae_name:'minimax_h3_video_vae_fp16.safetensors'}};
+    graph.context={class_type:MOTION_CONTEXT_NODE,inputs:{conditioning:['conditioning',0],
+      vae:['vae',0],latent:['conditioning',1],context_latent:['conditioning',1],
+      context_length:'5',audio_context_length:0}};
+    graph.guider.inputs={model:['model',0],positive:['context',0],negative:['context',0],cfg:1};
+  }
+  return graph;
 }
-export function contextInspectionSummary(response,check){
+export function contextInspectionSummary(response,check,mode='window'){
+  const target=mode==='motion'?MOTION_CONTEXT_NODE:CONTEXT_NODE;
   const id=response?.data?.taskId||response?.taskId;
   if(id)return {check,status:'unexpected_acceptance',
     taskId:/^\d{10,25}$/.test(String(id))?String(id):null,taskCreated:true};
@@ -72,7 +85,7 @@ export function contextInspectionSummary(response,check){
   const type=rejection.error?.type;
   const error=JSON.stringify(rejection.error||{});
   const missingNodes=[...allowedClasses].filter(n=>type==='missing_node_type'&&error.includes(n));
-  const graph=contextInspectionGraph(check);
+  const graph=contextInspectionGraph(check,mode);
   const nodeErrors=Object.entries(rejection.node_errors||{}).filter(([id])=>graph[id]).map(([id,n])=>({
     id,type:allowedClasses.has(n.class_type)?n.class_type:'other',
     errors:(Array.isArray(n.errors)?n.errors:[]).map(e=>allowedErrors.has(e.type)?e.type:'other')
@@ -81,7 +94,7 @@ export function contextInspectionSummary(response,check){
   let status='unconfirmed';
   if(check==='negative-control'){
     if(type==='missing_node_type'&&missingNodes.includes(CONTEXT_NEGATIVE))status='negative_control_passed';
-  }else if(missingNodes.includes(CONTEXT_NODE))status='unsupported';
+  }else if(missingNodes.includes(target))status='unsupported';
   else if(type==='missing_node_type')status='missing_dependency';
   else if(type==='prompt_outputs_failed_validation'&&guardRejected){
     status=check==='registration'?'registered':
@@ -90,19 +103,22 @@ export function contextInspectionSummary(response,check){
   return {check,status,taskCreated:false,validationType:type,missingNodes,nodeErrors};
 }
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function page(report,canCheck){
+function page(report,canCheck,route=CONTEXT_INSPECT_ROUTE){
   return '<!doctype html><html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
     '<title>Pemeriksaan H3 VANTA</title><style>body{font:16px system-ui;background:#101318;color:#e6e9ee;max-width:900px;margin:50px auto;padding:24px}'+
     'h1{font-size:27px}p{line-height:1.6;color:#b9c2ce}button{padding:13px 20px;border:0;border-radius:9px;background:#b7f46d;color:#15210a;font:600 16px system-ui}'+
     'pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:22px;border-radius:12px;background:#1b212a;line-height:1.5}</style>'+
     '<h1>Pemeriksaan kompatibilitas H3</h1><p>Pemeriksaan skema tanpa sampling, unggah model, atau generate video. Workflow aktif tetap menggunakan konfigurasi sebelumnya.</p>'+
     '<pre>'+escapeHtml(JSON.stringify(report,null,2))+'</pre>'+
-    (canCheck?'<form method="post" action="'+CONTEXT_INSPECT_ROUTE+'"><button type="submit">Periksa dukungan RunningHub</button></form>':'')+'</html>';
+    (canCheck?'<form method="post" action="'+route+'"><button type="submit">Periksa dukungan RunningHub</button></form>':'')+'</html>';
 }
 export function installH3ContextInspection({app,rootDir,getTask,isOwner,probe,cancelUnexpected,
   resolveTask=async task=>({task,summary:{selection:'source_task'}}),
-  taskId=CONTEXT_INSPECT_TASK,expires=CONTEXT_INSPECT_EXPIRES,now=Date.now}){
-  const file=path.join(rootDir,'h3-benchmark-checkpoints','context-schema-v2-'+taskId+'.json');
+  taskId=CONTEXT_INSPECT_TASK,expires=CONTEXT_INSPECT_EXPIRES,now=Date.now,mode='window'}){
+  if(!['window','motion'].includes(mode))throw Error('Unknown fixed context recipe');
+  const route=mode==='motion'?MOTION_INSPECT_ROUTE:CONTEXT_INSPECT_ROUTE;
+  const prefix=mode==='motion'?'motion-context-schema-v1-':'context-schema-v2-';
+  const file=path.join(rootDir,'h3-benchmark-checkpoints',prefix+taskId+'.json');
   let pending=null;
   const read=async()=>{try{return JSON.parse(await fs.readFile(file,'utf8'));}catch{return {status:'not_checked'};}};
   const authorized=(req,res)=>{
@@ -110,12 +126,12 @@ export function installH3ContextInspection({app,rootDir,getTask,isOwner,probe,ca
     if(!isOwner(req)||now()>=Date.parse(expires)){res.sendStatus(404);return false;}
     return true;
   };
-  app.get(CONTEXT_INSPECT_ROUTE,async(req,res)=>{
+  app.get(route,async(req,res)=>{
     if(!authorized(req,res))return;
     const report=await read();
-    res.type('html').send(page(report,report.status==='not_checked'));
+    res.type('html').send(page(report,report.status==='not_checked',route));
   });
-  app.post(CONTEXT_INSPECT_ROUTE,async(req,res)=>{
+  app.post(route,async(req,res)=>{
     if(!authorized(req,res))return;
     let origin;
     try{origin=new URL(req.get('origin'));}catch{return res.sendStatus(403);}
@@ -133,7 +149,7 @@ export function installH3ContextInspection({app,rootDir,getTask,isOwner,probe,ca
       for(const check of checks){
         if(!inspectionTask)break;
         let result;
-        try{result=contextInspectionSummary(await probe(inspectionTask,contextInspectionGraph(check)),check);}
+        try{result=contextInspectionSummary(await probe(inspectionTask,contextInspectionGraph(check,mode)),check,mode);}
         catch{result={check,status:'unconfirmed',taskCreated:false};}
         if(result.status==='unexpected_acceptance'){
           result.cancelled=false;
@@ -145,12 +161,13 @@ export function installH3ContextInspection({app,rootDir,getTask,isOwner,probe,ca
         if(result.status!==expected){status=result.status;break;}
         if(check==='signature')status='schema_recognized';
       }
-      const report={status,sourceTaskId:String(taskId),accountPreflight:prepared.summary,samplerPresent:false,modelUpload:false,
+      const report={status,requestedNode:mode==='motion'?MOTION_CONTEXT_NODE:CONTEXT_NODE,
+        sourceTaskId:String(taskId),accountPreflight:prepared.summary,samplerPresent:false,modelUpload:false,
         gpuExecutionQualified:false,visualQualified:false,checkedAt:new Date(now()).toISOString(),results};
       await fs.writeFile(file,JSON.stringify(report),{mode:0o600});
       return report;
     })();
-    try{await pending;res.redirect(303,CONTEXT_INSPECT_ROUTE);}
+    try{await pending;res.redirect(303,route);}
     catch{res.status(502).type('html').send(page({status:'unconfirmed'},false));}
   });
 }
