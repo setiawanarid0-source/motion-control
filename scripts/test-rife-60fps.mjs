@@ -80,13 +80,19 @@ try{
   const repeat=await q.stage({jobId:id,deviceId:'device123',body:{workflow:'rife60'},
     video:{path:source,originalname:'video.mp4',mimetype:'video/mp4',size:4096}});
   assert.equal(repeat.jobId,id);
+  q.update(id,{stage:'error',failureStage:'submitting',failureCode:'RUNNINGHUB_PAID_BALANCE_REQUIRED',
+    error:'Kredit RH berbayar tidak mencukupi. Task belum dibuat.'});
+  const recovered=createGenerationQueue({dir}).owned(id,'device123');
+  assert.equal(recovered.stage,'error');
+  assert.equal(recovered.failureCode,'RUNNINGHUB_PAID_BALANCE_REQUIRED',
+    'Definite billing reason survives durable storage and the public jobs response');
   await assert.rejects(q.stage({jobId:crypto.randomUUID(),deviceId:'device123',
     body:{workflow:'r15'},video:{path:source,originalname:'video.mp4',mimetype:'video/mp4',size:4096}}),/Media/);
 
   for(const fps of [24,25,30,40,50,60,120]){
     const input=path.join(dir,'video-'+fps+'.mp4');
     execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y',
-      '-f','lavfi','-i','color=c=black:s=64x64:r='+fps,'-t','1',
+      '-f','lavfi','-i','color=c=black:s=64x64:r='+fps,'-t',fps===40?'2':'1',
       '-c:v','libx264','-pix_fmt','yuv420p',input],{timeout:30000,maxBuffer:65536});
     const originalBytes=fs.readFileSync(input);
     if(fps<=60){
@@ -94,6 +100,12 @@ try{
       assert.equal(result.sourceFps,fps);
       assert.equal(result.width,64);assert.equal(result.height,64);
       assert.equal(result.targetFps,60);
+      if(fps===40){
+        const ready=await prepareAdaptiveRifeVideo({path:input,size:originalBytes.length},result);
+        assert.equal(ready.sourceFps,40);assert.equal(ready.adaptive,false);
+        assert.equal(ready.file.path,input,'The two-second 40fps input is used directly without conversion');
+        await ready.release();
+      }
     }else{
       await assert.rejects(verifyRifeInput({path:input}),/hingga 60/);
     }
@@ -291,4 +303,5 @@ try{
   assert.equal(nativeInfo.file.path,native25,'Do not preprocess genuine sub-60fps inputs');
 }finally{fs.rmSync(cadenceDir,{recursive:true,force:true});}
 
-console.log('PASS: RIFE preserves native FPS; adaptive 60fps duplicates are repaired using measured 24/30fps anchors, native 60fps is not charged.');
+console.log('PASS: RIFE accepts two-second 40fps input unchanged, persists billing rejection codes, preserves native FPS and orientation, and repairs measured duplicate cadence; no provider calls.');
+

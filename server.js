@@ -608,6 +608,16 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   if(onBeforeSubmit)onBeforeSubmit();
   const data = await rhJson('/task/openapi/create', apiKey, payload, 60000);
   if (!data || Number(data.code) !== 0 || !data.data?.taskId) {
+    // A known structured billing refusal is not a lost acknowledgement.
+    // Any task ID or an explicit success code keeps the response ambiguous.
+    const paidRefusal=/^Insufficient paid RH coins\. Consumer API keys can only spend paid RH coins; free RH coins are not accepted\.$/i;
+    const messages=[data?.msg,data?.message,data?.data?.message,data?.data?.error];
+    if(data&&typeof data==='object'&&Number(data.code)!==0&&!data?.data?.taskId&&!data?.taskId&&
+      messages.some(message=>typeof message==='string'&&paidRefusal.test(message.replace(/\s+/g,' ').trim()))){
+      const error=new Error('RunningHub menolak task: kredit RH berbayar pada akun ini tidak mencukupi. '+
+        'API key consumer tidak dapat memakai kredit RH gratis. Task belum dibuat.');
+      error.code='RUNNINGHUB_PAID_BALANCE_REQUIRED';error.definitelyRejected=true;throw error;
+    }
     if(!data?.data?.taskId&&!data?.taskId&&data?.msg==='NOT_ENOUGH_BALANCE'){
       const error=new Error('RunningHub menolak task karena saldo akun tidak mencukupi. Task belum dibuat.');
       error.code='RUNNINGHUB_INSUFFICIENT_BALANCE';throw error;
@@ -978,7 +988,7 @@ async function handleGeneration(req,res){
         });
       } catch (error) {
         lastError = error;
-        if(['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE'].includes(error.code)){
+        if(['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE','RUNNINGHUB_PAID_BALANCE_REQUIRED'].includes(error.code)){
           req.submissionAttempted=false;break;
         }
         if(videoOnly)console.warn('RIFE task attempt failed',
@@ -1010,7 +1020,8 @@ async function handleGeneration(req,res){
     throw lastError || new Error('Tidak ada akun RunningHub yang dapat membuat task.');
   } catch (error) {
     cleanup();
-    res.status(400).json({ error: error.message || 'Generate gagal.' });
+    res.status(400).json({ error: error.message || 'Generate gagal.',
+      ...(error.code==='RUNNINGHUB_PAID_BALANCE_REQUIRED'?{failureCode:error.code}:{}) });
   }
 }
 
@@ -1050,7 +1061,7 @@ async function runQueuedGeneration(job,report){
     });
   }else{
     generationQueue.update(job.jobId,{
-      stage:'error',failureStage,error:result?.error||
+      stage:'error',failureStage,failureCode:result?.failureCode||null,error:result?.error||
         (httpStatus===400?'Persiapan media belum berhasil.':'Tidak dapat memulai pemrosesan video.')
     });
   }

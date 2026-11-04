@@ -240,8 +240,10 @@ function displaySubmissionFailure(data,{restored=false}={}){
   const ambiguous=data?.stage==='uncertain';
   const rejectedGraph=/prompt_outputs_failed_validation|RUNNINGHUB_WORKFLOW_VALIDATION/i.test(msg);
   const capacityFull=/TASK_QUEUE_MAXED/i.test(String(data.error||''));
+  const paidBalanceRequired=data?.failureCode==='RUNNINGHUB_PAID_BALANCE_REQUIRED';
   $('#taskSection').classList.remove('hidden');
   $('#taskStatus').textContent=ambiguous?'Status penerimaan belum pasti':
+    paidBalanceRequired?'Kredit RH berbayar diperlukan':
     capacityFull?'Antrean akun penuh':
     rejectedGraph?'Workflow ditolak RunningHub':
     providerStage?'Pengiriman gagal':'Persiapan belum berhasil';
@@ -1100,3 +1102,4 @@ bindHistoryActions();
 resumeSubmission().catch(error=>console.warn('Upload resume pending',error.message));
 loadSession().then(()=>{startHistoryMonitor();cleanupReferenceMedia().catch(()=>{});})
   .catch(e=>toast(e.message,true));updateEstimates();updateGenerate();renderHistory();
+
