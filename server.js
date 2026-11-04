@@ -36,7 +36,7 @@ import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} fr
 import {createH3AppearanceModel,CHARACTER_ASSET} from './h3-appearance-model.js';
 import {installNativePoseInspection,poseValidationSummary} from './h3-native-pose-inspect.js';
 import {installAkatzInspection} from './h3-akatz-inspect.js';
-import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan} from './h3-akatz-motion.js';
+import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -579,9 +579,10 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   const payload = {
     apiKey,
     workflowId,
-    // Keep RandomNoise values typed in workflow JSON. RunningHub's explicit
-    // noise_seed override arrived as str at the final sampler (task 2117100444870602753).
-    nodeInfoList: h3 ? [] : [
+    // Akatz preserves each planned seed through a STRING expression override
+    // and an INT graph link; direct noise_seed overrides became strings.
+    // The other existing H3 profiles retain their current submission contract.
+    nodeInfoList: workflowKey==='minimaxH3Akatz' ? akatzSeedNodeInfo(h3Source) : h3 ? [] : [
       ...(workflowKey==='rife60'
         ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName },
            { nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps },
@@ -1441,3 +1442,4 @@ if(/^\d{10,25}$/.test(process.env.VANTA_REFERENCE_AUDIT_TASK||'')){
 }
 setInterval(()=>pruneReferences().catch(error=>console.warn('Reference cleanup',error.message)),60*60*1000).unref();
 app.listen(PORT, '0.0.0.0', () => console.log(`VANTA Motion Studio listening on :${PORT}`));
+
