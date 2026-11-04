@@ -81,11 +81,14 @@ try{
     video:{path:source,originalname:'video.mp4',mimetype:'video/mp4',size:4096}});
   assert.equal(repeat.jobId,id);
   q.update(id,{stage:'error',failureStage:'submitting',failureCode:'RUNNINGHUB_PAID_BALANCE_REQUIRED',
-    error:'Kredit RH berbayar tidak mencukupi. Task belum dibuat.'});
+    error:'RunningHub menolak task. Task belum dibuat.',
+    submissionAccount:{id:'0c579c72-dcd5-4e0b-a3cc-11f8871dadbe',name:'Account 02',mode:'plus',key:'NEVER_PUBLIC'}});
   const recovered=createGenerationQueue({dir}).owned(id,'device123');
   assert.equal(recovered.stage,'error');
   assert.equal(recovered.failureCode,'RUNNINGHUB_PAID_BALANCE_REQUIRED',
     'Definite billing reason survives durable storage and the public jobs response');
+  assert.deepEqual(recovered.submissionAccount,{id:'0c579c72-dcd5-4e0b-a3cc-11f8871dadbe',name:'Account 02',mode:'plus'});
+  assert.doesNotMatch(JSON.stringify(recovered),/NEVER_PUBLIC/,'Only allowlisted account identity survives the public view');
   await assert.rejects(q.stage({jobId:crypto.randomUUID(),deviceId:'device123',
     body:{workflow:'r15'},video:{path:source,originalname:'video.mp4',mimetype:'video/mp4',size:4096}}),/Media/);
 

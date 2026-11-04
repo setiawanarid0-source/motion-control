@@ -10,7 +10,7 @@ has(server,"generationQueue.setExecutor(runQueuedGeneration)");
 has(server,"app.get('/api/generate/jobs/:jobId'");
 has(server,"req.progress?.('preparing_motion')");
 has(server,"req.progress?.('saving_references')");
-has(server,"req.progress?.('submitting')");
+has(server,"req.progress?.('submitting',null,");
 has(server,"if(!mayTryNextAccountAfterCreate({");
 has(server,"error,selectedAccount:requestedAccountId,attemptedCreate:req.submissionAttempted");
 has(server,"if(isDefinitelyRejectedAtCapacity(error)){");

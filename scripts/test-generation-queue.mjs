@@ -40,7 +40,13 @@ try{
       'A reconnect reads the actual last transfer progress');
     assert.ok(!JSON.stringify(durable.read(job.jobId)).includes('private-'),
       'Credentials and signed URLs must not be persisted as model progress');
-    progress('submitting');await sleep(10);
+    const selected={id:'0c579c72-dcd5-4e0b-a3cc-11f8871dadbe',name:'Account 02',mode:'plus'};
+    progress('submitting',null,{account:{...selected,key:'private-account-key'}});
+    assert.deepEqual(queue.owned(job.jobId,device).submissionAccount,selected);
+    assert.deepEqual(durable.owned(job.jobId,device).submissionAccount,selected,
+      'Selected account persists at the create boundary across reconnect');
+    assert.ok(!JSON.stringify(durable.read(job.jobId)).includes('private-account-key'));
+    await sleep(10);
     queue.update(job.jobId,{stage:'accepted',task:{taskId:'2109000000000000001'}});
   });
   for(let i=0;i<30&&!queue.owned(id,device).task;i++)await sleep(20);

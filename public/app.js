@@ -243,7 +243,7 @@ function displaySubmissionFailure(data,{restored=false}={}){
   const paidBalanceRequired=data?.failureCode==='RUNNINGHUB_PAID_BALANCE_REQUIRED';
   $('#taskSection').classList.remove('hidden');
   $('#taskStatus').textContent=ambiguous?'Status penerimaan belum pasti':
-    paidBalanceRequired?'Kredit RH berbayar diperlukan':
+    paidBalanceRequired?'Pengiriman ditolak RunningHub':
     capacityFull?'Antrean akun penuh':
     rejectedGraph?'Workflow ditolak RunningHub':
     providerStage?'Pengiriman gagal':'Persiapan belum berhasil';
@@ -252,6 +252,7 @@ function displaySubmissionFailure(data,{restored=false}={}){
     providerStage||rejectedGraph?'Belum ada task ID dari RunningHub':
     'Gagal sebelum pengiriman task';
   $('#taskId').textContent='Belum ada task ID';
+  if(data?.submissionAccount?.name)$('#taskAccount').textContent=data.submissionAccount.name;
   if(restored)$('#taskWorkflow').textContent='RIFE · ≤60 → 60 FPS';
   const el=$('#taskFailureDetail');
   if(el){
