@@ -13,12 +13,24 @@ export const MOTION_INSPECT_ROUTE='/api/internal/h3-motion-context-inspect';
 export const CONTEXT_GUARD='VANTA_H3_CONTEXT_SCHEMA_ONLY_DO_NOT_EXECUTE.invalid';
 export const CONTEXT_NEGATIVE='VANTA_H3_CONTEXT_UNREGISTERED_NEGATIVE.invalid';
 const checks=['negative-control','registration','signature'];
-const allowedClasses=new Set(['LoadImage','PreviewImage','PreviewAny','UNETLoader',
+const motionChecks=['negative-control','registration','latent-contract','signature'];
+const allowedClasses=new Set(['LoadImage','ImageFromBatch','PreviewImage','PreviewAny','UNETLoader',
   'CLIPLoader','VAELoader','MiniMaxH3ReferenceToVideo','CFGGuider',CONTEXT_NODE,MOTION_CONTEXT_NODE,CONTEXT_NEGATIVE]);
 const allowedErrors=new Set(['custom_validation_failed','required_input_missing',
   'value_not_in_list','return_type_mismatch','invalid_input_type','exception_during_validation']);
 const providerMessages=new Set(['USER_BANNED','NOT_ENOUGH_BALANCE','TASK_QUEUE_MAXED',
   'API_KEY_INVALID','API_KEY_IS_NOT_EXIST','API_KEY_NOT_FOUND','WORKFLOW_NOT_EXIST']);
+const motionCheckpoint=rootDir=>path.join(rootDir,'h3-benchmark-checkpoints',
+  'motion-context-schema-v2-'+CONTEXT_INSPECT_TASK+'.json');
+export async function assertH3MotionContextSchema(rootDir){
+  let report;
+  try{report=JSON.parse(await fs.readFile(motionCheckpoint(rootDir),'utf8'));}catch{}
+  const expected=['negative_control_passed','registered','latent_contract_recognized','schema_recognized'];
+  if(report?.status!=='schema_recognized'||report.requestedNode!==MOTION_CONTEXT_NODE||
+    report.samplerPresent!==false||!Array.isArray(report.results)||report.results.length!==motionChecks.length||
+    report.results.some((r,i)=>r.check!==motionChecks[i]||r.status!==expected[i]||r.taskCreated!==false))
+    throw Error('Sambungan latent H3 belum lolos pemeriksaan worker. Task belum dikirim.');
+}
 export async function selectContextInspectionTask(source,accounts,readStatus){
   const inspect=async account=>{
     try{
@@ -43,8 +55,8 @@ export async function selectContextInspectionTask(source,accounts,readStatus){
 export function contextInspectionGraph(check,mode='window'){
   if(!['window','motion'].includes(mode))throw Error('Unknown fixed context recipe');
   const target=mode==='motion'?MOTION_CONTEXT_NODE:CONTEXT_NODE;
-  if(!checks.includes(check))throw Error('Unknown fixed context check');
-  if(check!=='signature')return {
+  if(!(mode==='motion'?motionChecks:checks).includes(check))throw Error('Unknown fixed context check');
+  if(!['signature','latent-contract'].includes(check))return {
     guard:{class_type:'LoadImage',inputs:{image:CONTEXT_GUARD}},
     output:{class_type:'PreviewImage',inputs:{images:['guard',0]}},
     catalog:{class_type:check==='negative-control'?CONTEXT_NEGATIVE:target,inputs:{}}
@@ -70,6 +82,12 @@ export function contextInspectionGraph(check,mode='window'){
       vae:['vae',0],latent:['conditioning',1],context_latent:['conditioning',1],
       context_length:'5',audio_context_length:0}};
     graph.guider.inputs={model:['model',0],positive:['context',0],negative:['context',0],cfg:1};
+    graph.trim={class_type:'ImageFromBatch',inputs:{image:['guard',0],batch_index:['context',1],length:1}};
+    graph.trim_output={class_type:'PreviewImage',inputs:{images:['trim',0]}};
+    // Unknown optional fields are sometimes ignored by graph validators.
+    // A deliberate CLIP -> LATENT mismatch proves context_latent is an
+    // actual typed input on this worker, rather than an ignored field.
+    if(check==='latent-contract')graph.context.inputs.context_latent=['clip',0];
   }
   return graph;
 }
@@ -97,7 +115,10 @@ export function contextInspectionSummary(response,check,mode='window'){
   }else if(missingNodes.includes(target))status='unsupported';
   else if(type==='missing_node_type')status='missing_dependency';
   else if(type==='prompt_outputs_failed_validation'&&guardRejected){
-    status=check==='registration'?'registered':
+    const rawTypeProven=rejection.node_errors?.context?.errors?.some(e=>
+      e.type==='return_type_mismatch'&&e.extra_info?.input_name==='context_latent');
+    status=check==='latent-contract'?(rawTypeProven?'latent_contract_recognized':'schema_incompatible'):
+      check==='registration'?'registered':
       nodeErrors.every(n=>n.id==='guard')?'schema_recognized':'schema_incompatible';
   }
   return {check,status,taskCreated:false,validationType:type,missingNodes,nodeErrors};
@@ -117,7 +138,7 @@ export function installH3ContextInspection({app,rootDir,getTask,isOwner,probe,ca
   taskId=CONTEXT_INSPECT_TASK,expires=CONTEXT_INSPECT_EXPIRES,now=Date.now,mode='window'}){
   if(!['window','motion'].includes(mode))throw Error('Unknown fixed context recipe');
   const route=mode==='motion'?MOTION_INSPECT_ROUTE:CONTEXT_INSPECT_ROUTE;
-  const prefix=mode==='motion'?'motion-context-schema-v1-':'context-schema-v2-';
+  const prefix=mode==='motion'?'motion-context-schema-v2-':'context-schema-v2-';
   const file=path.join(rootDir,'h3-benchmark-checkpoints',prefix+taskId+'.json');
   let pending=null;
   const read=async()=>{try{return JSON.parse(await fs.readFile(file,'utf8'));}catch{return {status:'not_checked'};}};
@@ -146,7 +167,7 @@ export function installH3ContextInspection({app,rootDir,getTask,isOwner,probe,ca
       try{prepared=await resolveTask(task);}catch{prepared={task:null,summary:{selection:'unconfirmed'}};}
       const results=[];let status=prepared.task?'unconfirmed':'no_eligible_inspection_account';
       const inspectionTask=prepared.task;
-      for(const check of checks){
+      for(const check of mode==='motion'?motionChecks:checks){
         if(!inspectionTask)break;
         let result;
         try{result=contextInspectionSummary(await probe(inspectionTask,contextInspectionGraph(check,mode)),check,mode);}
@@ -157,7 +178,8 @@ export function installH3ContextInspection({app,rootDir,getTask,isOwner,probe,ca
             try{await cancelUnexpected(inspectionTask,result.taskId);result.cancelled=true;}catch{}
         }
         results.push(result);
-        const expected=check==='negative-control'?'negative_control_passed':check==='registration'?'registered':'schema_recognized';
+        const expected=check==='negative-control'?'negative_control_passed':check==='registration'?'registered':
+          check==='latent-contract'?'latent_contract_recognized':'schema_recognized';
         if(result.status!==expected){status=result.status;break;}
         if(check==='signature')status='schema_recognized';
       }
