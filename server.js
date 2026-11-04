@@ -699,6 +699,14 @@ installH3ContextInspection({app,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id
     const response=await rhJson('/task/openapi/cancel',task.key,{apiKey:task.key,taskId:id},30000);
     if(Number(response?.code)!==0)throw Error('Context inspection cancellation unconfirmed');
   }});
+installH3ContextInspection({app,rootDir:DATA_DIR,mode:'motion',getTask:id=>taskRegistry.get(id),isOwner:ownerAuth.isOwner,
+  resolveTask:task=>selectContextInspectionTask(task,loadGlobalAccounts(),accountStatus),
+  probe:(task,graph)=>rhJson('/task/openapi/create',task.key,{apiKey:task.key,workflowId:LOCKED_WORKFLOW_ID,
+    instanceType:'plus',workflow:JSON.stringify(graph),nodeInfoList:[]},60000),
+  cancelUnexpected:async(task,id)=>{
+    const response=await rhJson('/task/openapi/cancel',task.key,{apiKey:task.key,taskId:id},30000);
+    if(Number(response?.code)!==0)throw Error('Motion context inspection cancellation unconfirmed');
+  }});
 // Agent bridge now inherits the same Owner session as every other VANTA feature.
 app.use('/api/agent', createAgentBridge({ isOwner: ownerAuth.isOwner }));
 // Independent provider: never shares RunningHub credits, task history, or account vault.

@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {CONTEXT_INSPECT_ROUTE,CONTEXT_NODE,CONTEXT_GUARD,CONTEXT_NEGATIVE,
-  contextInspectionGraph,contextInspectionSummary,installH3ContextInspection,selectContextInspectionTask} from '../h3-context-inspect.js';
+  MOTION_CONTEXT_NODE,MOTION_INSPECT_ROUTE,contextInspectionGraph,contextInspectionSummary,
+  installH3ContextInspection,selectContextInspectionTask} from '../h3-context-inspect.js';
 
 for(const check of ['negative-control','registration','signature']){
   const g=contextInspectionGraph(check);
@@ -30,6 +31,14 @@ const guarded=rejected({type:'prompt_outputs_failed_validation'},{
   guard:{class_type:'LoadImage',errors:[{type:'custom_validation_failed'}]}
 });
 assert.equal(contextInspectionSummary(missing(CONTEXT_NODE),'registration').status,'unsupported');
+assert.equal(contextInspectionSummary(missing(MOTION_CONTEXT_NODE),'registration','motion').status,'unsupported');
+const rawGraph=contextInspectionGraph('signature','motion');
+assert.equal(rawGraph.context.class_type,MOTION_CONTEXT_NODE);
+assert.deepEqual(rawGraph.context.inputs.context_latent,['conditioning',1]);
+assert.deepEqual(rawGraph.guider.inputs.positive,['context',0]);
+assert.deepEqual(rawGraph.conditioning.inputs['ref_images.ref_image_1'],['guard',0]);
+assert.ok(!Object.values(rawGraph).some(n=>/Sampler|Save|VideoCombine/.test(n.class_type)));
+assert.throws(()=>contextInspectionGraph('signature','arbitrary'));
 assert.equal(contextInspectionSummary(missing(CONTEXT_NEGATIVE),'negative-control').status,'negative_control_passed');
 assert.equal(contextInspectionSummary(guarded,'registration').status,'registered');
 assert.equal(contextInspectionSummary(guarded,'signature').status,'schema_recognized');
@@ -56,10 +65,10 @@ assert.equal(task.key,secret,'Inspection key selection must not rewrite archived
 const noAccount=await selectContextInspectionTask(task,[],async()=>{throw Error('USER_BANNED');});
 assert.equal(noAccount.task,null);assert.equal(noAccount.summary.sourceCredentialStatus,'USER_BANNED');
 let calls=0,cancellations=[];
-const build=(name,{probe,owner=true,now=()=>Date.parse('2026-11-04T07:00:00Z')}={})=>{
+const build=(name,{probe,owner=true,now=()=>Date.parse('2026-11-04T07:00:00Z'),mode='window'}={})=>{
   const handlers={};
   const app={get:(p,h)=>handlers['GET '+p]=h,post:(p,h)=>handlers['POST '+p]=h};
-  installH3ContextInspection({app,rootDir:path.join(root,name),taskId,getTask:()=>task,
+  installH3ContextInspection({app,rootDir:path.join(root,name),taskId,getTask:()=>task,mode,
     isOwner:()=>owner,now,probe:async(t,g)=>{calls++;assert.equal(t.key,secret);return probe(g);},
     cancelUnexpected:async(t,id)=>{assert.equal(t.key,secret);cancellations.push(id);}});
   return async(method,{origin='https://vanta.test'}={})=>{
@@ -67,7 +76,7 @@ const build=(name,{probe,owner=true,now=()=>Date.parse('2026-11-04T07:00:00Z')}=
     const res={statusCode:200,body:null,set(){return this;},type(){return this;},
       status(v){this.statusCode=v;return this;},sendStatus(v){this.statusCode=v;return this;},
       send(v){this.body=v;return this;},redirect(code,url){this.statusCode=code;this.body=url;return this;}};
-    await handlers[method+' '+CONTEXT_INSPECT_ROUTE](req,res);return res;
+    await handlers[method+' '+(mode==='motion'?MOTION_INSPECT_ROUTE:CONTEXT_INSPECT_ROUTE)](req,res);return res;
   };
 };
 try{
@@ -97,6 +106,9 @@ try{
   await accepted('POST');assert.equal(calls,7);assert.deepEqual(cancellations,['2118000000000000009']);
   const same=build('same-source',{probe:()=>({code:0,data:{taskId}})});
   await same('POST');assert.equal(calls,8);assert.equal(cancellations.length,1,'Never cancel the source task');
+  const motion=build('raw-motion',{mode:'motion',probe:g=>g.catalog?.class_type===CONTEXT_NEGATIVE?missing(CONTEXT_NEGATIVE):guarded});
+  await motion('POST');assert.equal(calls,11);
+  assert.match((await motion('GET')).body,/MiniMaxH3MotionContext/);
   const server=await fs.readFile(new URL('../server.js',import.meta.url),'utf8');
   assert.ok(server.indexOf('app.use(ownerAuth.requireOwner);')<server.indexOf('installH3ContextInspection({'));
   console.log('PASS: fixed no-sampler checks, mandatory invalid-image output dependency, owner/origin/expiry gates, negative control, durable once-only requests, schema gate and no secret disclosure');
