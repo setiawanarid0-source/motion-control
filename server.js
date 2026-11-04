@@ -36,7 +36,7 @@ import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} fr
 import {createH3AppearanceModel,CHARACTER_ASSET} from './h3-appearance-model.js';
 import {installNativePoseInspection,poseValidationSummary} from './h3-native-pose-inspect.js';
 import {installAkatzInspection} from './h3-akatz-inspect.js';
-import {installH3ContextInspection} from './h3-context-inspect.js';
+import {installH3ContextInspection,selectContextInspectionTask} from './h3-context-inspect.js';
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -692,6 +692,7 @@ for (const name of ['auth.css', 'auth.js']) {
 }
 app.use(ownerAuth.requireOwner);
 installH3ContextInspection({app,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),isOwner:ownerAuth.isOwner,
+  resolveTask:task=>selectContextInspectionTask(task,loadGlobalAccounts(),accountStatus),
   probe:(task,graph)=>rhJson('/task/openapi/create',task.key,{apiKey:task.key,workflowId:LOCKED_WORKFLOW_ID,
     instanceType:'plus',workflow:JSON.stringify(graph),nodeInfoList:[]},60000),
   cancelUnexpected:async(task,id)=>{

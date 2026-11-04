@@ -15,6 +15,29 @@ const allowedClasses=new Set(['LoadImage','PreviewImage','PreviewAny','UNETLoade
   'CLIPLoader','MiniMaxH3ReferenceToVideo','CFGGuider',CONTEXT_NODE,CONTEXT_NEGATIVE]);
 const allowedErrors=new Set(['custom_validation_failed','required_input_missing',
   'value_not_in_list','return_type_mismatch','invalid_input_type','exception_during_validation']);
+const providerMessages=new Set(['USER_BANNED','NOT_ENOUGH_BALANCE','TASK_QUEUE_MAXED',
+  'API_KEY_INVALID','API_KEY_IS_NOT_EXIST','API_KEY_NOT_FOUND','WORKFLOW_NOT_EXIST']);
+export async function selectContextInspectionTask(source,accounts,readStatus){
+  const inspect=async account=>{
+    try{
+      const status=await readStatus(account.key);
+      const coins=status?.remainCoins;
+      return {account,eligible:Number.isFinite(coins)&&coins>=100,
+        reason:Number.isFinite(coins)?coins>=100?'ready':'below_pool_minimum':'invalid_status'};
+    }catch(e){return {account,eligible:false,reason:providerMessages.has(e.message)?e.message:'unconfirmed'};}
+  };
+  const original=await inspect({key:source.key,id:source.accountId,name:source.accountName});
+  const summary={sourceCredentialStatus:original.reason,selection:'source_task'};
+  if(original.eligible)return {task:source,summary};
+  // Account labels can change when low-credit accounts retire. Use distinct
+  // stored keys and live read-only status, never a label or an old task balance.
+  const seen=new Set([source.key]);
+  const candidates=accounts.filter(a=>a?.key&&!seen.has(a.key)&&(seen.add(a.key),true)).slice(0,8);
+  const checked=await Promise.all(candidates.map(inspect));
+  const chosen=checked.find(x=>x.eligible);
+  summary.selection=chosen?'active_pool':'none';
+  return {task:chosen?{...source,key:chosen.account.key}:null,summary};
+}
 export function contextInspectionGraph(check){
   if(!checks.includes(check))throw Error('Unknown fixed context check');
   if(check!=='signature')return {
@@ -43,7 +66,9 @@ export function contextInspectionSummary(response,check){
   if(id)return {check,status:'unexpected_acceptance',
     taskId:/^\d{10,25}$/.test(String(id))?String(id):null,taskCreated:true};
   const rejection=findValidationRejection(response);
-  if(!rejection)return {check,status:'unconfirmed',taskCreated:false};
+  if(!rejection)return {check,status:'unconfirmed',taskCreated:false,
+    providerCode:Number.isFinite(Number(response?.code))?Number(response.code):null,
+    providerMessage:providerMessages.has(response?.msg)?response.msg:null};
   const type=rejection.error?.type;
   const error=JSON.stringify(rejection.error||{});
   const missingNodes=[...allowedClasses].filter(n=>type==='missing_node_type'&&error.includes(n));
@@ -75,8 +100,9 @@ function page(report,canCheck){
     (canCheck?'<form method="post" action="'+CONTEXT_INSPECT_ROUTE+'"><button type="submit">Periksa dukungan RunningHub</button></form>':'')+'</html>';
 }
 export function installH3ContextInspection({app,rootDir,getTask,isOwner,probe,cancelUnexpected,
+  resolveTask=async task=>({task,summary:{selection:'source_task'}}),
   taskId=CONTEXT_INSPECT_TASK,expires=CONTEXT_INSPECT_EXPIRES,now=Date.now}){
-  const file=path.join(rootDir,'h3-benchmark-checkpoints','context-schema-v1-'+taskId+'.json');
+  const file=path.join(rootDir,'h3-benchmark-checkpoints','context-schema-v2-'+taskId+'.json');
   let pending=null;
   const read=async()=>{try{return JSON.parse(await fs.readFile(file,'utf8'));}catch{return {status:'not_checked'};}};
   const authorized=(req,res)=>{
@@ -100,22 +126,26 @@ export function installH3ContextInspection({app,rootDir,getTask,isOwner,probe,ca
       await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});
       try{await fs.writeFile(file,JSON.stringify({status:'checking'}),{flag:'wx',mode:0o600});}
       catch(e){if(e.code==='EEXIST')return read();throw e;}
-      const results=[];let status='unconfirmed';
+      let prepared;
+      try{prepared=await resolveTask(task);}catch{prepared={task:null,summary:{selection:'unconfirmed'}};}
+      const results=[];let status=prepared.task?'unconfirmed':'no_eligible_inspection_account';
+      const inspectionTask=prepared.task;
       for(const check of checks){
+        if(!inspectionTask)break;
         let result;
-        try{result=contextInspectionSummary(await probe(task,contextInspectionGraph(check)),check);}
+        try{result=contextInspectionSummary(await probe(inspectionTask,contextInspectionGraph(check)),check);}
         catch{result={check,status:'unconfirmed',taskCreated:false};}
         if(result.status==='unexpected_acceptance'){
           result.cancelled=false;
           if(result.taskId&&result.taskId!==String(taskId)&&cancelUnexpected)
-            try{await cancelUnexpected(task,result.taskId);result.cancelled=true;}catch{}
+            try{await cancelUnexpected(inspectionTask,result.taskId);result.cancelled=true;}catch{}
         }
         results.push(result);
         const expected=check==='negative-control'?'negative_control_passed':check==='registration'?'registered':'schema_recognized';
         if(result.status!==expected){status=result.status;break;}
         if(check==='signature')status='schema_recognized';
       }
-      const report={status,sourceTaskId:String(taskId),samplerPresent:false,modelUpload:false,
+      const report={status,sourceTaskId:String(taskId),accountPreflight:prepared.summary,samplerPresent:false,modelUpload:false,
         gpuExecutionQualified:false,visualQualified:false,checkedAt:new Date(now()).toISOString(),results};
       await fs.writeFile(file,JSON.stringify(report),{mode:0o600});
       return report;
