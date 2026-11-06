@@ -39,6 +39,7 @@ import {installNativePoseInspection,poseValidationSummary} from './h3-native-pos
 import {installAkatzInspection} from './h3-akatz-inspect.js';
 import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionContextSchema} from './h3-context-inspect.js';
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
+import {installAkatzEditorDownload} from './h3-runninghub-export.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -738,6 +739,11 @@ app.get('/health', (req, res) => res.json({ ok: true, service: 'vanta-motion-stu
 app.get('/api/workflows', (req, res) => {
   res.json({ workflows: Object.values(workflowMeta) });
 });
+
+installAkatzEditorDownload({app,getModelFiles:()=>({
+  characterLoraFile:h3AkatzModels.character.cachedFile(),
+  turboLoraFile:h3AkatzModels.turbo.cachedFile()
+})});
 
 app.get('/api/session', async (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);

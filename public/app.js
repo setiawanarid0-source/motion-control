@@ -1055,6 +1055,22 @@ function startHistoryMonitor(){
   inspectRecentFailedTasks();
 }
 
+document.querySelector('.akatz-editor-download')?.addEventListener('click',async event=>{
+  event.preventDefault();const link=event.currentTarget;
+  if(link.getAttribute('aria-busy')==='true')return;
+  link.setAttribute('aria-busy','true');let url;
+  try{
+    const response=await fetch(link.href,{credentials:'same-origin'});
+    if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.error||'Workflow belum dapat diunduh.');}
+    const workflow=await response.json();
+    if(!Array.isArray(workflow.nodes)||!Array.isArray(workflow.links))throw Error('File workflow belum valid.');
+    url=URL.createObjectURL(new Blob([JSON.stringify(workflow,null,2)+'\n'],{type:'application/json'}));
+    const save=document.createElement('a');save.href=url;save.download=link.download;
+    document.body.append(save);save.click();save.remove();toast('Workflow diunduh.');
+  }catch(error){toast(error.message||'Unduhan workflow gagal.',true);}
+  finally{link.removeAttribute('aria-busy');if(url)setTimeout(()=>URL.revokeObjectURL(url),1000);}
+});
+
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
 $$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');

@@ -139,7 +139,11 @@ export function createH3AppearanceModel({dir,request,http=axios,asset=FFP_ASSET,
     try{await target.promise;}finally{target.listeners.delete(listener);}
     return name;
   }
-  return {primeCached,ensure(apiKey,{onProgress}={}){
+  return {primeCached,
+    // Owner-only editor exports may reuse a previously verified upload receipt.
+    // This is local metadata only, not authorization for a different RH account.
+    cachedFile(){return knownReceipts()[0]?.name||null;},
+    ensure(apiKey,{onProgress}={}){
     const id=keyId(apiKey);
     if(onProgress){
       if(!listeners.has(id))listeners.set(id,new Set());listeners.get(id).add(onProgress);
