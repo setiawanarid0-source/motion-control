@@ -1,0 +1,1515 @@
+{
+  "UNETLoader": {
+    "inputs": [
+      {
+        "widget": {
+          "name": "unet_name"
+        },
+        "name": "unet_name",
+        "type": "COMBO"
+      },
+      {
+        "widget": {
+          "name": "weight_dtype"
+        },
+        "name": "weight_dtype",
+        "type": "COMBO"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "MODEL",
+        "type": "MODEL"
+      }
+    ],
+    "widgetOrder": [
+      "unet_name",
+      "weight_dtype"
+    ],
+    "defaults": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "objectWidgets": false
+  },
+  "CLIPLoader": {
+    "inputs": [
+      {
+        "widget": {
+          "name": "clip_name"
+        },
+        "name": "clip_name",
+        "type": "COMBO"
+      },
+      {
+        "widget": {
+          "name": "type"
+        },
+        "name": "type",
+        "type": "COMBO"
+      },
+      {
+        "widget": {
+          "name": "device"
+        },
+        "shape": 7,
+        "name": "device",
+        "type": "COMBO"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "CLIP",
+        "type": "CLIP"
+      }
+    ],
+    "widgetOrder": [
+      "clip_name",
+      "type",
+      "device"
+    ],
+    "defaults": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "objectWidgets": false
+  },
+  "VAELoader": {
+    "inputs": [
+      {
+        "widget": {
+          "name": "vae_name"
+        },
+        "name": "vae_name",
+        "type": "COMBO"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "VAE",
+        "type": "VAE"
+      }
+    ],
+    "widgetOrder": [
+      "vae_name"
+    ],
+    "defaults": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    },
+    "objectWidgets": false
+  },
+  "RHLoraLoader": {
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      },
+      {
+        "shape": 7,
+        "name": "clip",
+        "type": "CLIP"
+      },
+      {
+        "widget": {
+          "name": "file_name"
+        },
+        "name": "file_name",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "strength_model"
+        },
+        "name": "strength_model",
+        "type": "FLOAT"
+      },
+      {
+        "widget": {
+          "name": "strength_clip"
+        },
+        "name": "strength_clip",
+        "type": "FLOAT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "MODEL",
+        "type": "MODEL"
+      },
+      {
+        "name": "CLIP",
+        "type": "CLIP"
+      }
+    ],
+    "widgetOrder": [
+      "file_name",
+      "strength_model",
+      "strength_clip"
+    ],
+    "defaults": {
+      "file_name": "",
+      "strength_model": 1,
+      "strength_clip": 0
+    },
+    "objectWidgets": false
+  },
+  "MiniMaxH3SigmaShift": {
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      },
+      {
+        "widget": {
+          "name": "shift_video"
+        },
+        "name": "shift_video",
+        "type": "FLOAT"
+      },
+      {
+        "widget": {
+          "name": "shift_audio"
+        },
+        "name": "shift_audio",
+        "type": "FLOAT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "MODEL",
+        "type": "MODEL"
+      }
+    ],
+    "widgetOrder": [
+      "shift_video",
+      "shift_audio"
+    ],
+    "defaults": {
+      "shift_video": 12,
+      "shift_audio": 3
+    },
+    "objectWidgets": false
+  },
+  "ModelAttentionBackend": {
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      },
+      {
+        "widget": {
+          "name": "attention"
+        },
+        "name": "attention",
+        "type": "COMBO"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      }
+    ],
+    "widgetOrder": [
+      "attention"
+    ],
+    "defaults": {
+      "attention": "comfy kitchen attention"
+    },
+    "objectWidgets": false
+  },
+  "LoadImage": {
+    "inputs": [
+      {
+        "widget": {
+          "name": "image"
+        },
+        "name": "image",
+        "type": "COMBO"
+      },
+      {
+        "widget": {
+          "name": "upload"
+        },
+        "name": "upload",
+        "type": "IMAGEUPLOAD"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "IMAGE",
+        "type": "IMAGE"
+      },
+      {
+        "name": "MASK",
+        "type": "MASK"
+      }
+    ],
+    "widgetOrder": [
+      "image",
+      "upload"
+    ],
+    "defaults": {
+      "image": "",
+      "upload": "image"
+    },
+    "objectWidgets": false
+  },
+  "ImagePadForOutpaint": {
+    "inputs": [
+      {
+        "name": "image",
+        "type": "IMAGE"
+      },
+      {
+        "widget": {
+          "name": "left"
+        },
+        "name": "left",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "top"
+        },
+        "name": "top",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "right"
+        },
+        "name": "right",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "bottom"
+        },
+        "name": "bottom",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "feathering"
+        },
+        "name": "feathering",
+        "type": "INT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "IMAGE",
+        "type": "IMAGE"
+      },
+      {
+        "name": "MASK",
+        "type": "MASK"
+      }
+    ],
+    "widgetOrder": [
+      "left",
+      "top",
+      "right",
+      "bottom",
+      "feathering"
+    ],
+    "defaults": {
+      "left": 0,
+      "top": 0,
+      "right": 8,
+      "bottom": 0,
+      "feathering": 0
+    },
+    "objectWidgets": false
+  },
+  "KSamplerSelect": {
+    "inputs": [
+      {
+        "widget": {
+          "name": "sampler_name"
+        },
+        "name": "sampler_name",
+        "type": "COMBO"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "SAMPLER",
+        "type": "SAMPLER"
+      }
+    ],
+    "widgetOrder": [
+      "sampler_name"
+    ],
+    "defaults": {
+      "sampler_name": "euler"
+    },
+    "objectWidgets": false
+  },
+  "BasicScheduler": {
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      },
+      {
+        "widget": {
+          "name": "scheduler"
+        },
+        "name": "scheduler",
+        "type": "COMBO"
+      },
+      {
+        "widget": {
+          "name": "steps"
+        },
+        "name": "steps",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "denoise"
+        },
+        "name": "denoise",
+        "type": "FLOAT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "SIGMAS",
+        "type": "SIGMAS"
+      }
+    ],
+    "widgetOrder": [
+      "scheduler",
+      "steps",
+      "denoise"
+    ],
+    "defaults": {
+      "scheduler": "simple",
+      "steps": 4,
+      "denoise": 1
+    },
+    "objectWidgets": false
+  },
+  "ImageBatchMulti": {
+    "inputs": [
+      {
+        "name": "image_1",
+        "type": "IMAGE"
+      },
+      {
+        "shape": 7,
+        "name": "image_2",
+        "type": "IMAGE"
+      },
+      {
+        "widget": {
+          "name": "inputcount"
+        },
+        "name": "inputcount",
+        "type": "INT"
+      },
+      {
+        "name": "image_3",
+        "type": "IMAGE",
+        "widget": {
+          "name": "image_3"
+        }
+      },
+      {
+        "name": "image_4",
+        "type": "IMAGE",
+        "widget": {
+          "name": "image_4"
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "name": "images",
+        "type": "IMAGE"
+      }
+    ],
+    "widgetOrder": [
+      "inputcount",
+      null
+    ],
+    "defaults": {
+      "inputcount": 4
+    },
+    "objectWidgets": false
+  },
+  "VHS_LoadAudioUpload": {
+    "inputs": [
+      {
+        "widget": {
+          "name": "audio"
+        },
+        "name": "audio",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "start_time"
+        },
+        "name": "start_time",
+        "type": "FLOAT"
+      },
+      {
+        "widget": {
+          "name": "duration"
+        },
+        "name": "duration",
+        "type": "FLOAT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "name": "audio_length_seconds",
+        "type": "FLOAT"
+      }
+    ],
+    "widgetOrder": [
+      "audio",
+      "start_time",
+      "duration",
+      "choose audio to upload"
+    ],
+    "defaults": {
+      "audio": "",
+      "start_time": 0,
+      "duration": 0,
+      "choose audio to upload": "image"
+    },
+    "objectWidgets": false
+  },
+  "TextGenerate": {
+    "inputs": [
+      {
+        "name": "clip",
+        "type": "CLIP"
+      },
+      {
+        "shape": 7,
+        "name": "image",
+        "type": "IMAGE"
+      },
+      {
+        "shape": 7,
+        "name": "video",
+        "type": "IMAGE"
+      },
+      {
+        "shape": 7,
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "shape": 7,
+        "name": "system_prompt",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "prompt"
+        },
+        "name": "prompt",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "max_length"
+        },
+        "name": "max_length",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "sampling_mode"
+        },
+        "name": "sampling_mode",
+        "type": "COMFY_DYNAMICCOMBO_V3"
+      },
+      {
+        "widget": {
+          "name": "thinking"
+        },
+        "shape": 7,
+        "name": "thinking",
+        "type": "BOOLEAN"
+      },
+      {
+        "widget": {
+          "name": "use_default_template"
+        },
+        "shape": 7,
+        "name": "use_default_template",
+        "type": "BOOLEAN"
+      },
+      {
+        "widget": {
+          "name": "mtp"
+        },
+        "shape": 7,
+        "name": "mtp",
+        "type": "COMBO"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "generated_text",
+        "type": "STRING"
+      },
+      {
+        "name": "thinking",
+        "type": "STRING"
+      }
+    ],
+    "widgetOrder": [
+      "prompt",
+      "max_length",
+      "sampling_mode",
+      "thinking",
+      "use_default_template",
+      "mtp"
+    ],
+    "defaults": {
+      "prompt": "Describe only the attached photo in concise English: visible facial details, hair colour, style and length, skin colour, visible garments and their exact colours, neckline, sleeves, material and pattern, visible accessories and hand coverings, and visible scene and illumination. Describe only what can actually be seen. Do not invent watches, jewellery, clothing, hidden body parts, identity, age or ethnicity. Do not estimate, reshape or beautify the body. Do not describe a different photo or a video. Return only the visible appearance description, without headings, instructions or reasoning.",
+      "max_length": 512,
+      "sampling_mode": "off",
+      "thinking": false,
+      "use_default_template": true,
+      "mtp": "auto"
+    },
+    "objectWidgets": false
+  },
+  "StringConcatenate": {
+    "inputs": [
+      {
+        "widget": {
+          "name": "string_a"
+        },
+        "name": "string_a",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "string_b"
+        },
+        "name": "string_b",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "delimiter"
+        },
+        "name": "delimiter",
+        "type": "STRING"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "STRING",
+        "type": "STRING"
+      }
+    ],
+    "widgetOrder": [
+      "string_a",
+      "string_b",
+      "delimiter"
+    ],
+    "defaults": {
+      "string_a": "Animate the subject and scene shown in <Picture 1> using the performance and camera trajectory in <Video 1>. Use the current photo as the appearance reference throughout: the same face and individual facial features, hair style, colour and length, skin tone, natural shadows, body proportions and volume, exact outfit, accessories and natural skin and fabric texture. Do not borrow the video performer identity, hair, body shape, clothes, wrist accessories or other appearance details. Keep the photo scene and illumination character; do not import unrelated video objects, add jewellery, alter garments, smooth textures or apply artificial bokeh. Transfer the video body and hand motion, head movement, gaze and performance timing. Follow the source camera, including genuine shake, roll and framing changes; At every corresponding video moment, reproduce the source facial expression and its intensity: eyebrow raises and furrows, eyelid opening and blinks, eye direction, cheek movement, smiles, mouth corners, lip shape, mouth opening and speech articulation, with the same onset and release timing. The photo defines facial identity and texture, not a frozen expression. Let those same facial features move with the video performance; do not keep the photo smile or neutral mouth when the video expression changes. keep a stationary source camera stationary. Do not stabilize, add drift or replace the moving pose with the photo pose. Keep the same character and materials from the first frame to the last. Visible photo appearance: ",
+      "string_b": "",
+      "delimiter": ""
+    },
+    "objectWidgets": false
+  },
+  "VHS_VideoCombine": {
+    "inputs": [
+      {
+        "name": "images",
+        "type": "IMAGE"
+      },
+      {
+        "shape": 7,
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "shape": 7,
+        "name": "meta_batch",
+        "type": "VHS_BatchManager"
+      },
+      {
+        "shape": 7,
+        "name": "vae",
+        "type": "VAE"
+      },
+      {
+        "widget": {
+          "name": "frame_rate"
+        },
+        "name": "frame_rate",
+        "type": "FLOAT"
+      },
+      {
+        "widget": {
+          "name": "loop_count"
+        },
+        "name": "loop_count",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "filename_prefix"
+        },
+        "name": "filename_prefix",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "format"
+        },
+        "name": "format",
+        "type": "COMBO"
+      },
+      {
+        "widget": {
+          "name": "pingpong"
+        },
+        "name": "pingpong",
+        "type": "BOOLEAN"
+      },
+      {
+        "widget": {
+          "name": "save_output"
+        },
+        "name": "save_output",
+        "type": "BOOLEAN"
+      },
+      {
+        "widget": {
+          "name": "no_preview"
+        },
+        "shape": 7,
+        "name": "no_preview",
+        "type": "BOOLEAN"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "Filenames",
+        "type": "VHS_FILENAMES"
+      }
+    ],
+    "widgetOrder": [
+      "save_output",
+      "filename_prefix",
+      "loop_count",
+      "format",
+      "no_preview",
+      "frame_rate",
+      "pingpong",
+      "pix_fmt",
+      "crf",
+      "save_metadata",
+      "trim_to_audio",
+      "videopreview"
+    ],
+    "defaults": {
+      "save_output": true,
+      "filename_prefix": "VANTA-H3-AKATZ-V1_5-NATIVE1080",
+      "loop_count": 0,
+      "format": "video/h264-mp4",
+      "no_preview": false,
+      "frame_rate": 24,
+      "pingpong": false,
+      "pix_fmt": "yuv420p",
+      "crf": 12,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "videopreview": {
+        "hidden": false,
+        "paused": false,
+        "params": {}
+      }
+    },
+    "objectWidgets": true
+  },
+  "VHS_LoadVideo": {
+    "inputs": [
+      {
+        "shape": 7,
+        "name": "meta_batch",
+        "type": "VHS_BatchManager"
+      },
+      {
+        "shape": 7,
+        "name": "vae",
+        "type": "VAE"
+      },
+      {
+        "widget": {
+          "name": "video"
+        },
+        "name": "video",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "force_rate"
+        },
+        "name": "force_rate",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "force_size"
+        },
+        "name": "force_size",
+        "type": "COMBO"
+      },
+      {
+        "widget": {
+          "name": "custom_width"
+        },
+        "name": "custom_width",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "custom_height"
+        },
+        "name": "custom_height",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "frame_load_cap"
+        },
+        "name": "frame_load_cap",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "skip_first_frames"
+        },
+        "name": "skip_first_frames",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "select_every_nth"
+        },
+        "name": "select_every_nth",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "format"
+        },
+        "shape": 7,
+        "name": "format",
+        "type": "COMBO"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "IMAGE",
+        "type": "IMAGE"
+      },
+      {
+        "name": "frame_count",
+        "type": "INT"
+      },
+      {
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "name": "video_info",
+        "type": "VHS_VIDEOINFO"
+      }
+    ],
+    "widgetOrder": [
+      "custom_height",
+      "force_rate",
+      "custom_width",
+      "select_every_nth",
+      "frame_load_cap",
+      "format",
+      "video",
+      "skip_first_frames",
+      "force_size",
+      "videopreview"
+    ],
+    "defaults": {
+      "custom_height": 0,
+      "force_rate": 24,
+      "custom_width": 0,
+      "select_every_nth": 1,
+      "frame_load_cap": 124,
+      "format": "None",
+      "video": "",
+      "skip_first_frames": 0,
+      "force_size": "Disabled",
+      "videopreview": {
+        "hidden": false,
+        "paused": false,
+        "params": {}
+      }
+    },
+    "objectWidgets": true
+  },
+  "MiniMaxH3ReferenceToVideo": {
+    "inputs": [
+      {
+        "name": "clip",
+        "type": "CLIP"
+      },
+      {
+        "shape": 7,
+        "name": "vae",
+        "type": "VAE"
+      },
+      {
+        "shape": 7,
+        "name": "audio_vae",
+        "type": "VAE"
+      },
+      {
+        "shape": 7,
+        "name": "ref_images.ref_image_0",
+        "type": "IMAGE"
+      },
+      {
+        "shape": 7,
+        "name": "ref_videos.ref_video_0",
+        "type": "IMAGE"
+      },
+      {
+        "shape": 7,
+        "name": "ref_video_audios.ref_video_audio_0",
+        "type": "AUDIO"
+      },
+      {
+        "shape": 7,
+        "name": "ref_audios.ref_audio_0",
+        "type": "AUDIO"
+      },
+      {
+        "widget": {
+          "name": "prompt"
+        },
+        "name": "prompt",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "width"
+        },
+        "name": "width",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "height"
+        },
+        "name": "height",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "length"
+        },
+        "name": "length",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "ref_image_size"
+        },
+        "name": "ref_image_size",
+        "type": "COMBO"
+      },
+      {
+        "name": "ref_images.ref_image_1",
+        "type": "IMAGE",
+        "shape": 7
+      },
+      {
+        "name": "ref_videos.ref_video_1",
+        "type": "IMAGE",
+        "shape": 7
+      },
+      {
+        "name": "ref_video_audios.ref_video_audio_1",
+        "type": "AUDIO",
+        "shape": 7
+      }
+    ],
+    "outputs": [
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "LATENT",
+        "type": "LATENT"
+      }
+    ],
+    "widgetOrder": [
+      "prompt",
+      "width",
+      "height",
+      "length",
+      "ref_image_size"
+    ],
+    "defaults": {
+      "prompt": "",
+      "width": 1088,
+      "height": 1920,
+      "length": 124,
+      "ref_image_size": "max"
+    },
+    "objectWidgets": false
+  },
+  "MiniMaxH3AddGuide": {
+    "inputs": [
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "shape": 7,
+        "name": "vae",
+        "type": "VAE"
+      },
+      {
+        "shape": 7,
+        "name": "audio_vae",
+        "type": "VAE"
+      },
+      {
+        "shape": 7,
+        "name": "image",
+        "type": "IMAGE"
+      },
+      {
+        "shape": 7,
+        "name": "audio",
+        "type": "AUDIO"
+      },
+      {
+        "widget": {
+          "name": "frame_idx"
+        },
+        "name": "frame_idx",
+        "type": "INT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      }
+    ],
+    "widgetOrder": [
+      "frame_idx"
+    ],
+    "defaults": {
+      "frame_idx": 0
+    },
+    "objectWidgets": false
+  },
+  "RandomNoise": {
+    "inputs": [
+      {
+        "widget": {
+          "name": "noise_seed"
+        },
+        "name": "noise_seed",
+        "type": "INT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "NOISE",
+        "type": "NOISE"
+      }
+    ],
+    "widgetOrder": [
+      "noise_seed",
+      "control_after_generate"
+    ],
+    "defaults": {
+      "noise_seed": 42,
+      "control_after_generate": "fixed"
+    },
+    "objectWidgets": false
+  },
+  "CFGGuider": {
+    "inputs": [
+      {
+        "name": "model",
+        "type": "MODEL"
+      },
+      {
+        "name": "positive",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "negative",
+        "type": "CONDITIONING"
+      },
+      {
+        "widget": {
+          "name": "cfg"
+        },
+        "name": "cfg",
+        "type": "FLOAT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "GUIDER",
+        "type": "GUIDER"
+      }
+    ],
+    "widgetOrder": [
+      "cfg"
+    ],
+    "defaults": {
+      "cfg": 1
+    },
+    "objectWidgets": false
+  },
+  "SamplerCustomAdvanced": {
+    "inputs": [
+      {
+        "name": "noise",
+        "type": "NOISE"
+      },
+      {
+        "name": "guider",
+        "type": "GUIDER"
+      },
+      {
+        "name": "sampler",
+        "type": "SAMPLER"
+      },
+      {
+        "name": "sigmas",
+        "type": "SIGMAS"
+      },
+      {
+        "name": "latent_image",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "type": "LATENT"
+      },
+      {
+        "name": "denoised_output",
+        "type": "LATENT"
+      }
+    ],
+    "widgetOrder": [],
+    "defaults": {},
+    "objectWidgets": false
+  },
+  "LTXVSeparateAVLatent": {
+    "inputs": [
+      {
+        "name": "av_latent",
+        "type": "LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "video_latent",
+        "type": "LATENT"
+      },
+      {
+        "name": "audio_latent",
+        "type": "LATENT"
+      }
+    ],
+    "widgetOrder": [],
+    "defaults": {},
+    "objectWidgets": false
+  },
+  "VAEDecode": {
+    "inputs": [
+      {
+        "name": "samples",
+        "type": "LATENT"
+      },
+      {
+        "name": "vae",
+        "type": "VAE"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "IMAGE",
+        "type": "IMAGE"
+      }
+    ],
+    "widgetOrder": [],
+    "defaults": {},
+    "objectWidgets": false
+  },
+  "ImageFromBatch": {
+    "inputs": [
+      {
+        "name": "image",
+        "type": "IMAGE"
+      },
+      {
+        "widget": {
+          "name": "batch_index"
+        },
+        "name": "batch_index",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "length"
+        },
+        "name": "length",
+        "type": "INT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "IMAGE",
+        "type": "IMAGE"
+      }
+    ],
+    "widgetOrder": [
+      "batch_index",
+      "length"
+    ],
+    "defaults": {
+      "batch_index": 0,
+      "length": 124
+    },
+    "objectWidgets": false
+  },
+  "ImageCrop": {
+    "inputs": [
+      {
+        "name": "image",
+        "type": "IMAGE"
+      },
+      {
+        "widget": {
+          "name": "width"
+        },
+        "name": "width",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "height"
+        },
+        "name": "height",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "x"
+        },
+        "name": "x",
+        "type": "INT"
+      },
+      {
+        "widget": {
+          "name": "y"
+        },
+        "name": "y",
+        "type": "INT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "IMAGE",
+        "type": "IMAGE"
+      }
+    ],
+    "widgetOrder": [
+      "width",
+      "height",
+      "x",
+      "y"
+    ],
+    "defaults": {
+      "width": 1080,
+      "height": 1920,
+      "x": 4,
+      "y": 0
+    },
+    "objectWidgets": false
+  },
+  "MathExpression|pysssss": {
+    "inputs": [
+      {
+        "shape": 7,
+        "name": "a",
+        "type": "INT,FLOAT,IMAGE,LATENT"
+      },
+      {
+        "shape": 7,
+        "name": "b",
+        "type": "INT,FLOAT,IMAGE,LATENT"
+      },
+      {
+        "shape": 7,
+        "name": "c",
+        "type": "INT,FLOAT,IMAGE,LATENT"
+      },
+      {
+        "widget": {
+          "name": "expression"
+        },
+        "name": "expression",
+        "type": "INT,FLOAT,IMAGE,LATENT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "INT",
+        "type": "INT"
+      },
+      {
+        "name": "FLOAT",
+        "type": "FLOAT"
+      }
+    ],
+    "widgetOrder": [
+      "expression"
+    ],
+    "defaults": {
+      "expression": "42"
+    },
+    "objectWidgets": false
+  },
+  "MiniMaxH3MotionContext": {
+    "inputs": [
+      {
+        "name": "conditioning",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "vae",
+        "type": "VAE"
+      },
+      {
+        "name": "latent",
+        "type": "LATENT"
+      },
+      {
+        "shape": 7,
+        "name": "context_frames",
+        "type": "IMAGE"
+      },
+      {
+        "shape": 7,
+        "name": "context_latent",
+        "type": "LATENT"
+      },
+      {
+        "shape": 7,
+        "name": "audio_vae",
+        "type": "VAE"
+      },
+      {
+        "shape": 7,
+        "name": "context_audio",
+        "type": "AUDIO"
+      },
+      {
+        "widget": {
+          "name": "context_length"
+        },
+        "name": "context_length",
+        "type": "COMBO"
+      },
+      {
+        "widget": {
+          "name": "audio_context_length"
+        },
+        "name": "audio_context_length",
+        "type": "INT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "conditioning",
+        "type": "CONDITIONING"
+      },
+      {
+        "name": "trim_frames",
+        "type": "INT"
+      }
+    ],
+    "widgetOrder": [
+      "context_length",
+      "audio_context_length"
+    ],
+    "defaults": {
+      "context_length": "5",
+      "audio_context_length": 0
+    },
+    "objectWidgets": false
+  },
+  "RepeatImageBatch": {
+    "inputs": [
+      {
+        "name": "image",
+        "type": "IMAGE"
+      },
+      {
+        "widget": {
+          "name": "amount"
+        },
+        "name": "amount",
+        "type": "INT"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "IMAGE",
+        "type": "IMAGE"
+      }
+    ],
+    "widgetOrder": [
+      "amount"
+    ],
+    "defaults": {
+      "amount": 2
+    },
+    "objectWidgets": false
+  },
+  "ImageBatch": {
+    "inputs": [
+      {
+        "name": "image1",
+        "type": "IMAGE"
+      },
+      {
+        "name": "image2",
+        "type": "IMAGE"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "IMAGE",
+        "type": "IMAGE"
+      }
+    ],
+    "widgetOrder": [],
+    "defaults": {},
+    "objectWidgets": false
+  },
+  "PrimitiveString": {
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "STRING",
+        "type": "STRING"
+      }
+    ],
+    "widgetOrder": [
+      "value"
+    ],
+    "defaults": {
+      "value": "UPLOAD_VIDEO_15_SECONDS.mp4"
+    },
+    "objectWidgets": false
+  },
+  "VHS_SelectFilename": {
+    "inputs": [
+      {
+        "name": "filenames",
+        "type": "VHS_FILENAMES"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "Filename",
+        "type": "STRING"
+      }
+    ],
+    "widgetOrder": [
+      "index"
+    ],
+    "defaults": {
+      "index": -1
+    },
+    "objectWidgets": false
+  },
+  "CompressImages": {
+    "inputs": [
+      {
+        "name": "images or video_path",
+        "type": "*"
+      },
+      {
+        "widget": {
+          "name": "filename_prefix"
+        },
+        "name": "filename_prefix",
+        "type": "STRING"
+      },
+      {
+        "widget": {
+          "name": "image_format"
+        },
+        "name": "image_format",
+        "type": "COMBO"
+      },
+      {
+        "widget": {
+          "name": "password"
+        },
+        "shape": 7,
+        "name": "password",
+        "type": "STRING"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "zip_filename",
+        "type": "STRING"
+      }
+    ],
+    "widgetOrder": [
+      "filename_prefix",
+      "image_format",
+      "password"
+    ],
+    "defaults": {
+      "filename_prefix": "KOH_1_ZIP",
+      "image_format": "PNG",
+      "password": ""
+    },
+    "objectWidgets": false
+  }
+}
