@@ -15,7 +15,10 @@ function position(id){
   if(special[id])return special[id];
   if(id>=1000){const window=Math.floor((id-1000)/40),offset=(id-1000)%40;
     return [(offset%7)*410,3100+window*1400+Math.floor(offset/7)*400];}
-  return [(id%5)*410,1400+Math.floor(id/5)*330];
+  const globals=[1,2,3,4,6,7,8,9,31,40,41,49,50,85,86,87];
+  const index=globals.indexOf(id);
+  if(index<0)throw Error('Posisi node editor tidak tersedia: '+id);
+  return [(index%5)*410,1400+Math.floor(index/5)*400];
 }
 
 export function akatzEditorWorkflow({characterLoraFile,turboLoraFile}){
@@ -80,6 +83,7 @@ export function akatzEditorWorkflow({characterLoraFile,turboLoraFile}){
   for(const id of ['493','494','496'])Object.assign(byId.get(id),{color:'#232',bgcolor:'#353'});
   const instructions='AKATZ V8 - MP4 FINAL DALAM ZIP\n\n'+
     'Preset editor: foto 1080 x 1920, video 15 detik (360 frame / 24 FPS), dengan audio. Vanta tetap merakit durasi dan rasio input lain secara dinamis.\n\n'+
+    'Tunggu editor RunningHub selesai memuat semua ekstensi sebelum mengimpor file ini.\n\n'+
     '1. Upload foto pada node 30 dan video pada node 1000.\n'+
     '2. Salin nama file video yang tampil pada node 1000 ke node 200. Node 200 benar-benar terhubung ke semua slice video berikutnya dan semua slice audio.\n'+
     '3. Gunakan Plus, lalu jalankan workflow.\n'+

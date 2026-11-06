@@ -56,7 +56,12 @@ for(const node of nodes.values()){
   const input=node.inputs.find(i=>i.name===field);
   assert.ok(input.link,'Every filename consumer needs a real STRING connection');
   assert.equal(linkById.get(input.link)[1],200);
-  assert.equal(typeof node.widgets_values[field],'string','A filename widget cannot contain a graph tuple');
+  assert.equal(typeof node.widgets_values_named[field],'string','A filename widget cannot contain a graph tuple');
+  if(node.type==='VHS_LoadAudioUpload'){
+    assert.deepEqual(node.widgets_values,['',
+      value(node.id,'start_time'),value(node.id,'duration'),'image']);
+    assert.equal(node.widgets_values.length,4,'VHS audio restores three input widgets plus its upload button');
+  }
 }
 assert.equal(value(493,'save_output'),false);assert.equal(value(493,'no_preview'),false);
 assert.equal(value(490,'save_output'),true);assert.equal(value(490,'no_preview'),false);

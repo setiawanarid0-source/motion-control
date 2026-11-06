@@ -477,16 +477,18 @@
       }
     ],
     "widgetOrder": [
-      "duration",
+      "audio",
       "start_time",
-      "audio"
+      "duration",
+      "choose audio to upload"
     ],
     "defaults": {
-      "duration": 15,
+      "audio": "",
       "start_time": 0,
-      "audio": ""
+      "duration": 0,
+      "choose audio to upload": "image"
     },
-    "objectWidgets": true
+    "objectWidgets": false
   },
   "TextGenerate": {
     "inputs": [
