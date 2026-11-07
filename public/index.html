@@ -242,14 +242,29 @@
       </section>
 
       <section id="view-accounts" class="view">
-        <div class="section-title account-pool-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>Tambahkan API key RunningHub. Workflow disiapkan otomatis dari server VANTA.</p></div><button class="ghost-btn refresh-account-btn" id="refreshAccounts" type="button" aria-label="Perbarui status dan saldo RunningHub" title="Perbarui status dan saldo RunningHub"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M5.7 9a7 7 0 0 1 12-2L20 12M4 12l2.3 5a7 7 0 0 0 12-2"/></svg></span></button></div>
+        <div class="section-title account-pool-title"><div><div class="eyebrow">PRIVATE STUDIO</div><h2>Account Pool</h2><p>Hubungkan sesi RunningHub atau tambahkan API key untuk menjalankan workflow dari VANTA.</p></div><button class="ghost-btn refresh-account-btn" id="refreshAccounts" type="button" aria-label="Perbarui status dan saldo RunningHub" title="Perbarui status dan saldo RunningHub"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M5.7 9a7 7 0 0 1 12-2L20 12M4 12l2.3 5a7 7 0 0 0 12-2"/></svg></span></button></div>
         <div class="account-layout">
           <div class="panel add-account">
-            <h3>Add RunningHub API key</h3>
+            <h3>Hubungkan RunningHub</h3>
+            <label class="field-label" for="rhConnectionMode">CARA MENGHUBUNGKAN</label>
+            <select id="rhConnectionMode" class="text-input">
+              <option value="web">Sesi RunningHub</option>
+              <option value="api">API key</option>
+            </select>
+            <div id="rhWebSessionPanel" class="rh-session-panel">
+              <p class="form-note">Buka akun RunningHub yang sudah login, jalankan kode, lalu tempel isi popup di bawah. Format kode Anda sebelumnya juga diterima.</p>
+              <button id="copyRhSessionCode" class="ghost-btn" type="button">Salin kode RunningHub</button>
+              <label class="field-label" for="rhWebSessionInput">SESI DARI POPUP RUNNINGHUB</label>
+              <textarea id="rhWebSessionInput" class="text-input rh-session-input" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Tempel JSON sesi di sini"></textarea>
+              <button id="connectRhWebSession" class="generate-btn compact" type="button">Hubungkan sesi</button>
+              <p class="form-note">Sesi diperiksa sebelum disimpan. Generasi dikirim lewat jalur editor web. Jika sesi berakhir, hubungkan ulang akun yang sama di sini.</p>
+            </div>
+            <div id="rhApiKeyPanel" hidden>
             <label class="field-label" for="apiKeyInput">API KEY</label>
             <input id="apiKeyInput" class="text-input" type="password" autocomplete="off" placeholder="Paste API key" />
             <button id="addAccountBtn" class="generate-btn compact">Add to pool</button>
             <p class="form-note">Key divalidasi ke RunningHub sebelum disimpan.</p>
+            </div>
           </div>
           <div class="account-list" id="accountList"></div>
         </div>
@@ -347,7 +362,8 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/auth.js?v=20261026-global-login" defer></script>
-  <script src="/app.js?v=20261104-rife-account-fallback" defer></script>
+  <script src="/rh-session.js?v=20261108-web-session" defer></script>
+  <script src="/app.js?v=20261108-web-session" defer></script>
   <script src="/kie-ui.js?v=20261023-grok2-v1" defer></script>
   <script src="/history-gallery.js?v=20261024-image-fullscreen-v1" defer></script>
 </body>

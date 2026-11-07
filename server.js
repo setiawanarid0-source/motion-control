@@ -40,6 +40,7 @@ import {installAkatzInspection} from './h3-akatz-inspect.js';
 import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionContextSchema} from './h3-context-inspect.js';
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import {installAkatzEditorDownload} from './h3-runninghub-export.js';
+import {createRunningHubWebSession,isRunningHubWebKey} from './runninghub-web-session.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -148,6 +149,7 @@ function decrypt(token) {
 }
 
 const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
+const runningHubWeb=createRunningHubWebSession({dir:DATA_DIR,encrypt,decrypt});
 const motionResults=createMotionResultArchive({dir:path.join(DATA_DIR,'motion-results')});
 const bucketResults=createMotionResultBucket();
 const privateMedia=createPrivateMediaBucket();
@@ -442,12 +444,14 @@ function publicAccount(account, status = null) {
     name: account.name,
     addedAt: account.addedAt,
     lastUsedAt: account.lastUsedAt || null,
+    connectionMode: isRunningHubWebKey(account.key)?'web':'api',
     status,
     canGenerate: canGenerateWithAccount(status, MIN_POOL_CREDITS),
   };
 }
 
 async function rhJson(pathname, apiKey, body, timeout = 30000) {
+  if(isRunningHubWebKey(apiKey))return runningHubWeb.request(pathname,apiKey,body);
   const { data } = await axios.post(`${RH_BASE}${pathname}`, body, {
     timeout,
     headers: {
@@ -461,6 +465,7 @@ async function rhJson(pathname, apiKey, body, timeout = 30000) {
 }
 
 async function accountStatus(apiKey) {
+  if(isRunningHubWebKey(apiKey))return runningHubWeb.status(apiKey);
   const data = await rhJson('/uc/openapi/accountStatus', apiKey, { apikey: apiKey }, 20000);
   if (!data || Number(data.code) !== 0) throw new Error(data?.msg || 'API key tidak dapat divalidasi.');
   const coins=data.data?.remainCoins;
@@ -475,6 +480,7 @@ async function accountStatus(apiKey) {
 }
 
 async function uploadToRunningHub(apiKey, file) {
+  if(isRunningHubWebKey(apiKey))return runningHubWeb.upload(apiKey,file);
   const form = new FormData();
   form.append('apiKey', apiKey);
   form.append('fileType', 'input');
@@ -606,6 +612,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   const instanceType=runningHubInstanceType(mode);
   if(instanceType)payload.instanceType=instanceType;
 
+  // Workspace setup must finish before marking a potentially paid submission.
+  if(isRunningHubWebKey(apiKey))await runningHubWeb.prepare(apiKey);
   const submittedAt = new Date().toISOString();
   if(onBeforeSubmit)onBeforeSubmit();
   const data = await rhJson('/task/openapi/create', apiKey, payload, 60000);
@@ -782,6 +790,30 @@ app.post('/api/accounts', async (req, res) => {
   }
 });
 
+app.post('/api/runninghub/web-session',async(req,res)=>{
+  res.setHeader('Cache-Control','private, no-store');
+  const origin=req.get('origin');
+  if(origin){
+    try{if(new URL(origin).host!==req.get('host'))throw Error();}
+    catch{return res.status(403).json({error:'Permintaan sesi harus berasal dari Vanta.'});}
+  }
+  try{
+    const connected=await runningHubWeb.connect(req.body?.session);
+    // Load after validation so a concurrent Pool deletion is not undone.
+    const {deviceId,accounts}=getPersistentAccounts(req);
+    let account=accounts.find(a=>a.key===connected.key);
+    const updated=Boolean(account);
+    if(!account){
+      account={id:crypto.randomUUID(),name:`Account ${String(accounts.length+1).padStart(2,'0')}`,
+        key:connected.key,fingerprint:crypto.createHash('sha256').update(connected.key).digest('hex').slice(0,16),
+        addedAt:new Date().toISOString(),lastUsedAt:null};
+      accounts.push(account);
+    }
+    saveVaultAccounts(deviceId,accounts);
+    res.json({account:publicAccount(account,connected.status),updated});
+  }catch(error){res.status(400).json({error:error.message||'Sesi RunningHub belum dapat diverifikasi.'});}
+});
+
 app.delete('/api/accounts/:id', async (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);
   if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
@@ -895,7 +927,7 @@ async function handleGeneration(req,res){
 
     const { deviceId, accounts } = getPersistentAccounts(req);
     if (!deviceId) throw new Error('Device session tidak tersedia. Reload halaman.');
-    if (!accounts.length) throw new Error('Belum ada RunningHub API key di Account Pool.');
+    if (!accounts.length) throw new Error('Belum ada akun RunningHub di Account Pool.');
     const diagnosticAccount=workflowKey==='r4Lab'?accounts.find(a=>a.id===diagnosticAccountId):null;
     if(workflowKey==='r4Lab'&&!diagnosticAccount)throw new Error('Akun tes SAM3 sebelumnya tidak tersedia pada sesi ini.');
 
@@ -912,7 +944,11 @@ async function handleGeneration(req,res){
         throw new Error('Akun ini tidak dapat digunakan. Generasi RunningHub memerlukan saldo minimal 100 RH.');
       candidates=[chosen];
     }else{
-      const checked=await Promise.all(accounts.map(async account=>{
+      // Importing a web session opts Automatic into the consumer web route.
+      // Never silently fall back to paid OpenAPI after a web failure.
+      const webAccounts=accounts.filter(a=>isRunningHubWebKey(a.key));
+      const automaticAccounts=webAccounts.length?webAccounts:accounts;
+      const checked=await Promise.all(automaticAccounts.map(async account=>{
         try{return {account,status:await accountStatus(account.key)};}
         catch(error){return {account,status:{error:error.message}};}
       }));

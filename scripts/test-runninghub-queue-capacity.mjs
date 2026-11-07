@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {isRunningHubWebKey} from '../runninghub-web-session.js';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {
@@ -51,6 +52,7 @@ assert.equal(graphValidationError({msg:JSON.stringify({result:false,error:{type:
 const uploads=[],requests=[];
 let nextReply=0;
 const context={
+  isRunningHubWebKey,runningHubWeb:{prepare:async()=>{}},
   uploadToRunningHub:async(key,file)=>{uploads.push([key,file.originalname]);return 'uploaded-'+file.originalname;},
   prepareDiagnosticAssets:()=>null,
   runningHubInstanceType:mode=>mode==='plus'?'plus':'default',
@@ -141,6 +143,7 @@ let attempts=0,saved,refusal,discarded=0;
 const registered=[];
 let pool=[{id:'one',name:'Account 01',key:'fixture-one'},{id:'two',name:'Account 02',key:'fixture-two'}];
 const worker={...context,IMAGE_MAX:20e6,VIDEO_MAX:100e6,MIN_POOL_CREDITS:100,LOCKED_WORKFLOW_ID:'fixture-workflow',
+  isRunningHubWebKey,
   workflowGraphs:{current:{},rife60:context.workflowGraphs.rife60},
   workflowMeta:{current:{name:'Current'},rife60:{name:'RIFE',outputKind:'video'}},
   console:{info(){},warn(){},error(){}},
@@ -191,11 +194,12 @@ assert.equal(fields.get('#taskStatus').textContent,'Status penerimaan belum past
 
 // Actual RIFE create + account loop + durable worker: only explicit, taskless
 // refusals may move an Automatic request to another account. No live APIs.
-async function runRifeReplies(replies,{accountId='auto',workflow='rife60',accountCount=2}={}){
+async function runRifeReplies(replies,{accountId='auto',workflow='rife60',accountCount=2,web=false}={}){
   responses.push(...replies);attempts=0;registered.length=0;saved={stage:'queued'};
   pool=[{id:'one',name:'Account 01',key:'fixture-one'},
     {id:'two',name:'Account 02',key:'fixture-two'},
     ...(accountCount===3?[{id:'zzz',name:'Account 03',key:'fixture-three'}]:[])];
+  if(web)pool[1].key='rhweb:'+'b'.repeat(64);
   refusal='RUNNINGHUB_PAID_BALANCE_REQUIRED';
   const before=requests.length;
   await worker.run({jobId:'fixture-job',deviceId:'fixture-device',body:{workflow,mode:'plus',accountId},
@@ -268,6 +272,13 @@ assert.ok(server.includes("if(isDefinitelyRejectedAtCapacity(error)){") &&
   'Server must reset uncertain marker ONLY for definitive queue rejections');
 assert.ok(server.includes('mayTryNextAccountAfterCreate({'),
   'Server must explicitly reject ambiguous duplicate paid creates');
+
+const webOnly=await runRifeReplies([accepted],{web:true});
+assert.equal(attempts,1);assert.equal(registered[0].accountId,'two');
+assert.equal(webOnly[0].key,'rhweb:'+'b'.repeat(64),'Automatic selects the web account when web and API accounts coexist');
+await runRifeReplies([refused],{web:true});
+assert.equal(attempts,1,'Web refusal must not spill into a paid API account');
+assert.equal(saved.stage,'error');
 assert.ok(server.includes("if(rejectedAtCapacity===candidates.length)"),
   'All accounts full must surface clear refusal instead of unknown paid state');
 assert.ok(server.includes("if(req.submissionAttempted){")&&

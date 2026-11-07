@@ -139,7 +139,7 @@ function sortedRunningHubAccounts(){
 function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic · minimal 100 RH</option>'+sortedRunningHubAccounts().map(a=>{
   const credits=a.status&&!a.status.error?Number(a.status.remainCoins):NaN;
   const reason=a.canGenerate===false?(Number.isFinite(credits)&&credits<100?' (di bawah 100 RH)':' (status belum tersedia)'):'';
-  return `<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)}${reason}</option>`;
+  return `<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)} · ${a.connectionMode==='web'?'Sesi web':'API key'}${reason}</option>`;
 }).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
 
 async function refreshAccounts(){
@@ -168,8 +168,8 @@ async function refreshAccounts(){
 }
 function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
-  const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada API key di pool.<br>Tambahkan akun pertama dari panel di sebelah kiri.</div>';return;}
-  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${ready?'Siap digunakan':ok&&Number(s.currentTaskCounts||0)>0?'Menunggu task berjalan selesai':ok?'Saldo tidak memenuhi syarat':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
+  const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada akun di pool.<br>Hubungkan sesi RunningHub atau tambahkan API key dari panel di sebelah kiri.</div>';return;}
+  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>${a.connectionMode==='web'?'Sesi web':'API key'} · ${ready?'Siap digunakan':ok&&Number(s.currentTaskCounts||0)>0?'Menunggu task berjalan selesai':ok?'Saldo tidak memenuhi syarat':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
   $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{
     // Claim browser-only completed History BEFORE changing the provider key vault.
     await claimBrowserHistory();
@@ -1114,6 +1114,37 @@ if(historyFilters) historyFilters.onclick=e=>{
   renderHistory();
 };
 $('#addAccountBtn').onclick=async()=>{const input=$('#apiKeyInput'),key=input.value.trim();if(!key)return toast('Masukkan API key.',true);const btn=$('#addAccountBtn');btn.disabled=true;btn.textContent='Validating…';try{await api('/api/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});input.value='';toast('API key valid dan ditambahkan.');await loadSession();}catch(e){toast(e.message,true)}finally{btn.disabled=false;btn.textContent='Add to pool'}};
+
+const rhConnectionMode=$('#rhConnectionMode');
+if(rhConnectionMode)rhConnectionMode.onchange=()=>{
+  const web=rhConnectionMode.value==='web';
+  $('#rhWebSessionPanel').hidden=!web;$('#rhApiKeyPanel').hidden=web;
+};
+$('#copyRhSessionCode')?.addEventListener('click',async()=>{
+  const code=window.vantaRunningHubSessionCode;
+  if(!code)return toast('Kode belum tersedia. Muat ulang halaman.',true);
+  let copied=false;
+  try{await navigator.clipboard.writeText(code);copied=true;}
+  catch{
+    const field=document.createElement('textarea');field.value=code;
+    field.style.cssText='position:fixed;left:-9999px';document.body.append(field);
+    field.select();try{copied=document.execCommand('copy');}catch{}field.remove();
+  }
+  toast(copied?'Kode tersalin. Jalankan saat membuka RunningHub yang sudah login.':'Browser belum mengizinkan penyalinan kode.',!copied);
+});
+$('#connectRhWebSession')?.addEventListener('click',async()=>{
+  const input=$('#rhWebSessionInput'),value=input.value.trim(),button=$('#connectRhWebSession');
+  if(!value)return toast('Tempel JSON sesi dari popup RunningHub.',true);
+  let session;try{session=JSON.parse(value);}catch{return toast('Tempel isi popup berupa JSON, bukan kode javascript.',true);}
+  button.disabled=true;button.textContent='Memeriksa sesi…';
+  try{
+    const result=await api('/api/runninghub/web-session',{method:'POST',body:JSON.stringify({session})});
+    input.value='';session=null;
+    toast(result.updated?'Sesi akun diperbarui.':'Akun terhubung melalui sesi web RunningHub.');
+    await loadSession();
+  }catch(error){toast(error.message,true);}
+  finally{button.disabled=false;button.textContent='Hubungkan sesi';}
+});
 
 bindHistoryActions();
 resumeSubmission().catch(error=>console.warn('Upload resume pending',error.message));

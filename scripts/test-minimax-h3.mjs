@@ -1,3 +1,4 @@
+import {isRunningHubWebKey} from '../runninghub-web-session.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -239,7 +240,7 @@ assert.equal(graph['30'].inputs.image,'api/current-photo.png','No cross-request 
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
 const calls=[],uploads=[];let response={code:0,data:{taskId:'2113333333333333333',taskStatus:'RUNNING'}};
-const context={workflowGraphs:{minimaxH3:manifest,current:{unchanged:true}},h3GraphForInputs,
+const context={isRunningHubWebKey,workflowGraphs:{minimaxH3:manifest,current:{unchanged:true}},h3GraphForInputs,
   uploadToRunningHub:async(key,file)=>{uploads.push(file);return 'api/'+file.originalname;},
   runningHubInstanceType,explicitQueueMaxed,queueCapacityError,graphValidationError,
   rhJson:async(url,key,payload)=>{calls.push({url,payload});return response;}};
