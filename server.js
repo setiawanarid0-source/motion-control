@@ -5,13 +5,11 @@ import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import axios from 'axios';
 import os from 'node:os';
-import { pipeline } from 'node:stream/promises';
-import { Transform } from 'node:stream';
 import { extractTaskFailure,auditFailedH3Tasks } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
 import {canGenerateWithAccount,rankGenerationAccounts} from './runninghub-account-priority.js';
 import {auditRunningHubAccounts} from './runninghub-account-audit.js';
-import { analyzeSource, prepareMotionSource, saveSource, cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
+import { cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences,
   configureReferenceMedia,resolvedReferenceAvailability,openRemoteReference,migrateReferences } from './history-references.js';
 import {createPrivateMediaBucket} from './private-media-bucket.js';
@@ -29,6 +27,7 @@ import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {H3_DEFAULT_PROFILE,prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {selectFinalVideoOutput} from './runninghub-output.js';
+import {compileMotionFlyHD,MOTIONFLY_HD_NAME} from './motionfly-hd-workflow.js';
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
 import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h3-safe-benchmark.js';
 import {longH3Profile,longH3Result,longH3ModelChoices,runLongH3Deployment} from './h3-long-benchmark.js';
@@ -61,10 +60,8 @@ const ACCOUNT_DIR = path.join(DATA_DIR, 'account-vaults');
 const GLOBAL_ACCOUNT_VAULT = path.join(DATA_DIR, 'accounts.enc');
 
 const workflowGraphs = {
-  r15: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/r15-camera-adaptive-api.json'), 'utf8')),
+  motionflyHD: compileMotionFlyHD(JSON.parse(fs.readFileSync(path.join(__dirname,'workflows/motionfly-hd-runninghub.json'),'utf8'))),
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
-  koh1AntiObject: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-sam3-diagnostic-api.json'), 'utf8')),
-  r4Lab: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/motionfly-r4-full-controlled-api.json'), 'utf8')),
   rife60: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/rife60-api.json'), 'utf8')),
   minimaxH3: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/minimax-h3-motion-control.json'), 'utf8')),
   minimaxH3Akatz: {revision:AKATZ_REVISION},
@@ -72,6 +69,12 @@ const workflowGraphs = {
 };
 
 const workflowMeta = {
+  motionflyHD: {
+    id:'motionflyHD',name:MOTIONFLY_HD_NAME,
+    subtitle:'Foto + video · HD · audio sumber · ZIP',
+    detail:'Workflow MotionFly dari file yang diunggah. Mask SAM3 dihitung langsung dari referensi; keluaran mengikuti pengaturan HD, audio, preview dan ZIP pada file.',
+    outputKind:'video'
+  },
   minimaxH3AkatzV3: {
     id:'minimaxH3AkatzV3',name:'MiniMax H3 · Akatz v3 · 1080p',
     subtitle:'1080p · foto + video · 24 FPS · Plus · hingga 15 detik',
@@ -96,34 +99,12 @@ const workflowMeta = {
     detail: 'Video di bawah 60 FPS diinterpolasi ke 60. Video berlabel 60 FPS dianalisis untuk mendeteksi frame duplikat; bila terbukti, RIFE membuat gerakan baru dari frame unik pada FPS efektif terukur (bukan selalu 30). Bila tidak bisa diperbaiki, task tidak dikirim dan kredit RH tidak terpakai. Tanpa upscale; RunningHub belum diuji berbayar.',
     outputKind: 'video'
   },
-  r15: {
-    id: 'r15',
-    name: 'MotionFly R4 · Camera Engine (R15)',
-    subtitle: '35 FPS · 1080×1920 · 6 steps · CFG 1 · eksperimen',
-    detail: 'Gerakan sumber dinormalisasi ke 35 FPS tanpa frame duplikat. Kamera diperiksa sebelum dan sesudah generate; tidak ada warp seluruh tubuh. Eksperimental, belum terbukti bebas jitter AI.',
-    outputKind: 'video', experimental: true, cameraEngine: true
-  },
   current: {
     id: 'current',
     name: 'Current Workflow',
     subtitle: 'KOH (1) · 40 FPS langsung dari workflow · 6 steps · CFG 1',
     detail: 'Current Workflow dari file KOH (1) yang baru.'
   },
-  koh1AntiObject: {
-    id: 'koh1AntiObject',
-    name: 'MotionFly R4 · SAM3 Mask Diagnostic',
-    subtitle: 'Diagnostik SAM3 · 35 FPS · tanpa generasi AI video',
-    detail: 'Upload video driving yang SUDAH dikompensasi 35 FPS. Hasil: video mask orang + gambar mask referensi. Memakai kredit RunningHub; belum menguji kamera hasil generasi.',
-    outputKind: 'diagnostic'
-  },
-  r4Lab: {
-    id: 'r4Lab',
-    name: 'MotionFly R4 · Full Controlled Test',
-    subtitle: 'Eksperimen · 40 FPS langsung dari workflow · 6 steps · CFG 1',
-    detail: 'Menggunakan dua upload serta mask dari tes SAM3 berhasil di History. Video driving dan mask diselaraskan pada 40 FPS di workflow. Wajib memakai reference image dan video kompensasi yang SAMA dengan tes SAM3. Memerlukan kredit RunningHub.',
-    outputKind: 'video',
-    experimental: true
-  }
 };
 
 const masterSecret = process.env.APP_MASTER_KEY || 'development-only-change-me';
@@ -474,52 +455,7 @@ async function uploadToRunningHub(apiKey, file) {
   return runningHubWeb.upload(apiKey,file);
 }
 
-// Reuse previously saved SAM3 diagnostic masks, without adding new user media inputs.
-// Do not execute paid full generation unless both masks are retrievable and uploaded.
-async function fetchDiagnosticMasks(sourceAccount, sourceTaskId) {
-  if(!/^\d{10,25}$/.test(String(sourceTaskId||'')))throw new Error('Task ID diagnostik tidak valid.');
-  const result=await rhJson('/task/openapi/outputs',sourceAccount.key,{apiKey:sourceAccount.key,taskId:String(sourceTaskId)},30000);
-  if(Number(result?.code)!==0||!Array.isArray(result?.data))throw new Error('Mask diagnostik sudah tidak tersedia atau task belum selesai.');
-  const outputs=result.data.filter(x=>typeof x.fileUrl==='string'&&/^https:\/\//i.test(x.fileUrl));
-  const video=outputs.find(x=>String(x.nodeId)==='393');
-  const reference=outputs.find(x=>String(x.nodeId)==='394');
-  if(!video||!reference)throw new Error('Task diagnostik tidak memiliki kedua output mask dari node 393 dan 394.');
-  return {videoUrl:video.fileUrl,referenceUrl:reference.fileUrl};
-}
-async function downloadDiagnosticAsset(url,destination,maxBytes){
-  const u=new URL(url);
-  if(u.protocol!=='https:'||u.username||u.password||u.hostname==='localhost'||/^(?:\d+\.){3}\d+$/.test(u.hostname))
-    throw new Error('URL aset mask RunningHub tidak aman.');
-  const response=await axios.get(url,{responseType:'stream',timeout:120000,maxRedirects:4});
-  let read=0;
-  const limit=new Transform({transform(chunk,enc,cb){
-    read+=chunk.length;
-    if(read>maxBytes)cb(new Error('Aset mask melebihi batas ukuran.'));
-    else cb(null,chunk);
-  }});
-  try{await pipeline(response.data,limit,fs.createWriteStream(destination));}
-  catch(error){response.data.destroy();throw error;}
-  if(read<100)throw new Error('Aset mask RunningHub kosong.');
-  return read;
-}
-async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
-  const urls=await fetchDiagnosticMasks(sourceAccount,sourceTaskId);
-  const dir=await fs.promises.mkdtemp(path.join(os.tmpdir(),'r4-full-lab-'));
-  try{
-    const video=path.join(dir,'sam3-driving-mask.mp4');
-    const image=path.join(dir,'sam3-reference-mask.png');
-    const [videoSize,imageSize]=await Promise.all([
-      downloadDiagnosticAsset(urls.videoUrl,video,VIDEO_MAX),
-      downloadDiagnosticAsset(urls.referenceUrl,image,IMAGE_MAX)
-    ]);
-    const [videoName,imageName]=await Promise.all([
-      uploadToRunningHub(targetApiKey,{path:video,originalname:'r4-sam3-driving-mask.mp4',mimetype:'video/mp4',size:videoSize}),
-      uploadToRunningHub(targetApiKey,{path:image,originalname:'r4-sam3-reference-mask.png',mimetype:'image/png',size:imageSize})
-    ]);
-    return {videoName,imageName};
-  }finally{await fs.promises.rm(dir,{recursive:true,force:true});}
-}
-async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, diagnosticAccount, diagnosticTaskId, onBeforeSubmit, onModelPreparation }) {
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, onBeforeSubmit, onModelPreparation }) {
   const h3=['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(workflowKey);
   const isAkatz=workflowKey==='minimaxH3Akatz'||workflowKey==='minimaxH3AkatzV3';
   let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
@@ -556,7 +492,6 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
       h3Source.appearanceLoraFile=await h3CharacterModel.ensure(apiKey);
     selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
   }
-  const masks=workflowKey==='r4Lab' ? await prepareDiagnosticAssets(diagnosticAccount,diagnosticTaskId,apiKey) : null;
   const payload = {
     apiKey,
     workflowId,
@@ -570,8 +505,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
            { nodeId: '2', fieldName: 'target_fps', fieldValue: RIFE_TARGET_FPS }]
         : [{ nodeId: '30', fieldName: 'image', fieldValue: imageName },
            { nodeId: '33', fieldName: 'video', fieldValue: videoName }]),
-      ...(['koh1AntiObject','rife60'].includes(workflowKey) ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
-      ...(masks ? [{ nodeId: '500', fieldName: 'image', fieldValue: masks.imageName }, { nodeId: '501', fieldName: 'video', fieldValue: masks.videoName }] : []),
+      ...(workflowKey==='rife60' ? [] : [{ nodeId: '331', fieldName: 'seed', fieldValue: 50 }]),
     ],
     workflow: JSON.stringify(selectedGraph),
     addMetadata: true,
@@ -828,20 +762,18 @@ app.get('/api/runninghub/account-audit',async(_req,res)=>{
 async function handleGeneration(req,res){
   const imageFile = req.files?.referenceImage?.[0];
   const videoFile = req.files?.videoReference?.[0];
-  let preparedMotion=null;
   let rifeSource=null;
   let h3Source=null;
   let stagedReferences=null;
   const cleanup = () => {
     if(stagedReferences)discardReferences(stagedReferences).catch(e=>console.warn('Reference staging cleanup',e.message));
-    if(preparedMotion)preparedMotion.release().catch(e=>console.warn('R15 temporary file cleanup',e.message));
     if(rifeSource?.release)rifeSource.release().catch(e=>console.warn('RIFE temporary anchors cleanup',e.message));
     if(h3Source?.release)h3Source.release().catch(e=>console.warn('H3 temporary media cleanup',e.message));
     for (const f of [imageFile, videoFile]) if (f?.path) fs.promises.unlink(f.path).catch(() => {});
   };
 
   try {
-    const workflowKey = String(req.body?.workflow || 'r15');
+    const workflowKey = String(req.body?.workflow || 'motionflyHD');
     const videoOnly=workflowKey==='rife60';
     if ((!videoOnly&&!imageFile) || !videoFile) throw new Error('Media input wajib diisi.');
     if (imageFile?.size > IMAGE_MAX) throw new Error('Reference Image maksimal 20 MB.');
@@ -851,6 +783,7 @@ async function handleGeneration(req,res){
 
     const mode = String(req.body?.mode || 'standard');
     const requestedAccountId = String(req.body?.accountId || 'auto');
+    if(['r15','koh1AntiObject','r4Lab'].includes(workflowKey))throw new Error('Workflow R4 sudah diganti. Muat ulang Vanta dan pilih MotionFly HD.');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
     if(['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(workflowKey)){
       req.progress?.('analyzing');
@@ -870,22 +803,12 @@ async function handleGeneration(req,res){
         {fps:metadata.sourceFps,measuredMotionFps:rifeSource.sourceFps,
          repair:rifeSource.adaptive,duplicateRatio:rifeSource.cadence?.duplicateRatio??0});
     }
-    const diagnosticTaskId=String(req.body?.diagnosticTaskId||'');
-    const diagnosticAccountId=String(req.body?.diagnosticAccountId||'');
-    if(workflowKey==='r4Lab' && (!/^\d{10,25}$/.test(diagnosticTaskId)||!diagnosticAccountId))
-      throw new Error('R4 Full membutuhkan tes SAM3 berhasil di History untuk memakai ulang mask.');
     if (!['standard','plus','lite'].includes(mode)) throw new Error('Mode RunningHub tidak dikenali.');
     // Lite accepted here only to let already-queued legacy tasks finish.
 
     const { deviceId, accounts } = getPersistentAccounts(req);
     if (!deviceId) throw new Error('Device session tidak tersedia. Reload halaman.');
     if (!accounts.length) throw new Error('Belum ada akun RunningHub di Account Pool.');
-    const diagnosticAccount=workflowKey==='r4Lab'?accounts.find(a=>a.id===diagnosticAccountId):null;
-    if(workflowKey==='r4Lab'&&!diagnosticAccount)throw new Error('Akun tes SAM3 sebelumnya tidak tersedia pada sesi ini.');
-
-    req.progress?.('analyzing');
-    // Analyze driving-video camera before a paid RunningHub submission.
-    const sourceCamera=workflowKey==='r15'?await analyzeSource(videoFile):null;
     req.progress?.('checking_account');
     let candidates=[];
     if(requestedAccountId!=='auto'){
@@ -906,10 +829,6 @@ async function handleGeneration(req,res){
         .map(x=>x.account);
       if(!candidates.length)throw new Error('Tidak ada akun RunningHub yang siap dengan saldo minimal 100 RH.');
     }
-    if(workflowKey==='r15'){
-      req.progress?.('preparing_motion');
-      preparedMotion=await prepareMotionSource(videoFile);
-    }
     // Verify both input previews and encrypted task registry before a paid submission.
     req.progress?.('saving_references');
     stagedReferences=await stageReferences(h3Source?.referenceFile||imageFile,videoFile,{videoOnly});
@@ -928,11 +847,9 @@ async function handleGeneration(req,res){
           workflowKey,
           mode,
           imageFile,
-          videoFile:preparedMotion?.file||rifeSource?.file||videoFile,
+          videoFile:rifeSource?.file||videoFile,
           sourceFps:rifeSource?.sourceFps,
           h3Source,
-          diagnosticAccount,
-          diagnosticTaskId,
           onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting',null,
             {account:{id:account.id,name:account.name,mode}});},
           onModelPreparation:details=>req.progress?.('preparing_models',null,details),
@@ -961,10 +878,6 @@ async function handleGeneration(req,res){
           stagedReferences=null;
         }catch(mediaError){
           console.error('Reference preview commit failed',String(task.taskId),mediaError.message);
-        }
-        if(workflowKey==='r15'){
-          try{await saveSource(String(task.taskId),videoFile,sourceCamera);}
-          catch(cameraError){console.error('R15 source save failed',String(task.taskId),cameraError.message);}
         }
         // Never restore a deleted account from this request's earlier in-memory snapshot.
         try{
@@ -1097,7 +1010,11 @@ app.post('/api/generate', upload.fields([
       return res.status(503).json({error:'Penyimpanan media sedang disiapkan atau belum tersedia. Task belum dikirim; coba lagi sebentar.'});}
     const deviceId=getDeviceId(req);
     if(!deviceId)return res.status(400).json({error:'Sesi perangkat tidak tersedia. Muat ulang halaman.'});
-    const videoOnly=String(req.body?.workflow||'r15')==='rife60';
+    const workflowKey=String(req.body?.workflow||'motionflyHD');
+    if(['r15','koh1AntiObject','r4Lab'].includes(workflowKey))
+      return res.status(410).json({error:'Workflow R4 sudah diganti. Muat ulang Vanta dan pilih MotionFly HD.'});
+    if(!workflowGraphs[workflowKey])return res.status(400).json({error:'Workflow tidak dikenali.'});
+    const videoOnly=workflowKey==='rife60';
     if(!video||(!videoOnly&&!image))return res.status(400).json({error:'Media wajib diunggah.'});
     if(!canSubmitMachineMode(String(req.body?.mode||'standard')))
       return res.status(400).json({error:'Pilih mesin RunningHub Standard atau Plus.'});

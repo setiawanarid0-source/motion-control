@@ -1,5 +1,5 @@
 const state = {
-  view: 'create', workflow: 'r15', mode: 'standard', session: null, accounts: [],
+  view: 'create', workflow: 'motionflyHD', mode: 'standard', session: null, accounts: [],
   image: null, video: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false, historyFilter: 'all',
   registeredTaskIds: new Set(), submission:null, submissionTimer:null, submissionPolling:false,
@@ -191,8 +191,6 @@ function setMedia(kind,file){
   else{state.video=file;const p=$('#videoPreview'); if(!file){p.innerHTML='';p.classList.remove('active');state.videoDuration=0;updateEstimates();updateGenerate();return} const url=URL.createObjectURL(file);p.innerHTML=`<video src="${url}" muted playsinline preload="metadata"></video><div class="media-overlay"><div><strong>${escapeHtml(file.name)}</strong><small id="videoFileMeta">${fileSize(file.size)}</small></div><button class="remove-media" data-remove="video">×</button></div>`;p.classList.add('active');const v=p.querySelector('video');v.onloadedmetadata=()=>{state.videoDuration=v.duration||0;$('#videoFileMeta').textContent=`${fileSize(file.size)} · ${fmtTime(v.duration)}`;updateEstimates();};}
   $$('[data-remove]').forEach(btn=>btn.onclick=e=>{e.preventDefault();e.stopPropagation();setMedia(btn.dataset.remove,null)});updateGenerate();
 }
-function lastSam3Diagnostic(){return history().filter(x=>x.outputKind==='diagnostic'&&x.status==='success'&&x.taskId&&resolveHistoryAccountId(x)).sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt))[0]||null;}
-function refreshLabNotice(){const item=lastSam3Diagnostic(),el=$('#r4LabMaskSource');if(el)el.textContent=item?`Mask dari task SAM3 #${item.taskId} (${new Date(item.startedAt).toLocaleString('id-ID')}). Gunakan gambar dan video kompensasi yang sama.`:'Belum ada hasil SAM3 berhasil di History browser ini. Jalankan tes SAM3 terlebih dahulu.';}
 function updateEstimates(){
   // Plus runtime/credit estimates are not validated for these custom workflows.
   // Preserve the existing Standard estimate for Current only; do not invent a Plus value.
@@ -206,22 +204,17 @@ function updateGenerate(){
   // RunningHub accepts independent paid tasks; only the current reference
   // upload/submission is exclusive. Accepted tasks continue in History.
   const ready=Boolean((state.workflow==='rife60'||state.image)&&state.video&&state.accounts.some(a=>a.canGenerate===true)&&
-    !state.submission&&(state.workflow!=='r4Lab'||!!lastSam3Diagnostic()));
+    !state.submission);
   $('#generateBtn').disabled=!ready;
   if(!state.submission)$('#generateBtn').querySelector('span:first-child').textContent=
-    state.workflow==='koh1AntiObject'?'Jalankan tes SAM3':
-    state.workflow==='r4Lab'?'Tes R4 Full (berbayar)':
     state.workflow==='rife60'?'Interpolasi 60 FPS':'Generate motion';
-  refreshLabNotice();
 }
 function workflowName(){
+  if(state.workflow==='motionflyHD')return 'MotionFly · 1080 HD + ZIP';
   if(state.workflow==='minimaxH3AkatzV3')return 'MiniMax H3 · Akatz v3 · 1080p';
   if(state.workflow==='minimaxH3Akatz')return 'MiniMax H3 · Akatz V1.5 Native · 1080p';
   if(state.workflow==='minimaxH3')return 'MiniMax H3 · Motion Control · 1080p';
   if(state.workflow==='rife60')return 'RIFE Adaptive · hingga 60 FPS';
-  if(state.workflow==='r15')return 'MotionFly R4 · Camera Engine (R15)';
-  if(state.workflow==='koh1AntiObject')return 'MotionFly R4 · SAM3 Mask Diagnostic';
-  if(state.workflow==='r4Lab')return 'MotionFly R4 · Full Controlled Test';
   return 'Current Workflow';
 }
 function estimateSeconds(){ if(state.workflow!=='current'||state.mode!=='standard'||!state.videoDuration)return 0; return state.videoDuration*21.2; }
@@ -453,12 +446,6 @@ async function generate(){
   fd.append('workflow',state.workflow);
   fd.append('mode',state.mode);
   fd.append('accountId',$('#accountSelect').value||'auto');
-  if(state.workflow==='r4Lab'){
-    const maskSource=lastSam3Diagnostic();
-    if(!maskSource)return toast('Jalankan tes SAM3 terlebih dahulu.',true);
-    fd.append('diagnosticTaskId',maskSource.taskId);
-    fd.append('diagnosticAccountId',resolveHistoryAccountId(maskSource));
-  }
   // Stop the old single-task Live panel poll before showing a new upload.
   // No provider cancel/delete is sent: the accepted task remains in the
   // encrypted server registry and is monitored in Motion History.
@@ -765,7 +752,6 @@ function renderHistory(){
   // on each one-second refresh when the Nora gallery is available.
   if(window.vantaGallery){
     window.vantaGallery.renderMotion(items);
-    if(state.workflow==='r4Lab')refreshLabNotice();
     return;
   }
   if(!items.length){
@@ -815,7 +801,6 @@ function renderHistory(){
     </tr>`;
   }).join('');
   window.vantaGallery?.renderMotion(items);
-  if(state.workflow==='r4Lab')refreshLabNotice();
 }
 async function pollHistoryTasks(){
   if(state.historyPollBusy)return;
@@ -1085,8 +1070,6 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $('#mediaRequirements').textContent=videoOnly?'Cukup satu video dengan FPS ≤60 · gambar tidak diperlukan':'Kedua file wajib diisi';
   $('#videoDrop').querySelector('strong').textContent=videoOnly?'Source Video (≤60 FPS)':'Video Reference';
   $('#rifeNotice').classList.toggle('hidden',!videoOnly);
-  $('#diagnosticNotice').classList.toggle('hidden',state.workflow!=='koh1AntiObject');
-  $('#fullLabNotice').classList.toggle('hidden',state.workflow!=='r4Lab');
   $('#h3Notice').classList.toggle('hidden',state.workflow!=='minimaxH3');
   $('#akatzNotice').classList.toggle('hidden',state.workflow!=='minimaxH3Akatz');
   const h3=['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(state.workflow);

@@ -124,7 +124,7 @@ assert.ok(server.includes("nodeId: '2', fieldName: 'source_fps', fieldValue: sou
 assert.ok(server.includes("nodeId: '2', fieldName: 'target_fps', fieldValue: RIFE_TARGET_FPS"));
 assert.ok(server.includes('const metadata=await verifyRifeInput(videoFile);'));
 assert.ok(server.includes('rifeSource=await prepareAdaptiveRifeVideo(videoFile,metadata,{maxUploadBytes:VIDEO_MAX});'));
-assert.ok(server.includes('videoFile:preparedMotion?.file||rifeSource?.file||videoFile,'));
+assert.ok(server.includes('videoFile:rifeSource?.file||videoFile,'));
 assert.ok(server.includes('rifeSource.release().catch'),'Prepared RIFE anchors must always be cleaned');
 assert.ok(!server.includes('prepareRifeSource'),'RIFE must not create local FPS converted video');
 const sourceCode=fs.readFileSync(new URL('../rife-video.js',import.meta.url),'utf8');

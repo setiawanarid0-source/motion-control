@@ -11,6 +11,7 @@ import {AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,akatzGra
 import * as akatzV3 from '../h3-akatz-v3-motion.js';
 import {rifeGraphForSourceFps,RIFE_TARGET_FPS} from '../rife-video.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
+import {compileMotionFlyHD} from '../motionfly-hd-workflow.js';
 
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-all-token-'));
 try{
@@ -43,9 +44,9 @@ try{
   };
   const h3AppearanceModel=model(FFP_ASSET,1),h3CharacterModel=model(CHARACTER_ASSET,2);
   const h3AkatzModels={character:model(AKATZ_ASSET,3),turbo:model(AKATZ_TURBO_ASSET,4)};
-  const files={r15:'r15-camera-adaptive-api.json',current:'current-api.json',koh1AntiObject:'motionfly-r4-sam3-diagnostic-api.json',
-    r4Lab:'motionfly-r4-full-controlled-api.json',rife60:'rife60-api.json',minimaxH3:'minimax-h3-motion-control.json'};
+  const files={current:'current-api.json',rife60:'rife60-api.json',minimaxH3:'minimax-h3-motion-control.json'};
   const workflowGraphs=Object.fromEntries(Object.entries(files).map(([name,file])=>[name,JSON.parse(fs.readFileSync(new URL('../workflows/'+file,import.meta.url),'utf8'))]));
+  workflowGraphs.motionflyHD=compileMotionFlyHD(JSON.parse(fs.readFileSync(new URL('../workflows/motionfly-hd-runninghub.json',import.meta.url),'utf8')));
   workflowGraphs.minimaxH3Akatz={};workflowGraphs.minimaxH3AkatzV3={};
   const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
   const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
@@ -53,26 +54,32 @@ try{
     AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,RIFE_TARGET_FPS,rifeGraphForSourceFps,runningHubInstanceType,h3AppearanceModel,h3CharacterModel,h3AkatzModels,
     DATA_DIR:dir,assertH3MotionContextSchema:async()=>{},
     uploadToRunningHub:(credential,file)=>runningHubWeb.upload(credential,file),
-    rhJson:(route,credential,body)=>runningHubWeb.request(route,credential,body),
-    prepareDiagnosticAssets:async()=>({imageName:'verified-mask.png',videoName:'verified-mask.mp4'})};
+    rhJson:(route,credential,body)=>runningHubWeb.request(route,credential,body)};
   vm.createContext(context);vm.runInContext(server.slice(begin,end)+'\nthis.createTask=createTask;',context);
   const filePath=path.join(dir,'source.bin');fs.writeFileSync(filePath,'fixture-original-media');
   const media={path:filePath,originalname:'source.bin',mimetype:'video/mp4',size:22};
   const source={...h3PhotoPlan(1143,2048),fps:24,totalFrames:49,hasAudio:true,sceneCuts:[],driverCanvas:[736,1280],file:media};
+  const submitted={};
   for(const workflowKey of Object.keys(workflowGraphs)){
     const h3Source=workflowKey==='minimaxH3'?{...source,inferenceProfile:H3_DEFAULT_PROFILE}:
       workflowKey.startsWith('minimaxH3Akatz')?{...source,inferenceProfile:AKATZ_PROFILE}:undefined;
     const result=await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey,mode:'plus',
       imageFile:{...media,mimetype:'image/png'},videoFile:media,sourceFps:30,h3Source});
     assert.match(result.taskId,/^\d{19}$/);assert.ok(result.submittedAt);
+    submitted[workflowKey]=created.at(-1);
   }
-  assert.equal(created.length,8,'Every workflow selection must reach the token task transport');
-  assert.equal(created[6]['7'].inputs.file_name,'api-lora-usa/'+'3'.repeat(32)+'.safetensors');
-  assert.equal(created[7]['7'].inputs.file_name,created[6]['7'].inputs.file_name);
-  assert.equal(created[7]['6'].inputs.file_name,created[6]['6'].inputs.file_name);
-  assert.equal(created[7]['490'].inputs.crf,16,'Akatz v3 must retain its historical encoding recipe');
-  assert.equal(created[7]['490'].inputs.frame_rate,24);
-  assert.ok(created[7]['10'],'Akatz v3 must retain the original attention node');
+  assert.equal(created.length,6,'Every active workflow selection must reach the token task transport');
+  const native=submitted.minimaxH3Akatz,v3=submitted.minimaxH3AkatzV3,hd=submitted.motionflyHD;
+  assert.equal(native['7'].inputs.file_name,'api-lora-usa/'+'3'.repeat(32)+'.safetensors');
+  assert.equal(v3['7'].inputs.file_name,native['7'].inputs.file_name);
+  assert.equal(v3['6'].inputs.file_name,native['6'].inputs.file_name);
+  assert.equal(v3['490'].inputs.crf,16,'Akatz v3 must retain its historical encoding recipe');
+  assert.equal(v3['490'].inputs.frame_rate,24);
+  assert.ok(v3['10'],'Akatz v3 must retain the original attention node');
+  assert.match(hd['30'].inputs.image,/^input-\d+\.bin$/,'Uploaded image must replace the source editor filename');
+  assert.match(hd['33'].inputs.video,/^input-\d+\.bin$/,'Uploaded video must replace the source editor filename');
+  assert.equal(hd['33'].inputs.force_rate,24);assert.equal(hd['331'].inputs.steps,6);
+  assert.deepEqual(hd['496'].inputs['images or video_path'],['494',0]);
   const missing=createH3AppearanceModel({dir,asset:{...FFP_ASSET,name:'missing-pinned-model'},
     request:async()=>{throw Error('No API key fallback');},http:{get:async()=>{throw Error('No speculative download');}}});
   await assert.rejects(missing.ensure(key),error=>error.code==='H3_MODEL_PREPARATION_FAILED');
@@ -80,5 +87,5 @@ try{
   for(const name of Object.keys(workflowGraphs))assert.ok(html.includes('data-workflow="'+name+'"'));
   assert.equal(createHash('sha256').update(fs.readFileSync(new URL('../h3-akatz-v3-motion.js',import.meta.url))).digest('hex'),
     '91b41ceb399a8ed159b154f18b4305dab043c30eae9fcb9fa77f3b9745a6b40f','The historical v3 source must be preserved');
-  console.log('PASS: all 8 real workflow builders submit via access token, including H3/Akatz v3; verified model receipts reused without API keys or repeated transfers; v3 source preserved. No live inference.');
+  console.log('PASS: all 6 real workflow builders submit via access token, including MotionFly HD and H3/Akatz v3; model receipts reused; v3 source preserved. No live inference.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
