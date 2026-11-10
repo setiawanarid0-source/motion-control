@@ -5,6 +5,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import axios from 'axios';
+import {isRunningHubWebKey} from './runninghub-web-session.js';
 export const FFP_ASSET=Object.freeze({
   name:'minimax_h3_motion_transfer_ffp_v1.0_ref2va',
   url:'https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/8cfc2964aa872e3d18dd90bf7ae5c4cdf8303184/loras/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors',
@@ -80,6 +81,13 @@ export function createH3AppearanceModel({dir,request,http=axios,asset=FFP_ASSET,
     const id=keyId(apiKey),own=registry[id];
     if(own?.sha256===asset.sha256&&validUploadedH3Lora(own.name))return own.name;
     const known=knownReceipts();if(!known.length)return null;
+    // API-uploaded weights are addressed by content MD5, not by API key.
+    // The studio already verified the bytes against this pinned SHA-256 before
+    // saving a receipt. Token rotation/reconnection must reuse those same files.
+    if(isRunningHubWebKey(apiKey)){
+      const name=known[0].name;
+      await saveReceipt(id,name);return name;
+    }
     const {name}=await destination(apiKey,md5FromName(known[0].name));
     if(!known.some(x=>x.name===name))return null;
     await saveReceipt(id,name);return name;
@@ -118,6 +126,8 @@ export function createH3AppearanceModel({dir,request,http=axios,asset=FFP_ASSET,
   async function upload(apiKey,id){
     notify(id,{phase:'checking_cache',loaded:0});
     const cached=await primeCached(apiKey);if(cached)return cached;
+    if(isRunningHubWebKey(apiKey))throw Object.assign(new Error('File model '+asset.name+' belum tercatat terunggah di RunningHub. Task belum dikirim.'),
+      {code:'H3_MODEL_PREPARATION_FAILED',definitelyRejected:true});
     const {file,md5}=await acquireLocal(id),{name,url}=await destination(apiKey,md5);
     let location;try{location=new URL(url);}catch{throw Error('Lokasi unggah model H3 FFP tidak valid.');}
     if(location.protocol!=='https:'||location.username||location.password||

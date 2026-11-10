@@ -35,7 +35,7 @@ function makeElement(dataset={}){
 }
 const nav=['create','image-create','history','image-history','accounts','kie-accounts']
   .map(view=>makeElement({view}));
-const workflow=['rife60','r15','current','koh1AntiObject','r4Lab','minimaxH3','minimaxH3Akatz']
+const workflow=['rife60','r15','current','koh1AntiObject','r4Lab','minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3']
   .map(id=>makeElement({workflow:id}));
 const modes=['standard','plus'].map(mode=>makeElement({mode}));
 for(const key of ['create','image-create','history','image-history','accounts','kie-accounts']){
@@ -47,7 +47,8 @@ for(const key of workflow.map(x=>x.dataset.workflow)){
 const nodeKeys=['#menuBtn','#sidebar','#diagnosticNotice','#fullLabNotice','#rifeNotice','#h3Notice','#akatzNotice','#mediaRequirements',
   '#imageDrop','#referenceImage','#videoDrop',
   '#videoReference','#generateBtn','#refreshAccounts','#motionGalleryRefresh',
-  '#addAccountBtn'];
+  '#rhWebSessionPanel',
+  '#copyRhSessionCode','#connectRhWebSession','#rhWebSessionInput'];
 const nodes=new Map(nodeKeys.map(key=>[key,makeElement()]));
 nodes.set('#historyFilters',null);
 const requested=[],uploads=[],errors=[],state={workflow:'r15',mode:'standard'};
@@ -73,6 +74,8 @@ const context={
   setMedia:(kind,file)=>uploads.push({kind,file}),
   updateEstimates:()=>{},updateGenerate:()=>{},
   toast:message=>errors.push(message),
+  api:async(url,options)=>{requested.push({url,options});return {updated:true};},
+  loadSession:async()=>requested.push('reload-session'),
   window:{vantaMotionGallery:{refresh:async()=>{}}}
 };
 assert.doesNotThrow(()=>vm.runInNewContext(executable,context),
@@ -83,6 +86,17 @@ for(const control of [...nav,...workflow,...modes]){
 }
 assert.equal(nodes.get('#generateBtn').onclick,generated);
 assert.equal(nodes.get('#refreshAccounts').onclick,refreshed);
+assert.ok(!html.includes('id="rhApiKeyPanel"'));
+assert.ok(!html.includes('id="apiKeyInput"'));
+nodes.get('#rhWebSessionInput').value='javascript:not-json';
+await nodes.get('#connectRhWebSession').listener('click')();
+assert.equal(requested.filter(x=>x?.url==='/api/runninghub/access-token').length,0);
+nodes.get('#rhWebSessionInput').value='{"site":"runninghub.ai","access":"fixture-access"}';
+await nodes.get('#connectRhWebSession').listener('click')();
+assert.equal(requested.filter(x=>x?.url==='/api/runninghub/access-token').length,1);
+assert.equal(nodes.get('#rhWebSessionInput').value,'','Imported session is cleared from the form');
+assert.equal(nodes.get('#connectRhWebSession').disabled,false);
+assert.ok(requested.includes('reload-session'));
 nodes.get('#generateBtn').onclick();
 nodes.get('#refreshAccounts').onclick();
 assert.ok(requested.includes('generate')&&requested.includes('refresh'));

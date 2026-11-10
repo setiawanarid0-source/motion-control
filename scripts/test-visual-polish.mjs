@@ -18,7 +18,7 @@ assert.ok(link('kie-ui.js?v=')>link('app.js?v='), 'kie.ai UI still loads after t
 for(const id of ['sidebar','menuBtn','sidebarClose','sidebarOverlay','view-create',
   'view-image-create','view-history','view-image-history','view-accounts','view-kie-accounts',
   'kieRefreshAccounts','kieAddAccount','kieKeyInput','kieAccountList','kieModel',
-  'kieRefs','kieGenerateBtn','historyBody','accountList','addAccountBtn','refreshAccounts']){
+  'kieRefs','kieGenerateBtn','historyBody','accountList','connectRhWebSession','refreshAccounts']){
   assert.ok(html.includes('id="'+id+'"'),'Critical existing UI ID is missing: '+id);
 }
 for(const view of ['create','image-create','history','image-history','accounts','kie-accounts']){

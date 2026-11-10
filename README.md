@@ -11,11 +11,13 @@ Both use the same input node contract:
 - Video Reference → node `33`, field `video`
 - Final output → node `490`
 
-The app sends the selected API-format graph through RunningHub's `workflow` override on `/task/openapi/create`, while retaining one configurable RunningHub template `workflowId`.
+The backend sends the selected graph through authenticated RunningHub HTTP requests using the account's access token. No browser process is required during generation.
 
 ## Security
 
-RunningHub API keys are validated server-side, then stored only inside an AES-256-GCM encrypted HttpOnly cookie. The browser never receives stored raw keys back. Set a persistent `APP_MASTER_KEY` environment variable in production.
+RunningHub access tokens are validated server-side and stored in an AES-256-GCM encrypted vault. The browser never receives stored credentials back. Refresh tokens are used when supplied. Owner login protects the account pool and generation endpoints. Set a persistent `APP_MASTER_KEY` environment variable in production.
+
+At startup, migration removes former RunningHub API keys from the global/device vaults, task credentials, retired-account escrow, and stale credential files. Completed history and archived media remain available for their existing three-day lifetime. Old credential cookies are expired and cannot restore removed keys. KIE.AI credentials are separate.
 
 ## Run
 
@@ -30,9 +32,9 @@ Open `http://localhost:3000`.
 
 Open **Account Pool**:
 
-1. Save a RunningHub template Workflow ID.
-2. Add one or more RunningHub API keys.
-3. Return to Create, choose R15 or Current Workflow, upload image/video, then generate.
+1. Copy the token exporter from RunningHub Pool and run it on RunningHub while logged in.
+2. Paste the exported JSON into **Access token / JSON RunningHub** and connect the account. Existing export JSON remains supported. A raw access token can also verify an account; the exported JSON supplies upload identity and refresh credentials when needed.
+3. Return to Create, choose the workflow, upload references, then generate.
 
 ## Deployment note
 

@@ -17,7 +17,7 @@ assert.ok(!code.split('\n').some(line=>line.trimStart().startsWith("$('[data-del
 const accountList={innerHTML:''};
 const state={accounts:[
   {id:'account-alpha',name:'Account 1',status:{remainCoins:450,currentTaskCounts:0},canGenerate:true},
-  {id:'account-beta',name:'Account 2',status:{remainCoins:150,currentTaskCounts:0},canGenerate:true}
+  {id:'account-beta',name:'Account 2',connectionMode:'access-token',status:{remainCoins:150,currentTaskCounts:0},canGenerate:true}
 ]};
 const buttons=state.accounts.map(a=>({dataset:{delete:a.id},onclick:null}));
 const removed=[];
@@ -41,6 +41,8 @@ assert.doesNotThrow(()=>context.renderAccounts(),
   'Rendering 2 accounts must not throw a forEach TypeError');
 assert.ok(accountList.innerHTML.includes('account-alpha'));
 assert.ok(accountList.innerHTML.includes('account-beta'));
+assert.ok(accountList.innerHTML.includes('Access token'));
+assert.ok(!accountList.innerHTML.includes('API key'));
 assert.equal(buttons.filter(x=>typeof x.onclick==='function').length,2,
   'Both Remove buttons must have handlers');
 await buttons[0].onclick();
@@ -49,5 +51,5 @@ assert.deepEqual(removed.map(x=>x.url),['/api/accounts/account-alpha','/api/acco
 assert.ok(removed.every(x=>x.method==='DELETE'));
 state.accounts=[];
 assert.doesNotThrow(()=>context.renderAccounts(),'Empty Account Pool still renders safely');
-assert.ok(accountList.innerHTML.includes('Belum ada API key'));
+assert.ok(accountList.innerHTML.includes('Belum ada akun'));
 console.log('PASS: Account Pool with 0/2 accounts renders, each Remove button binds and works.');
