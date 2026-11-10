@@ -59,7 +59,16 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     const tasks=all();
     const id=String(task.taskId);
     const existing=tasks.find(t=>t.taskId===id);
-    if(existing)return publicEntry(existing);
+    if(existing){
+      // The recovery route verifies ownership with RunningHub before calling
+      // add. Preserve the original account/history/media scope on reconnection.
+      if(!existing.key&&/^rhweb:[a-f0-9]{64}$/.test(String(task.key))){
+        existing.key=task.key;
+        if(existing.status==='unavailable'){existing.status='check_error';existing.error=null;}
+        commit(tasks);
+      }
+      return publicEntry(existing);
+    }
     const submittedAt=task.submittedAt||new Date(now()).toISOString();
     const entry={
       taskId:id,accountId:task.accountId,accountName:task.accountName||'Account',

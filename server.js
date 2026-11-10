@@ -4,7 +4,6 @@ import { createOwnerAuth } from './owner-auth.js';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import axios from 'axios';
-import FormData from 'form-data';
 import os from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
@@ -39,8 +38,10 @@ import {installNativePoseInspection,poseValidationSummary} from './h3-native-pos
 import {installAkatzInspection} from './h3-akatz-inspect.js';
 import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionContextSchema} from './h3-context-inspect.js';
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
+import * as akatzV3 from './h3-akatz-v3-motion.js';
 import {installAkatzEditorDownload} from './h3-runninghub-export.js';
 import {createRunningHubWebSession,isRunningHubWebKey} from './runninghub-web-session.js';
+import {migrateRunningHubAccessTokens} from './runninghub-token-migration.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -50,7 +51,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
-const RH_BASE = 'https://www.runninghub.ai';
 const COOKIE_NAME = 'vanta_session_v2';
 const IMAGE_MAX = 20 * 1024 * 1024;
 const VIDEO_MAX = 100 * 1024 * 1024;
@@ -68,9 +68,16 @@ const workflowGraphs = {
   rife60: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/rife60-api.json'), 'utf8')),
   minimaxH3: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/minimax-h3-motion-control.json'), 'utf8')),
   minimaxH3Akatz: {revision:AKATZ_REVISION},
+  minimaxH3AkatzV3: {revision:akatzV3.AKATZ_REVISION},
 };
 
 const workflowMeta = {
+  minimaxH3AkatzV3: {
+    id:'minimaxH3AkatzV3',name:'MiniMax H3 · Akatz v3 · 1080p',
+    subtitle:'1080p · foto + video · 24 FPS · Plus · hingga 15 detik',
+    detail:'Workflow Akatz v3 asli. Versi uji yang perbaikan visualnya belum selesai.',
+    outputKind:'video',experimental:true,requiredMode:'plus'
+  },
   minimaxH3Akatz: {
     id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz V1.5 Native · 1080p',
     subtitle:'1080p · foto + video · 24 FPS · Plus · hingga 15 detik',
@@ -148,6 +155,8 @@ function decrypt(token) {
   }
 }
 
+const tokenMigration=migrateRunningHubAccessTokens({dir:DATA_DIR,encrypt,decrypt});
+console.info('RunningHub access-token migration',JSON.stringify(tokenMigration));
 const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
 const runningHubWeb=createRunningHubWebSession({dir:DATA_DIR,encrypt,decrypt});
 const motionResults=createMotionResultArchive({dir:path.join(DATA_DIR,'motion-results')});
@@ -304,7 +313,7 @@ async function monitorRegisteredTasks(){
   if(monitorBusy)return;
   monitorBusy=true;
   try{
-    const active=taskRegistry.active();
+    const active=taskRegistry.active().filter(task=>isRunningHubWebKey(task.key));
     h3ExecutionMonitor.retain(active.map(t=>t.taskId));
     const pending=active.sort((a,b)=>Date.parse(a.lastCheckedAt||0)-Date.parse(b.lastCheckedAt||0)).slice(0,8);
     await Promise.all(pending.map(async item=>{
@@ -350,6 +359,7 @@ function normalizeAccounts(accounts) {
   const seen = new Set();
   const out = [];
   for (const account of Array.isArray(accounts) ? accounts : []) {
+    if(!isRunningHubWebKey(account?.key))continue;
     const key = account?.fingerprint || account?.id || account?.key;
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -423,7 +433,7 @@ function getSession(req) {
   const session = decrypt(req.cookies?.[COOKIE_NAME]);
   const base = session && typeof session === 'object' ? session : {};
   return {
-    accounts: Array.isArray(base.accounts) ? base.accounts : [],
+    accounts: normalizeAccounts(base.accounts),
   };
 }
 
@@ -444,66 +454,24 @@ function publicAccount(account, status = null) {
     name: account.name,
     addedAt: account.addedAt,
     lastUsedAt: account.lastUsedAt || null,
-    connectionMode: isRunningHubWebKey(account.key)?'web':'api',
+    connectionMode: 'access-token',
     status,
     canGenerate: canGenerateWithAccount(status, MIN_POOL_CREDITS),
   };
 }
 
 async function rhJson(pathname, apiKey, body, timeout = 30000) {
-  if(isRunningHubWebKey(apiKey))return runningHubWeb.request(pathname,apiKey,body);
-  const { data } = await axios.post(`${RH_BASE}${pathname}`, body, {
-    timeout,
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    validateStatus: () => true,
-  });
-  return data;
+  if(!isRunningHubWebKey(apiKey))throw Object.assign(new Error('Hubungkan access token RunningHub di Account Pool.'),
+    {code:'RH_ACCESS_TOKEN_REQUIRED',definitelyRejected:true});
+  return runningHubWeb.request(pathname,apiKey,body);
 }
 
 async function accountStatus(apiKey) {
-  if(isRunningHubWebKey(apiKey))return runningHubWeb.status(apiKey);
-  const data = await rhJson('/uc/openapi/accountStatus', apiKey, { apikey: apiKey }, 20000);
-  if (!data || Number(data.code) !== 0) throw new Error(data?.msg || 'API key tidak dapat divalidasi.');
-  const coins=data.data?.remainCoins;
-  if(coins==null||!Number.isFinite(Number(coins)))
-    throw new Error('Saldo akun belum dapat diverifikasi. Akun tidak akan dihapus.');
-  return {
-    remainCoins: Number(coins),
-    currentTaskCounts: Number(data.data?.currentTaskCounts || 0),
-    currency: data.data?.currency || null,
-    apiType: data.data?.apiType || null,
-  };
+  return runningHubWeb.status(apiKey);
 }
 
 async function uploadToRunningHub(apiKey, file) {
-  if(isRunningHubWebKey(apiKey))return runningHubWeb.upload(apiKey,file);
-  const form = new FormData();
-  form.append('apiKey', apiKey);
-  form.append('fileType', 'input');
-  form.append('file', fs.createReadStream(file.path), {
-    filename: file.originalname,
-    contentType: file.mimetype,
-    knownLength: file.size,
-  });
-  const response = await axios.post(`${RH_BASE}/task/openapi/upload`, form, {
-    timeout: 10 * 60 * 1000,
-    headers: {
-      ...form.getHeaders(),
-      Authorization: `Bearer ${apiKey}`,
-    },
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
-    validateStatus: () => true,
-  });
-  const data = response.data;
-  if (!data || Number(data.code) !== 0 || !data.data?.fileName) {
-    throw new Error(data?.msg || `Upload ${file.originalname} gagal.`);
-  }
-  return data.data.fileName;
+  return runningHubWeb.upload(apiKey,file);
 }
 
 // Reuse previously saved SAM3 diagnostic masks, without adding new user media inputs.
@@ -552,7 +520,8 @@ async function prepareDiagnosticAssets(sourceAccount,sourceTaskId,targetApiKey){
   }finally{await fs.promises.rm(dir,{recursive:true,force:true});}
 }
 async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, diagnosticAccount, diagnosticTaskId, onBeforeSubmit, onModelPreparation }) {
-  const h3=['minimaxH3','minimaxH3Akatz'].includes(workflowKey);
+  const h3=['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(workflowKey);
+  const isAkatz=workflowKey==='minimaxH3Akatz'||workflowKey==='minimaxH3AkatzV3';
   let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
   if(h3&&!h3Source?.file)
     throw Error('Metadata video sumber H3 belum tervalidasi.');
@@ -562,7 +531,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey,
     h3?(h3Source.referenceFile||imageFile):imageFile);
   const videoName = await uploadToRunningHub(apiKey, h3?h3Source.file:videoFile);
-  if(workflowKey==='minimaxH3Akatz'){
+  if(isAkatz){
     if(h3Source.inferenceProfile!==AKATZ_PROFILE)throw Error('Profil Akatz belum tervalidasi.');
     onModelPreparation?.();
     const states={character:{phase:'checking_cache'},accelerator:{phase:'checking_cache'}};
@@ -578,7 +547,8 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
       h3AkatzModels.turbo.ensure(apiKey,{onProgress:progress('accelerator')})]);}
     catch(error){const failure=new Error(error?.message||'Persiapan model Akatz belum selesai.');
       failure.code='H3_MODEL_PREPARATION_FAILED';throw failure;}
-    selectedGraph=akatzGraphForInputs({imageName,videoName,source:h3Source,characterLoraFile,turboLoraFile});
+    const build=workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzGraphForInputs:akatzGraphForInputs;
+    selectedGraph=build({imageName,videoName,source:h3Source,characterLoraFile,turboLoraFile});
   }else if(workflowKey==='minimaxH3'){
     if(['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(h3Source.inferenceProfile))
       h3Source.appearanceLoraFile=await h3AppearanceModel.ensure(apiKey);
@@ -606,7 +576,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     workflow: JSON.stringify(selectedGraph),
     addMetadata: true,
     // H3 and RIFE do not reserve a paid retained instance after completion.
-    ...(['rife60','minimaxH3','minimaxH3Akatz'].includes(workflowKey)?{}:{retainSeconds:259200}),
+    ...(['rife60','minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(workflowKey)?{}:{retainSeconds:259200}),
   };
   // Match the RunningHub instance selected by the user; keep queued legacy Lite unchanged.
   const instanceType=runningHubInstanceType(mode);
@@ -662,6 +632,10 @@ const upload = multer({
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+app.use((req,res,next)=>{
+  if(req.cookies?.[COOKIE_NAME])res.clearCookie(COOKIE_NAME,{httpOnly:true,sameSite:'lax',path:'/'});
+  next();
+});
 installNativePoseInspection({app,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),getReference:referenceFile,
   taskId:process.env.VANTA_H3_INSPECT_TASK_ID||'',hash:process.env.VANTA_H3_INSPECT_TOKEN_HASH||'',
   expires:process.env.VANTA_H3_INSPECT_EXPIRES||'',
@@ -742,7 +716,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
-app.get('/health', (req, res) => res.json({ ok: true, service: 'vanta-motion-studio', workflows: Object.keys(workflowGraphs), persistentStorage: DATA_DIR }));
+app.get('/health', (req, res) => res.json({ ok: true, service: 'vanta-motion-studio', workflows: Object.keys(workflowGraphs), persistentStorage: DATA_DIR, runningHubAuthentication:'access-token' }));
 
 app.get('/api/workflows', (req, res) => {
   res.json({ workflows: Object.values(workflowMeta) });
@@ -763,43 +737,16 @@ app.get('/api/session', async (req, res) => {
   });
 });
 
-app.post('/api/accounts', async (req, res) => {
-  const apiKey = String(req.body?.apiKey || '').trim();
-  if (apiKey.length < 12 || apiKey.length > 256) return res.status(400).json({ error: 'API key tidak valid.' });
-  const { deviceId, accounts } = getPersistentAccounts(req);
-  if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
-  const fingerprint = crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
-  if (accounts.some(a => a.fingerprint === fingerprint)) return res.status(409).json({ error: 'API key ini sudah ada di pool.' });
-  try {
-    const status = await accountStatus(apiKey);
-    if (!canStartNewTask(status,MIN_POOL_CREDITS))
-      return res.status(400).json({ error: 'Akun harus memiliki minimal 100 RH untuk ditambahkan ke Account Pool.' });
-    const account = {
-      id: crypto.randomUUID(),
-      name: `Account ${String(accounts.length + 1).padStart(2, '0')}`,
-      key: apiKey,
-      fingerprint,
-      addedAt: new Date().toISOString(),
-      lastUsedAt: null,
-    };
-    accounts.push(account);
-    saveVaultAccounts(deviceId, accounts);
-    res.json({ account: publicAccount(account, status), storage: 'persistent' });
-  } catch (error) {
-    res.status(400).json({ error: error.message || 'API key tidak dapat divalidasi.' });
-  }
-});
-
-app.post('/api/runninghub/web-session',async(req,res)=>{
+async function connectRunningHubAccount(req,res){
   res.setHeader('Cache-Control','private, no-store');
+  if(Object.hasOwn(req.body||{},'apiKey'))return res.status(410).json({error:'API key RunningHub sudah dihapus. Gunakan access token.',code:'RH_ACCESS_TOKEN_REQUIRED'});
   const origin=req.get('origin');
   if(origin){
     try{if(new URL(origin).host!==req.get('host'))throw Error();}
-    catch{return res.status(403).json({error:'Permintaan sesi harus berasal dari Vanta.'});}
+    catch{return res.status(403).json({error:'Permintaan token harus berasal dari Vanta.'});}
   }
   try{
-    const connected=await runningHubWeb.connect(req.body?.session);
-    // Load after validation so a concurrent Pool deletion is not undone.
+    const connected=await runningHubWeb.connect(req.body?.session??req.body?.accessToken);
     const {deviceId,accounts}=getPersistentAccounts(req);
     let account=accounts.find(a=>a.key===connected.key);
     const updated=Boolean(account);
@@ -811,8 +758,12 @@ app.post('/api/runninghub/web-session',async(req,res)=>{
     }
     saveVaultAccounts(deviceId,accounts);
     res.json({account:publicAccount(account,connected.status),updated});
-  }catch(error){res.status(400).json({error:error.message||'Sesi RunningHub belum dapat diverifikasi.'});}
-});
+  }catch(error){res.status(400).json({error:error.message||'Access token RunningHub belum dapat diverifikasi.'});}
+}
+app.post('/api/accounts',connectRunningHubAccount);
+app.post('/api/runninghub/access-token',connectRunningHubAccount);
+// Older Vanta tabs can reconnect, but can never restore API-key credentials.
+app.post('/api/runninghub/web-session',connectRunningHubAccount);
 
 app.delete('/api/accounts/:id', async (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);
@@ -901,14 +852,15 @@ async function handleGeneration(req,res){
     const mode = String(req.body?.mode || 'standard');
     const requestedAccountId = String(req.body?.accountId || 'auto');
     if (!workflowGraphs[workflowKey]) throw new Error('Workflow tidak dikenali.');
-    if(['minimaxH3','minimaxH3Akatz'].includes(workflowKey)){
+    if(['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(workflowKey)){
       req.progress?.('analyzing');
-      h3Source=workflowKey==='minimaxH3Akatz'?await prepareAkatzInput(videoFile,mode,imageFile):
+      h3Source=workflowKey==='minimaxH3AkatzV3'?await akatzV3.prepareAkatzInput(videoFile,mode,imageFile):
+        workflowKey==='minimaxH3Akatz'?await prepareAkatzInput(videoFile,mode,imageFile):
         await prepareH3Input(videoFile,mode,imageFile,{
           inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
-      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
+      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
       req.progress?.('analyzing');
@@ -938,16 +890,14 @@ async function handleGeneration(req,res){
     let candidates=[];
     if(requestedAccountId!=='auto'){
       const chosen=accounts.find(a=>a.id===requestedAccountId);
-      if(!chosen)throw new Error('Akun yang dipilih tidak ditemukan.');
+      if(!chosen||!isRunningHubWebKey(chosen.key))throw new Error('Akun access token yang dipilih tidak ditemukan.');
       const status=await accountStatus(chosen.key);
       if(!canGenerateWithAccount(status,MIN_POOL_CREDITS))
         throw new Error('Akun ini tidak dapat digunakan. Generasi RunningHub memerlukan saldo minimal 100 RH.');
       candidates=[chosen];
     }else{
-      // Importing a web session opts Automatic into the consumer web route.
-      // Never silently fall back to paid OpenAPI after a web failure.
-      const webAccounts=accounts.filter(a=>isRunningHubWebKey(a.key));
-      const automaticAccounts=webAccounts.length?webAccounts:accounts;
+      // Both automatic and manual selection accept access-token references only.
+      const automaticAccounts=accounts.filter(a=>isRunningHubWebKey(a.key));
       const checked=await Promise.all(automaticAccounts.map(async account=>{
         try{return {account,status:await accountStatus(account.key)};}
         catch(error){return {account,status:{error:error.message}};}
@@ -996,7 +946,7 @@ async function handleGeneration(req,res){
             outputKind:workflowMeta[workflowKey].outputKind||'video',mode,
             video:videoFile.originalname,submittedAt:task.submittedAt,
             status:task.taskStatus==='RUNNING'?'running':'queued',
-            inputDiagnostics:h3Source?(workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):null});
+            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):null});
           trackingRegistered=true;
         }catch(registerError){
           console.error('Paid task accepted but registry write failed',String(task.taskId),registerError.message);
@@ -1258,16 +1208,16 @@ app.post('/api/tasks/:taskId/recover',async(req,res)=>{
   const taskId=String(req.params.taskId||'');
   if(!/^\d{10,25}$/.test(taskId))return res.status(400).json({error:'Task ID tidak valid.'});
   const registered=registeredAccount(taskId);
-  if(registered)return res.json({ok:true,accountId:registered.id,accountName:registered.name});
+  if(registered&&isRunningHubWebKey(registered.key))return res.json({ok:true,accountId:registered.id,accountName:registered.name});
   const accounts=[...getPersistentAccounts(req).accounts,
     ...taskRegistry.retiredAccounts().map(x=>taskRegistry.getRetiredAccount(x.id))];
   for(const account of accounts.slice(0,65)){
     try{
       const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},15000);
       if(isTrackableTaskCode(data?.code,data)){
-        taskRegistry.add({taskId,accountId:account.id,accountName:account.name,
+        const restored=taskRegistry.add({taskId,accountId:account.id,accountName:account.name,
           key:account.key,workflow:'Recovered task',submittedAt:new Date().toISOString(),status:'running'});
-        return res.json({ok:true,accountId:account.id,accountName:account.name});
+        return res.json({ok:true,accountId:restored.accountId,accountName:restored.accountName});
       }
     }catch(error){/* Continue checking; no paid generation occurs. */}
   }
@@ -1459,6 +1409,7 @@ if (!fs.existsSync(GLOBAL_ACCOUNT_VAULT) && !startupGlobalAccounts.length && sta
   saveGlobalAccounts(startupLegacyAccounts);
 }
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
+console.info('RunningHub model receipts',JSON.stringify({ffp:Boolean(h3AppearanceModel.cachedFile()),character:Boolean(h3CharacterModel.cachedFile()),akatz:Boolean(h3AkatzModels.character.cachedFile()),turbo:Boolean(h3AkatzModels.turbo.cachedFile())}));
 // Cache-only reuse authorizes existing MD5 paths for the other pool accounts.
 // This cannot download weights, PUT bytes, create inference, retry or cancel.
 void (async()=>{

@@ -31,9 +31,10 @@ function cookies(value){
   return out;
 }
 export function parseRunningHubSession(input){
+  if(typeof input==='string'&&!input.trim().startsWith('{'))input={site:'runninghub.ai',access:input};
   try{if(typeof input==='string'&&input.length<=98304)input=JSON.parse(input);}catch{}
   if(!input||typeof input!=='object'||Array.isArray(input)||!['runninghub.ai','www.runninghub.ai'].includes(input.site))
-    throw error('Tempel JSON sesi dari popup RunningHub.','RH_WEB_INVALID_SESSION',true);
+    throw error('Tempel access token atau JSON dari popup RunningHub.','RH_WEB_INVALID_SESSION',true);
   if(JSON.stringify(input).length>98304)throw error('Data sesi terlalu besar.','RH_WEB_INVALID_SESSION',true);
   const cookie=cookies(input.cookies),stores=[input.localStorage,input.sessionStorage].filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
   const find=name=>{
@@ -44,7 +45,7 @@ export function parseRunningHubSession(input){
   // The website gives its exact auth cookie precedence over stale localStorage.
   const access=token(cookie['rh-accesstoken']||input.access||find('Rh-Accesstoken'));
   const refresh=token(cookie['rh-refreshtoken']||input.refresh||find('Rh-Refreshtoken'));
-  if(!access)throw error('Access token tidak ditemukan. Login RunningHub lalu salin ulang sesi.','RH_WEB_INVALID_SESSION',true);
+  if(!access||/^javascript:/i.test(access))throw error('Access token tidak ditemukan. Login RunningHub lalu salin ulang token.','RH_WEB_INVALID_SESSION',true);
   const identify=String(input.identify||find('Rh-Identify')||'');
   if(identify&&!/^[A-Za-z0-9_-]{1,128}$/.test(identify))throw error('Identitas sesi tidak valid.','RH_WEB_INVALID_SESSION',true);
   const payload=claim(access);
@@ -164,6 +165,10 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(coins<minimumCredits)throw error('Akun harus memiliki minimal '+minimumCredits+' RH untuk ditambahkan.','RH_WEB_LOW_BALANCE',true);
     const hash=crypto.createHash('sha256').update('runninghub-web-personal:'+id).digest('hex');
     const previous=read()[hash];
+    // Retain verified upload/refresh metadata when reconnecting with a raw token.
+    const identify=session.identify||profile.identify||claim(session.access)?.identify||previous?.identify||'';
+    if(identify&&!/^[A-Za-z0-9_-]{1,128}$/.test(identify))throw error('Identitas token tidak valid.','RH_WEB_INVALID_SESSION',true);
+    session={...session,identify,refresh:session.refresh||previous?.refresh||'',comfyAuth:session.comfyAuth||previous?.comfyAuth||''};
     write(hash,{...session,userId:id,workflowId:previous?.workflowId||null,connectedAt:new Date(now()).toISOString()});
     return {key:'rhweb:'+hash,status:{remainCoins:coins,currentTaskCounts:0,apiType:'WEB_SESSION',
       expiresAt:session.expiresAt?new Date(session.expiresAt).toISOString():null}};
@@ -187,7 +192,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       return comfyRefreshing.get(key);
     }
     if(!session.comfyAuth)session=await authorize();
-    if(!session.identify)throw error('Rh-Identify tidak ditemukan. Buka editor RunningHub dan salin ulang sesi.','RH_WEB_UPLOAD_AUTH',true);
+    if(!session.identify)throw error('Data unggah akun belum lengkap. Gunakan kode pengambil token di Pool dan tempel JSON dari popup RunningHub.','RH_WEB_UPLOAD_AUTH',true);
     async function send(){
       const form=new FormData(),stream=fs.createReadStream(file.path);
       form.append('image',stream,{filename:file.originalname,contentType:file.mimetype,knownLength:file.size});form.append('type','input');
@@ -199,7 +204,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     // this never replays /task/create or starts inference.
     if(authFailure(result)){await authorize();result=await send();}
     const uploaded=typeof result.name==='string'?result:Number(result.code)===0?result.data:null;
-    if(!uploaded?.name||/[\\\x00-\x1f]/.test(uploaded.name))throw error('Upload referensi melalui editor gagal.','RH_WEB_UPLOAD_FAILED',true);
+    if(!uploaded?.name||/[\\\x00-\x1f]/.test(uploaded.name))throw error('Upload referensi ke RunningHub gagal.','RH_WEB_UPLOAD_FAILED',true);
     const name=[uploaded.subfolder,uploaded.name].filter(Boolean).join('/');
     if(name.split('/').some(x=>x==='..')||name.startsWith('/'))throw error('Nama file upload tidak valid.','RH_WEB_UPLOAD_FAILED',true);
     return name;
@@ -246,7 +251,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
   }
   async function outputs(key,id){
     const task=await detail(key,id);
-    if(!task)return {code:804,msg:'Task web belum ditemukan. Periksa kembali History.'};
+    if(!task)return {code:802,msg:'Task tidak ditemukan pada akun access token ini.'};
     if(['QUEUED','PENDING'].includes(task.taskStatus))return {code:813,msg:'QUEUED'};
     if(['FAILED','ERROR','CANCELED','CANCELLED'].includes(task.taskStatus)){
       const failed=await post(key,'/task/failedReason',{taskId:String(id)});
@@ -275,7 +280,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(route==='/openapi/v2/query'){
       const task=await detail(key,body.taskId);return {code:0,data:task};
     }
-    throw error('Operasi ini masih memerlukan API key. Jalur sesi web tidak dialihkan ke API berbayar.','RH_WEB_UNSUPPORTED_OPERATION',true);
+    throw error('Operasi RunningHub ini belum mendukung access token. Task belum dikirim.','RH_WEB_UNSUPPORTED_OPERATION',true);
   }
   return {connect,status,upload,request,prepare:workspace,file};
 }

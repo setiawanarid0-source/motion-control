@@ -230,3 +230,22 @@ test('export code is one-line JavaScript and contains only the intended session 
   assert.ok(!code.includes('fetch('));assert.ok(!code.includes('XMLHttpRequest'));
   assert.ok(!code.includes('localStorage.length'));assert.ok(!code.includes('cookies:document.cookie'));
 });
+
+
+test('raw access token authenticates directly and reimport retains verified refresh/upload metadata',()=>fixture(async({service,calls})=>{
+  assert.equal(parseRunningHubSession('Bearer '+exported.access).access,exported.access);
+  const first=await service.connect(exported);
+  const next=await service.connect('Bearer '+jwt(userId,time/1000+8000));
+  assert.equal(next.key,first.key);
+  const before=calls.length;
+  await service.status(next.key);
+  assert.equal(calls[before].headers.Authorization,'Bearer '+jwt(userId,time/1000+8000));
+  assert.ok(!calls.slice(before).some(c=>c.url.includes('/openapi/')));
+}));
+
+test('a task absent from the token account cannot be claimed as running or recovered',()=>fixture(async({service,setHandler})=>{
+  const {key}=await service.connect(exported);
+  setHandler(async()=>({code:0,data:{total:0,records:[]}}));
+  const result=await service.request('/task/openapi/outputs',key,{taskId:renderId});
+  assert.equal(result.code,802);
+}));

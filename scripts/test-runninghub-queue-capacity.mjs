@@ -141,7 +141,7 @@ const handlerStart=server.indexOf('async function handleGeneration(');
 const handlerEnd=server.indexOf('generationQueue.setExecutor(runQueuedGeneration);',handlerStart);
 let attempts=0,saved,refusal,discarded=0;
 const registered=[];
-let pool=[{id:'one',name:'Account 01',key:'fixture-one'},{id:'two',name:'Account 02',key:'fixture-two'}];
+let pool=[{id:'one',name:'Account 01',key:'rhweb:'+'1'.repeat(64)},{id:'two',name:'Account 02',key:'rhweb:'+'2'.repeat(64)}];
 const worker={...context,IMAGE_MAX:20e6,VIDEO_MAX:100e6,MIN_POOL_CREDITS:100,LOCKED_WORKFLOW_ID:'fixture-workflow',
   isRunningHubWebKey,
   workflowGraphs:{current:{},rife60:context.workflowGraphs.rife60},
@@ -196,10 +196,10 @@ assert.equal(fields.get('#taskStatus').textContent,'Status penerimaan belum past
 // refusals may move an Automatic request to another account. No live APIs.
 async function runRifeReplies(replies,{accountId='auto',workflow='rife60',accountCount=2,web=false}={}){
   responses.push(...replies);attempts=0;registered.length=0;saved={stage:'queued'};
-  pool=[{id:'one',name:'Account 01',key:'fixture-one'},
-    {id:'two',name:'Account 02',key:'fixture-two'},
-    ...(accountCount===3?[{id:'zzz',name:'Account 03',key:'fixture-three'}]:[])];
-  if(web)pool[1].key='rhweb:'+'b'.repeat(64);
+  pool=[{id:'one',name:'Account 01',key:'rhweb:'+'1'.repeat(64)},
+    {id:'two',name:'Account 02',key:'rhweb:'+'2'.repeat(64)},
+    ...(accountCount===3?[{id:'zzz',name:'Account 03',key:'rhweb:'+'3'.repeat(64)}]:[])];
+  if(web){pool[0].key='legacy-api-fixture';pool[1].key='rhweb:'+'b'.repeat(64);}
   refusal='RUNNINGHUB_PAID_BALANCE_REQUIRED';
   const before=requests.length;
   await worker.run({jobId:'fixture-job',deviceId:'fixture-device',body:{workflow,mode:'plus',accountId},

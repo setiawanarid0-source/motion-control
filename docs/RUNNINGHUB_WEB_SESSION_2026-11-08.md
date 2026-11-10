@@ -1,3 +1,7 @@
+> Updated 11 November 2026: every existing workflow routes through the access-token transport. Akatz v3 is restored as a separate selection from commit ce7ec85, with its original builder preserved byte for byte. H3/FFP, character, Akatz and Turbo models reuse the studio's existing upload receipts, matched to pinned SHA-256 hashes; their content-addressed file names remain unchanged. API keys and repeated multi-gigabyte model transfers are unnecessary for these existing files. A missing model receipt remains a real preflight error, not a successful generate. Live GPU execution still requires an owner's valid token and provider availability.
+
+> Updated 10 November 2026: production authentication is access-token only. API-key import and OpenAPI fallback have been removed. Startup migration purges old RunningHub API keys from global/device vaults, task credentials, retired-account escrow and stale temporary files. KIE and archived videos are not changed. The pool accepts a raw access token or existing exporter JSON, and reconnecting preserves verified upload/refresh metadata. The technical protocol notes below describe the original integration; the previous API-key option and deployment-review state are historical.
+
 # Sesi RunningHub di Vanta
 
 Vanta sebelumnya hanya menerima API key. Menempelkan token browser ke jalur
