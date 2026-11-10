@@ -153,7 +153,7 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1,me
   }
   async function stage({jobId,deviceId,body,image,video}){
     folder(jobId);
-    const videoOnly=String(body?.workflow||'r15')==='rife60';
+    const videoOnly=String(body?.workflow||'motionflyHD')==='rife60';
     if(!deviceId||!video?.path||(!videoOnly&&!image?.path))throw Error('Media yang diperlukan belum lengkap');
     const old=read(jobId);
     if(old){
@@ -179,11 +179,9 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1,me
       const createdAt=new Date(now()).toISOString();
       const data={jobId,deviceId,createdAt,updatedAt:createdAt,stage:'queued',
         message:LABELS.queued,body:{
-          workflow:String(body.workflow||'r15'),
+          workflow:String(body.workflow||'motionflyHD'),
           mode:String(body.mode||'standard'),
-          accountId:String(body.accountId||'auto'),
-          diagnosticTaskId:String(body.diagnosticTaskId||''),
-          diagnosticAccountId:String(body.diagnosticAccountId||'')
+          accountId:String(body.accountId||'auto')
         },image:storedImage||(image?.path?{path:imageDest,originalname:String(image.originalname||'reference.jpg'),
           mimetype:image.mimetype,size:image.size}:null),
         video:storedVideo||{path:videoDest,originalname:String(video.originalname||'driving.mp4'),

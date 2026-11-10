@@ -103,25 +103,15 @@
                 <p>AI Frame Interpolation · target 60 FPS · original resolution · video-only</p>
                 <small>Video di bawah 60 FPS diinterpolasi ke 60 FPS. Untuk video berlabel 60 FPS, VANTA mendeteksi frame berulang dan memperbaiki gerakan menggunakan RIFE pada FPS efektif terukur. Jika tidak ditemukan pola yang aman, proses dihentikan sebelum memakai kredit RH. Tanpa upscale.</small>
               </button>
-              <button class="workflow-card selected" data-workflow="r15">
-                <div class="workflow-row"><strong>MotionFly R4 · Camera Engine</strong><span class="badge badge-accent">01</span></div>
-                <p>35 FPS · 1080 × 1920 · 6 steps · CFG 1 · Tes</p>
-                <small>Gerakan video disinkronkan ke 35 FPS tanpa frame ulang. Kamera hasil diperiksa; tanpa koreksi paksa ke seluruh tubuh.</small>
+              <button class="workflow-card selected" data-workflow="motionflyHD" type="button">
+                <div class="workflow-row"><strong>MotionFly · 1080 HD + ZIP</strong><span class="badge">HD</span></div>
+                <p>Foto + video · audio sumber · MP4 + ZIP</p>
+                <small>Mask SAM3 diproses otomatis dari referensi yang diunggah.</small>
               </button>
               <button class="workflow-card" data-workflow="current">
                 <div class="workflow-row"><strong>Current Workflow</strong><span class="badge">02</span></div>
                 <p>KOH (1) · 30 FPS · 6 steps · CFG 1</p>
                 <small>Current Workflow terbaru.</small>
-              </button>
-              <button class="workflow-card" data-workflow="koh1AntiObject">
-                <div class="workflow-row"><strong>MotionFly R4 · SAM3 Mask Diagnostic</strong><span class="badge">03</span></div>
-                <p>35 FPS · Tes tracking dan mask · tanpa sampler</p>
-                <small>Hasil: video mask gerakan + gambar mask referensi. BUKAN video motion-transfer akhir.</small>
-              </button>
-              <button class="workflow-card" data-workflow="r4Lab">
-                <div class="workflow-row"><strong>MotionFly R4 · Full Controlled Test</strong><span class="badge">TEST</span></div>
-                <p>35 FPS · 337 frame · 1080 × 1920 · 6 steps / CFG 1</p>
-                <small>Gunakan kembali mask tes SAM3 berhasil. Ini tes generasi penuh, bukan workflow final.</small>
               </button>
               <button class="workflow-card" data-workflow="minimaxH3" type="button">
                 <div class="workflow-row"><strong>MiniMax H3 · Motion Control</strong><span class="badge badge-accent">NEW</span></div>
@@ -141,8 +131,6 @@
             </div>
 
             <div id="rifeNotice" class="diagnostic-notice hidden" role="note"><strong>Frame Interpolation tanpa Upscale</strong><p>Unggah video hingga 60 FPS. Video yang terbaca 60 FPS tetapi memiliki frame duplikat akan dianalisis: frame gerakan unik dijadikan input RIFE agar AI membuat frame perantara baru hingga 60 FPS. Nilai FPS gerakan ditentukan dari hasil analisis, bukan dipaksa ke 30 FPS. Resolusi dan durasi dipertahankan. Jika tidak ada pola yang dapat diperbaiki secara aman, task tidak dikirim ke RunningHub. Analisis menggunakan CPU VANTA dan dapat memerlukan waktu.</p><p>Mode Automatic dapat mencoba akun lain jika RunningHub menolak pengiriman sebelum membuat task. Setelah task diterima atau status penerimaannya belum pasti, pengiriman tidak diulang.</p></div>
-            <div id="diagnosticNotice" class="diagnostic-notice hidden" role="note"><strong>Mode diagnosis SAM3</strong><p>Wajib upload driving video yang sudah dikompensasi ke 35 FPS, bukan video mentah. Tes ini menghasilkan mask saja dan tetap dapat menggunakan kredit RunningHub. Belum ada estimasi biaya yang tervalidasi.</p></div>
-            <div id="fullLabNotice" class="diagnostic-notice hidden" role="note"><strong>R4 Full Controlled · Tes berbayar</strong><p id="r4LabMaskSource"></p><p>Upload kembali gambar referensi dan driving video hasil kompensasi 35 FPS yang sama dengan tes SAM3. Dua mask akan dipakai ulang otomatis dari task tersebut. Mask belum menjalani refinement offline. Proses 337 frame dengan RunningHub dan membutuhkan kredit. Kamera statis belum terbukti.</p></div>
             <div id="h3Notice" class="diagnostic-notice hidden" role="note"><strong>MiniMax H3 · Motion Control</strong><p>Foto menjadi acuan wajah, bentuk tubuh, pakaian, tekstur dan tampilan scene. Video 0,25–60 detik memandu gerakan, ekspresi dan kamera. Hasil 1080p mengikuti rasio foto, 24 FPS, dengan audio sumber; tanpa upscale, downscale atau refinement hasil.</p><p>Gunakan Plus. Ketepatan visual dan kecukupan memori belum dibuktikan melalui render; mulai dengan klip pendek. Foto tidak dipotong: rasio hingga 2:1 atau 1:2, sisi pendek 64–2048 px.</p></div>
             <div id="akatzNotice" class="diagnostic-notice hidden" role="note"><strong>Akatz V1.5 Native · Versi uji v8</strong><p>Unggah satu foto dan satu video 0,25–15 detik. Gunakan Plus. Hasil dibuat langsung pada canvas 1080p, 24 FPS, dengan audio sumber; tanpa upscale, downscale atau refinement hasil.</p><p>Untuk klip sekitar 14–15 detik, bagian akhir dibagi menjadi dua segmen pendek. Versi ini menambah satu proses sampling dengan history tetap 5 frame. Kualitas, waktu dan biaya masih perlu diuji; masalah tekstur belum dinyatakan selesai.</p><p><a class="akatz-editor-download" href="/api/workflows/minimaxH3Akatz/runninghub" download="VANTA_MINIMAX_H3_AKATZ_V8_RUNNINGHUB.json">Unduh workflow RunningHub + ZIP</a></p><p>Preset editor: 15 detik · 1080 × 1920. Unggah kembali referensi di RunningHub. Unduhan workflow tidak menjalankan generate.</p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
@@ -356,8 +344,8 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/auth.js?v=20261026-global-login" defer></script>
-  <script src="/rh-session.js?v=20261111-access-token-all-workflows" defer></script>
-  <script src="/app.js?v=20261111-access-token-all-workflows" defer></script>
+  <script src="/rh-session.js?v=20261111-motionfly-hd" defer></script>
+  <script src="/app.js?v=20261111-motionfly-hd" defer></script>
   <script src="/kie-ui.js?v=20261023-grok2-v1" defer></script>
   <script src="/history-gallery.js?v=20261024-image-fullscreen-v1" defer></script>
 </body>

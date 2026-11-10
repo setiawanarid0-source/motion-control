@@ -8,7 +8,7 @@ has(server,"app.post('/api/generate', upload.fields([");
 has(server,"res.status(202).json(staged)");
 has(server,"generationQueue.setExecutor(runQueuedGeneration)");
 has(server,"app.get('/api/generate/jobs/:jobId'");
-has(server,"req.progress?.('preparing_motion')");
+assert.ok(!server.includes('await prepareMotionSource('),'MotionFly HD must use the uploaded workflow timebase without the retired R4 conversion');
 has(server,"req.progress?.('saving_references')");
 has(server,"req.progress?.('submitting',null,");
 has(server,"if(!mayTryNextAccountAfterCreate({");

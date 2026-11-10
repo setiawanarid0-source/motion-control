@@ -52,7 +52,7 @@ try{
   assert.equal(changed.status,200);
   headers.Cookie = changed.headers.get('set-cookie').split(';')[0];
   const jobId=crypto.randomUUID();
-  const form=(mode='standard',workflow='r15')=>{
+  const form=(mode='standard',workflow='motionflyHD')=>{
     const data=new FormData();
     data.append('referenceImage',new Blob([Buffer.alloc(1024,1)],{type:'image/jpeg'}),'source.jpg');
     data.append('videoReference',new Blob([Buffer.alloc(4096,2)],{type:'video/mp4'}),'source.mp4');
@@ -91,6 +91,16 @@ try{
   });
   assert.equal(replay.status,202);
   assert.equal((await replay.json()).jobId,jobId);
+  for(const retired of ['r15','koh1AntiObject','r4Lab']){
+    const retiredId=crypto.randomUUID();
+    const reply=await fetch(url+'/api/generate',{
+      method:'POST',headers:{...headers,'X-Vanta-Request-Id':retiredId},body:form('standard',retired)
+    });
+    assert.equal(reply.status,410,'Retired R4 must never enter the submission queue');
+    assert.match((await reply.json()).error,/R4 sudah diganti/);
+    const missing=await fetch(url+'/api/generate/jobs/'+retiredId,{headers});
+    assert.equal(missing.status,404);
+  }
   const latest=await fetch(url+'/api/generate/jobs',{headers});
   assert.ok((await latest.json()).jobs.some(x=>x.jobId===jobId));
   // Only Standard and Plus are offered/accepted for NEW requests.
@@ -127,6 +137,9 @@ try{
   assert.equal(rifeJob.task,null);
   const workflowsReply=await fetch(url+'/api/workflows',{headers});
   const workflows=await workflowsReply.json();
+  assert.ok(workflows.workflows.some(w=>w.id==='motionflyHD'&&w.outputKind==='video'));
+  assert.equal(workflows.workflows.length,6);
+  assert.ok(!workflows.workflows.some(w=>['r15','koh1AntiObject','r4Lab'].includes(w.id)));
   assert.ok(workflows.workflows.some(w=>w.id==='minimaxH3'&&w.outputKind==='video'));
   const h3Info=workflows.workflows.find(w=>w.id==='minimaxH3');
   assert.equal(h3Info.requiredMode,'plus');

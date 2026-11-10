@@ -35,7 +35,7 @@ function makeElement(dataset={}){
 }
 const nav=['create','image-create','history','image-history','accounts','kie-accounts']
   .map(view=>makeElement({view}));
-const workflow=['rife60','r15','current','koh1AntiObject','r4Lab','minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3']
+const workflow=['rife60','motionflyHD','current','minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3']
   .map(id=>makeElement({workflow:id}));
 const modes=['standard','plus'].map(mode=>makeElement({mode}));
 for(const key of ['create','image-create','history','image-history','accounts','kie-accounts']){
@@ -44,14 +44,15 @@ for(const key of ['create','image-create','history','image-history','accounts','
 for(const key of workflow.map(x=>x.dataset.workflow)){
   assert.ok(html.includes('data-workflow="'+key+'"'),'Workflow option must exist: '+key);
 }
-const nodeKeys=['#menuBtn','#sidebar','#diagnosticNotice','#fullLabNotice','#rifeNotice','#h3Notice','#akatzNotice','#mediaRequirements',
+for(const key of ['r15','koh1AntiObject','r4Lab'])assert.ok(!html.includes('data-workflow="'+key+'"'),'Retired R4 card must be removed');
+const nodeKeys=['#menuBtn','#sidebar','#rifeNotice','#h3Notice','#akatzNotice','#mediaRequirements',
   '#imageDrop','#referenceImage','#videoDrop',
   '#videoReference','#generateBtn','#refreshAccounts','#motionGalleryRefresh',
   '#rhWebSessionPanel',
   '#copyRhSessionCode','#connectRhWebSession','#rhWebSessionInput'];
 const nodes=new Map(nodeKeys.map(key=>[key,makeElement()]));
 nodes.set('#historyFilters',null);
-const requested=[],uploads=[],errors=[],state={workflow:'r15',mode:'standard'};
+const requested=[],uploads=[],errors=[],state={workflow:'motionflyHD',mode:'standard'};
 const generated=()=>requested.push('generate');
 const refreshed=()=>requested.push('refresh');
 const documentQueries={
@@ -120,18 +121,18 @@ assert.equal(modes.find(x=>x.dataset.mode==='standard').disabled,true);
 assert.equal(nodes.get('#imageDrop').classList.contains('hidden'),false);
 assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),false);
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true);
-workflow.find(x=>x.dataset.workflow==='r4Lab').onclick();
+workflow.find(x=>x.dataset.workflow==='motionflyHD').onclick();
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true,'H3 help must not leak into old workflows');
 assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),true,'Akatz help is scoped to its own option');
 assert.equal(modes.find(x=>x.dataset.mode==='standard').disabled,false);
 assert.equal(nodes.get('#imageDrop').classList.contains('hidden'),false,'Other motion modes need image input');
-assert.equal(state.workflow,'r4Lab');
+assert.equal(state.workflow,'motionflyHD');
 modes.find(x=>x.dataset.mode==='plus').onclick();
 assert.equal(state.mode,'plus');
-workflow.find(x=>x.dataset.workflow==='r15').onclick();
+workflow.find(x=>x.dataset.workflow==='current').onclick();
 modes.find(x=>x.dataset.mode==='standard').onclick();
 assert.equal(state.mode,'standard');
-assert.equal(state.workflow,'r15');
+assert.equal(state.workflow,'current');
 assert.equal(workflow.filter(x=>x.classList.contains('selected')).length,1);
 assert.ok(!html.includes('data-workflow="characterSwap"'));
 assert.ok(!app.includes("characterSwap"));
@@ -144,4 +145,15 @@ const sample={name:'test.png'};
 nodes.get('#referenceImage').files=[sample];
 nodes.get('#referenceImage').onchange();
 assert.deepEqual(uploads,[{kind:'image',file:sample}]);
+// The replacement is a complete workflow: a fresh photo/video pair and a ready
+// token account must enable Generate without any diagnostic task in History.
+state.workflow='motionflyHD';state.image=sample;state.video={name:'test.mp4'};
+state.accounts=[{canGenerate:true}];state.submission=null;
+const readiness=app.slice(app.indexOf('function updateGenerate(){'),app.indexOf('function workflowName(){'));
+vm.runInNewContext(readiness+'\nupdateGenerate();',context);
+assert.equal(nodes.get('#generateBtn').disabled,false);
+state.image=null;context.updateGenerate();
+assert.equal(nodes.get('#generateBtn').disabled,true,'MotionFly must require its photo input');
+state.image=sample;state.submission={jobId:'uploading'};context.updateGenerate();
+assert.equal(nodes.get('#generateBtn').disabled,true,'Prevent duplicate uploads during submission');
 console.log('PASS: complete Create boot and nav, workflow/mode clicks, image+video upload, Generate, Refresh handlers work.');

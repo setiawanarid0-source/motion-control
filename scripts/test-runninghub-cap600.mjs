@@ -51,7 +51,7 @@ assert.deepEqual(partitionAccountRefresh([entry('high',800),entry('low',99)]).re
   ['high'],'High-credit accounts remain stored in pool rather than being deleted');
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const browser=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-const backend=server.slice(server.indexOf('let candidates=[]'),server.indexOf("if(workflowKey==='r15'){",server.indexOf('let candidates=[]')));
+const backend=server.slice(server.indexOf('let candidates=[]'),server.indexOf("req.progress?.('saving_references');",server.indexOf('let candidates=[]')));
 assert.ok(backend.includes('if(!canGenerateWithAccount(status,MIN_POOL_CREDITS))'),
   'Manual selection must enforce minimum only after fresh balance check');
 assert.ok(backend.includes('rankGenerationAccounts(checked,MIN_POOL_CREDITS)'),
