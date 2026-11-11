@@ -63,6 +63,8 @@ assert.ok(accountList.innerHTML.includes('RH lama — · Points belum tersedia')
 assert.ok(accountList.innerHTML.includes('Tasks —'),'Unknown task counts must not become zero');
 assert.ok(!accountList.innerHTML.includes('RH 0'),'A funded points account must not be presented as RH zero');
 assert.ok(!accountList.innerHTML.includes('Saldo tidak memenuhi syarat'));
+state.accounts[0].status.transitionCoinRemained=1734;
+context.renderAccounts();assert.ok(accountList.innerHTML.includes('RH 1.734'),'Available transition RH must remain visible alongside points');
 state.accounts[0].status.balancePoint=0.0001;
 context.renderAccounts();assert.ok(accountList.innerHTML.includes('Points 0,0001'),'Small nonzero balances must not round to zero');
 state.accounts=[];
