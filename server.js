@@ -789,6 +789,14 @@ app.get('/api/runninghub/account-audit',async(_req,res)=>{
   res.setHeader('Cache-Control','private, no-store');
   res.json(await auditRunningHubAccounts({accounts:loadGlobalAccounts(),request:rhJson}));
 });
+// Owner-only credential metadata. No token bytes, cookies or provider payloads.
+app.get('/api/runninghub/session-audit',(_req,res)=>{
+  res.setHeader('Cache-Control','private, no-store');
+  res.json({checkedAt:new Date().toISOString(),accounts:loadGlobalAccounts().map(account=>{
+    try{return {id:account.id,name:account.name,...runningHubWeb.sessionAudit(account.key)};}
+    catch{return {id:account.id,name:account.name,unavailable:true};}
+  })});
+});
 
 async function handleGeneration(req,res){
   const imageFile = req.files?.referenceImage?.[0];

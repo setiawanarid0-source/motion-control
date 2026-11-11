@@ -119,18 +119,28 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(!session.refresh)throw error('Sesi RunningHub kedaluwarsa. Login dan tempel sesi baru di Pool.','RH_WEB_AUTH_EXPIRED',true);
     const result=await raw(session,'/uc/token/refresh',{}, {refresh:true});
     const data=result.data,access=token(data?.access_token),next=token(data?.refresh_token)||session.refresh;
-    if(Number(result.code)!==0||!access)throw error('Sesi RunningHub tidak dapat diperbarui. Login dan tempel sesi baru.','RH_WEB_AUTH_EXPIRED',true);
+    if(Number(result.code)!==0||!access)throw Object.assign(error('Sesi RunningHub tidak dapat diperbarui. Login dan tempel sesi baru.','RH_WEB_AUTH_EXPIRED',true),
+      {providerCode:Number.isFinite(Number(result.code))?Number(result.code):null});
     const claims=claim(access);
     return {...session,access,refresh:next,identify:data.identify||session.identify,
       expiresAt:Number.isFinite(Number(claims.exp))?Number(claims.exp)*1000:null};
   }
   async function renew(key){
     if(!refreshing.has(key))refreshing.set(key,(async()=>{
-      const old=get(key),next=await refresh(old);
+      const old=get(key);let next;
+      try{next=await refresh(old);}
+      catch(error){
+        const latest=get(key);
+        if(latest.access!==old.access||latest.refresh!==old.refresh)return latest;
+        remember(key,{lastRenewal:{at:new Date(now()).toISOString(),outcome:'failed',
+          code:error.code,providerCode:error.providerCode??null}});
+        throw error;
+      }
       // Re-importing a session while refresh is in flight must win.
       const latest=get(key);
       if(latest.access!==old.access||latest.refresh!==old.refresh)return latest;
-      return remember(key,{access:next.access,refresh:next.refresh,identify:next.identify,expiresAt:next.expiresAt});
+      return remember(key,{access:next.access,refresh:next.refresh,identify:next.identify,expiresAt:next.expiresAt,
+        lastRenewal:{at:new Date(now()).toISOString(),outcome:'renewed'}});
     })().finally(()=>refreshing.delete(key)));
     return refreshing.get(key);
   }
@@ -380,5 +390,12 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     }
     throw error('Operasi RunningHub ini belum mendukung access token. Task belum dikirim.','RH_WEB_UNSUPPORTED_OPERATION',true);
   }
-  return {connect,status,upload,request,prepare:workspace,inspectTask,file};
+  function sessionAudit(key){
+    const session=get(key),accessClaims=claim(session.access),refreshClaims=claim(session.refresh);
+    const expiry=value=>Number.isFinite(Number(value))?new Date(Number(value)*1000).toISOString():null;
+    return {accessExpiresAt:expiry(accessClaims.exp),refreshAvailable:!!session.refresh,
+      refreshExpiresAt:expiry(refreshClaims.exp),refreshIdentityMatches:refreshClaims.sub&&accessClaims.sub?
+        String(refreshClaims.sub)===String(accessClaims.sub):null,lastRenewal:session.lastRenewal||null};
+  }
+  return {connect,status,upload,request,prepare:workspace,inspectTask,sessionAudit,file};
 }
