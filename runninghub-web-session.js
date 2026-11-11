@@ -56,7 +56,7 @@ const METHODS=new Set(['/uc/getUserInfo','/uc/token/refresh','/api/instance/acce
   '/api/workflow/create','/task/create','/task/list','/task/cancel','/task/failedReason',
   '/api/output/v2/history']);
 
-export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=()=>Date.now(),minimumCredits=100}){
+export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=()=>Date.now()}){
   const file=path.join(dir,'runninghub-web-sessions.enc'),refreshing=new Map(),creating=new Map(),comfyRefreshing=new Map();
   function read(){
     if(!fs.existsSync(file))return {};
@@ -162,7 +162,6 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     const profile=requireSuccess(result,session),id=String(profile.id||profile.userId||'');
     if(!/^[A-Za-z0-9_-]{4,128}$/.test(id))throw error('Identitas akun web belum terverifikasi.','RH_WEB_PROTOCOL_ERROR',true);
     const coins=balance(profile);
-    if(coins<minimumCredits)throw error('Akun harus memiliki minimal '+minimumCredits+' RH untuk ditambahkan.','RH_WEB_LOW_BALANCE',true);
     const hash=crypto.createHash('sha256').update('runninghub-web-personal:'+id).digest('hex');
     const previous=read()[hash];
     // Retain verified upload/refresh metadata when reconnecting with a raw token.

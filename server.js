@@ -690,6 +690,10 @@ async function connectRunningHubAccount(req,res){
         addedAt:new Date().toISOString(),lastUsedAt:null};
       accounts.push(account);
     }
+    // Connecting a valid token has no minimum RH balance. Keep a low-balance
+    // import in the pool instead of immediately retiring it on load/refresh.
+    if(Number(connected.status.remainCoins)<MIN_POOL_CREDITS)account.lowBalanceImportAt=new Date().toISOString();
+    else delete account.lowBalanceImportAt;
     saveVaultAccounts(deviceId,accounts);
     res.json({account:publicAccount(account,connected.status),updated});
   }catch(error){res.status(400).json({error:error.message||'Access token RunningHub belum dapat diverifikasi.'});}
@@ -722,8 +726,8 @@ async function refreshPool(req){
     try{return {account,status:await accountStatus(account.key)};}
     catch(error){return {account,status:{error:error.message}};}
   }));
-  // Strict policy: verified RH balance <100 means immediate removal from
-  // Account Pool, regardless of History claim / bucket upload completion.
+  // Existing eligible accounts still retire below 100 RH. A token imported
+  // below that balance stays stored until it first becomes eligible.
   // Unknown/network-error balances are preserved rather than guessed.
   const {removed}=partitionAccountRefresh(checked,MIN_POOL_CREDITS);
   let autoRemovedCount=0;
@@ -732,14 +736,26 @@ async function refreshPool(req){
     // Reload after provider checks to avoid restoring accounts manually deleted
     // while the balance API was running.
     const latest=loadGlobalAccounts();
-    const toRetire=latest.filter(a=>removedIds.has(a.id));
+    const toRetire=latest.filter(a=>removedIds.has(a.id)&&!a.lowBalanceImportAt);
+    const retiringIds=new Set(toRetire.map(a=>a.id));
     // Critical: encrypted task escrow must commit BEFORE deleting Pool entries.
     for(const account of toRetire)taskRegistry.retireAccount(account);
-    const next=latest.filter(a=>!removedIds.has(a.id));
+    const next=latest.filter(a=>!retiringIds.has(a.id));
     if(next.length!==latest.length)saveVaultAccounts(deviceId,next);
     autoRemovedCount=latest.length-next.length;
     for(const account of toRetire)scheduleAccountResultArchiving(account.id);
     if(autoRemovedCount)console.info('RunningHub Pool: auto-retired accounts below 100 RH',autoRemovedCount);
+  }
+  const qualifiedImports=new Map(checked.filter(({account,status})=>account.lowBalanceImportAt&&
+    canGenerateWithAccount(status,MIN_POOL_CREDITS)).map(({account})=>[account.id,account.lowBalanceImportAt]));
+  if(qualifiedImports.size){
+    let changed=false;
+    const next=loadGlobalAccounts().map(account=>{
+      // Preserve a newer low-balance re-import while a status check was running.
+      if(!qualifiedImports.has(account.id)||account.lowBalanceImportAt!==qualifiedImports.get(account.id))return account;
+      const {lowBalanceImportAt,...eligible}=account;changed=true;return eligible;
+    });
+    if(changed)saveVaultAccounts(deviceId,next);
   }
   const remaining=loadGlobalAccounts();
   return {accounts:remaining.map(a=>{
@@ -1389,8 +1405,8 @@ setInterval(()=>{
 },45000).unref();
 setInterval(()=>monitorRegisteredTasks(),25000).unref();
 setTimeout(()=>monitorRegisteredTasks(),1200).unref();
-// Enforce the <100 RH rule even when no browser is open. A UI refresh checks
-// immediately; this periodic check covers accounts whose balance drops later.
+// Refresh balances even when no browser is open. Previously eligible accounts
+// still retire below 100 RH; new low-balance token imports remain stored.
 // Do not start overlapping provider status checks or auto-delete on API errors.
 let scheduledPoolCheck=null;
 function checkPoolBalancesInBackground(){

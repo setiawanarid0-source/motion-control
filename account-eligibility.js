@@ -13,7 +13,10 @@ export function partitionAccountRefresh(checked, minimum=MIN_NEW_TASK_CREDITS){
   for(const entry of checked){
     const status=entry?.status;
     const credits=Number(status?.remainCoins);
-    if(status && !status.error && status.remainCoins!=null && Number.isFinite(credits) && credits<minimum)
+    // A valid token imported below the generation threshold must survive its
+    // first refresh. Normal retirement resumes after it reaches that threshold.
+    if(status && !status.error && status.remainCoins!=null && Number.isFinite(credits) && credits<minimum
+      && !entry?.account?.lowBalanceImportAt)
       removed.push(entry);
     else retained.push(entry);
   }
