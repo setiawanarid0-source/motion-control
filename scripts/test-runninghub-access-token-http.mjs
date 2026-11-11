@@ -35,10 +35,19 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
   fs.writeFileSync(preload,`
     import axios from ${JSON.stringify(axiosUrl)};
     import fs from 'node:fs';
+    let currentAccess=${JSON.stringify(access)},currentRefresh='fixture-refresh-token',renewalCount=0;
     axios.request=async config=>{
       const route=new URL(config.url).pathname;
+      if(route==='/uc/token/refresh'){
+        if(config.headers.Authorization!=='Bearer '+currentRefresh||config.headers.client!=='WEB')throw Error('Unexpected refresh grant');
+        renewalCount++;
+        currentAccess='eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(JSON.stringify({sub:${JSON.stringify(userId)},exp:Math.floor(Date.now()/1000)+7200+renewalCount})).toString('base64url')+'.fixture-new-signature';
+        currentRefresh='fixture-rotated-refresh-'+renewalCount;
+        fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify({method:config.method,route})+'\\n');
+        return {status:200,data:{code:0,data:{access_token:currentAccess,refresh_token:currentRefresh}}};
+      }
       const low=config.headers.Authorization===${JSON.stringify('Bearer '+lowAccess)};
-      if(!low&&config.headers.Authorization!==${JSON.stringify('Bearer '+access)})throw Error('Unexpected fixture authentication');
+      if(!low&&config.headers.Authorization!=='Bearer '+currentAccess&&config.headers.Authorization!==${JSON.stringify('Bearer '+access)})throw Error('Unexpected fixture authentication');
       fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify({method:config.method,route})+'\\n');
       if(route==='/uc/getUserInfo')return {status:200,data:{code:0,data:{id:low?${JSON.stringify(lowUserId)}:${JSON.stringify(userId)},
         totalCoin:low?fs.readFileSync(${JSON.stringify(lowBalanceFile)},'utf8'):'600'}}};
@@ -85,7 +94,17 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
     response=await post('/api/accounts',{accessToken:access});assert.equal(response.status,200);
     const again=await response.json();assert.equal(again.updated,true);assert.equal(again.account.id,first.account.id);
     response=await post('/api/accounts/refresh',{});assert.equal(response.status,200);
-    assert.equal((await response.json()).accounts[0].status.remainCoins,600);
+    const refreshedFirst=await response.json();
+    assert.equal(refreshedFirst.accounts[0].status.remainCoins,600);
+    assert.deepEqual(refreshedFirst.tokenRenewal,{requested:1,renewed:1,failed:0});
+    assert.equal(refreshedFirst.accounts[0].status.sessionRenewal.state,'renewed');
+    assert.equal((await fetch(base+'/api/runninghub/session-audit')).status,401);
+    response=await fetch(base+'/api/runninghub/session-audit',{headers});assert.equal(response.status,200);
+    const metadata=await response.json();assert.equal(metadata.accounts[0].lastRenewal.outcome,'renewed');
+    assert.equal(metadata.accounts[0].refreshAvailable,true);
+    assert.doesNotMatch(JSON.stringify(metadata),/fixture-refresh|fixture-rotated|fixture-new-signature/);
+    response=await post('/api/accounts/refresh',{});
+    assert.equal((await response.json()).tokenRenewal.renewed,1,'Refresh must acquire a new token even while the current one is still valid');
     response=await post('/api/runninghub/access-token',{session:access},{...headers,Origin:'https://attacker.example'});
     assert.equal(response.status,403);
     const stored=decrypt(fs.readFileSync(path.join(dir,'accounts.enc'),'utf8'));
@@ -144,7 +163,7 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
     assert.ok(retired.accounts.some(a=>a.id===lowAccountId),'Web points accounts cannot be retired using the RH-only threshold');
     assert.ok(!fs.readFileSync(path.join(dir,'runninghub-web-sessions.enc'),'utf8').includes(access));
     const routes=fs.readFileSync(calls,'utf8').trim().split('\n').map(x=>JSON.parse(x).route);
-    assert.ok(routes.every(route=>['/uc/getUserInfo','/uc/point/summary','/task/list'].includes(route)),'Connecting an account must never start inference or call OpenAPI');
+    assert.ok(routes.every(route=>['/uc/getUserInfo','/uc/point/summary','/uc/token/refresh','/task/list'].includes(route)),'Connecting or refreshing an account must never start inference or call OpenAPI');
   }finally{
     server.kill('SIGTERM');await new Promise(resolve=>server.once('exit',resolve));fs.rmSync(dir,{recursive:true,force:true});
   }

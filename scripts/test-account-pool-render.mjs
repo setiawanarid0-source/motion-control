@@ -69,7 +69,29 @@ state.accounts[0].status.transitionCoinRemained=1734;
 context.renderAccounts();assert.ok(accountList.innerHTML.includes('RH 1.734'),'Available transition RH must remain visible alongside points');
 state.accounts[0].status.balancePoint=0.0001;
 context.renderAccounts();assert.ok(accountList.innerHTML.includes('Points 0,0001'),'Small nonzero balances must not round to zero');
+state.accounts[0].status.sessionRenewal={state:'renewed',refreshedAt:'2026-11-11T10:00:00Z'};
+context.renderAccounts();assert.match(accountList.innerHTML,/Token diperbarui 17[.:]00 WIB/);
+state.accounts[0].status.sessionRenewal={state:'failed',code:'RH_WEB_REFRESH_MISSING'};
+context.renderAccounts();assert.ok(accountList.innerHTML.includes('refresh token belum tersimpan'));
+assert.ok(accountList.innerHTML.includes('Siap digunakan'),'A still-valid access token remains usable when refresh credentials are absent');
 state.accounts=[];
 assert.doesNotThrow(()=>context.renderAccounts(),'Empty Account Pool still renders safely');
 assert.ok(accountList.innerHTML.includes('Belum ada akun'));
+const refreshStart=source.indexOf('async function refreshAccounts(');
+const refreshEnd=source.indexOf('function updatePoolSummary(',refreshStart);
+const feedback=[],refreshButton={classList:{add(){},remove(){}}};let requests=0,failed=0;
+const refreshContext={state:{accounts:[{id:'fixture'}]},$:()=>refreshButton,
+  renderAccounts(){},updatePoolSummary(){},renderAccountSelect(){},
+  api:async(route,options)=>{
+    requests++;assert.equal(route,'/api/accounts/refresh');assert.equal(options.method,'POST');
+    return {accounts:[{id:'fixture'}],tokenRenewal:{requested:1,renewed:failed?0:1,failed}};
+  },toast:(message,error)=>feedback.push({message,error})};
+vm.runInNewContext(source.slice(refreshStart,refreshEnd)+'\nthis.refresh=refreshAccounts;',refreshContext);
+await refreshContext.refresh({type:'click'});
+assert.match(feedback[0].message,/Token 1 akun berhasil diperbarui/);
+assert.equal(refreshButton.disabled,false);
+failed=1;await refreshContext.refresh({type:'click'});
+assert.equal(feedback[1].error,true);assert.match(feedback[1].message,/1 akun belum bisa diperbarui/);
+await refreshContext.refresh();assert.equal(feedback.length,2,'Background loading must not show a click completion toast');
+assert.equal(requests,3);
 console.log('PASS: Account Pool with 0/2 accounts renders, each Remove button binds and works.');

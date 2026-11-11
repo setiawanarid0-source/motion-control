@@ -412,3 +412,82 @@ test('a task absent from the token account cannot be claimed as running or recov
   const result=await service.request('/task/openapi/outputs',key,{taskId:renderId});
   assert.equal(result.code,802);
 }));
+
+test('manual Pool refresh renews a still-valid access token and persists each rotated refresh token',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);let count=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/token/refresh'){
+      assert.equal(config.headers.client,'WEB');assert.deepEqual(config.data,{});
+      assert.equal(config.headers.Authorization,'Bearer '+(count?'fixture-rotation-'+count:exported.refresh));
+      count++;return {code:0,data:{access_token:jwt(userId,time/1000+7200+count),refresh_token:'fixture-rotation-'+count}};
+    }
+    assert.equal(config.headers.Authorization,'Bearer '+jwt(userId,time/1000+7200+count));
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:587}};
+    if(route==='/task/list')return {code:0,data:{total:2}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'NEW',balancePoint:25,transitionCoinRemained:587}};
+    throw Error('Unexpected provider call');
+  });
+  for(let index=0;index<2;index++){
+    const status=await service.status(key,{renewTokens:true});
+    assert.equal(status.sessionRenewal.state,'renewed');assert.equal(status.currentTaskCounts,2);
+    assert.equal(status.remainCoins,587);assert.equal(status.balancePoint,25);
+  }
+  assert.equal(count,2);assert.equal(service.sessionAudit(key).lastRenewal.outcome,'renewed');
+  const publicData=JSON.stringify(service.sessionAudit(key));
+  assert.ok(!publicData.includes(exported.refresh));assert.ok(!publicData.includes('fixture-rotation'));
+  assert.ok(!calls.some(call=>/create|cancel|openapi/.test(new URL(call.url).pathname)));
+}));
+
+test('automatic renewal starts ten minutes before expiry while the browser is closed',()=>fixture(async({service,calls})=>{
+  const {key}=await service.connect({...exported,access:jwt(userId,time/1000+8*60)});
+  const before=calls.length;
+  await service.status(key);
+  assert.equal(new URL(calls[before].url).pathname,'/uc/token/refresh');
+  assert.equal(service.sessionAudit(key).lastRenewal.outcome,'renewed');
+}));
+
+test('temporary proactive renewal failure keeps a still-valid access token usable',()=>fixture(async({service,setHandler})=>{
+  const {key}=await service.connect({...exported,access:jwt(userId,time/1000+8*60)});
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/token/refresh')throw Error('temporary network failure');
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:111}};
+    if(route==='/task/list')return {code:0,data:{total:0}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'OLD'}};
+    throw Error('Unexpected request');
+  });
+  const status=await service.status(key);assert.equal(status.remainCoins,111);assert.equal(status.sessionVerified,true);
+  assert.equal(service.sessionAudit(key).lastRenewal.code,'RH_WEB_TRANSPORT_ERROR');
+  const manual=await service.status(key,{renewTokens:true});
+  assert.equal(manual.sessionRenewal.state,'failed');assert.equal(manual.sessionRenewal.code,'RH_WEB_TRANSPORT_ERROR');
+  assert.equal(manual.sessionVerified,true);
+}));
+
+test('a revoked grant is reported precisely once without claiming success or exposing provider secrets',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);
+  setHandler(async config=>({code:412,msg:'rejected '+exported.refresh+' '+exported.access}));
+  const before=calls.length;
+  await assert.rejects(service.status(key,{renewTokens:true}),error=>{
+    assert.equal(error.code,'RH_WEB_REFRESH_REJECTED');assert.equal(error.providerCode,412);
+    assert.ok(!error.message.includes(exported.refresh));assert.ok(!error.message.includes(exported.access));return true;
+  });
+  assert.equal(calls.slice(before).filter(call=>new URL(call.url).pathname==='/uc/token/refresh').length,1);
+  assert.equal(service.sessionAudit(key).lastRenewal.providerCode,412);
+  assert.notEqual(service.sessionAudit(key).lastRenewal.outcome,'renewed');
+}));
+
+test('parallel manual refreshes share one grant and a cross-account renewal never replaces credentials',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported),before=calls.length;
+  await Promise.all([service.status(key,{renewTokens:true}),service.status(key,{renewTokens:true})]);
+  assert.equal(calls.slice(before).filter(call=>new URL(call.url).pathname==='/uc/token/refresh').length,1);
+  const expiry=service.sessionAudit(key).accessExpiresAt;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/token/refresh')return {code:0,data:{access_token:jwt('2110000000000000002'),refresh_token:'wrong-account-refresh'}};
+    if(route==='/uc/getUserInfo')return {code:412};
+    throw Error('Unexpected request');
+  });
+  await assert.rejects(service.status(key,{renewTokens:true}),{code:'RH_WEB_IDENTITY_MISMATCH'});
+  assert.equal(service.sessionAudit(key).accessExpiresAt,expiry);
+}));
