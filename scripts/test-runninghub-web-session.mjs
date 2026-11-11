@@ -6,6 +6,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import vm from 'node:vm';
 import {createRunningHubWebSession,parseRunningHubSession,isRunningHubWebKey} from '../runninghub-web-session.js';
+import {runningHubWebBalance,webBalanceNumber} from '../runninghub-web-balance.js';
+import {canGenerateWithAccount,rankGenerationAccounts} from '../runninghub-account-priority.js';
+import {partitionAccountRefresh} from '../account-eligibility.js';
 
 const time=Date.UTC(2026,10,8),userId='2110000000000000001',renderId='2110000000000000999';
 const jwt=(sub=userId,exp=time/1000+3600)=>'eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(JSON.stringify({sub,exp})).toString('base64url')+'.fixture-signature';
@@ -24,6 +27,7 @@ async function fixture(run){
   let handler=async config=>{
     const route=new URL(config.url).pathname;
     if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:'600.00'}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'OLD',converting:false,balancePoint:0}};
     if(route==='/uc/token/refresh')return {code:0,data:{access_token:jwt(userId,time/1000+7200),refresh_token:'fixture-refreshed-token'}};
     if(route==='/task/list')return {code:0,data:{total:1,records:config.data.taskId?[{taskId:renderId,taskStatus:'SUCCESS'}]:[]}};
     if(route==='/api/workflow/create')return {code:0,data:{workflowId:'2110000000000000100'}};
@@ -59,17 +63,19 @@ test('accepts the original popup and persists only the four needed credential fi
 test('connect is read-only on RunningHub, verifies balance, encrypts credentials and keeps a stable reference',()=>fixture(async({service,calls})=>{
   const first=await service.connect(JSON.stringify(exported));
   assert.ok(isRunningHubWebKey(first.key));assert.equal(first.status.remainCoins,600);
-  assert.deepEqual(calls.map(x=>new URL(x.url).pathname),['/uc/getUserInfo']);
+  assert.deepEqual(calls.map(x=>new URL(x.url).pathname),['/uc/getUserInfo','/uc/point/summary']);
   assert.equal(fs.statSync(service.file).mode&0o777,0o600);
   assert.ok(!fs.readFileSync(service.file,'utf8').includes(exported.access));
   const second=await service.connect({...exported,access:jwt(userId,time/1000+5000)});
   assert.equal(first.key,second.key,'reconnect must not invalidate accepted task credentials');
 }));
 
-test('never stores an account whose balance cannot be verified',()=>fixture(async({service,setHandler})=>{
+test('a verified identity can connect with unknown balances without fabricating zero',()=>fixture(async({service,setHandler})=>{
   setHandler(async()=>({code:0,data:{id:userId}}));
-  await assert.rejects(service.connect(exported),{code:'RH_WEB_BALANCE_UNAVAILABLE'});
-  assert.ok(!fs.existsSync(service.file));
+  const connected=await service.connect(exported);
+  assert.equal(connected.status.remainCoins,null);assert.equal(connected.status.balancePoint,null);
+  assert.equal(connected.status.currentTaskCounts,null);assert.equal(connected.status.billingVersion,'UNKNOWN');
+  assert.equal(connected.status.sessionVerified,true);assert.equal(canGenerateWithAccount(connected.status),true);
 }));
 
 test('accepts and reconnects valid tokens at every balance without a 100 RH import threshold',()=>fixture(async({service,setHandler,calls})=>{
@@ -81,7 +87,49 @@ test('accepts and reconnects valid tokens at every balance without a 100 RH impo
     if(key)assert.equal(connected.key,key,'Balance changes must not create a different credential reference');
     key=connected.key;
   }
-  assert.ok(calls.every(call=>new URL(call.url).pathname==='/uc/getUserInfo'),'Import must not generate, upload or spend RH');
+  assert.ok(calls.every(call=>['/uc/getUserInfo','/uc/point/summary'].includes(new URL(call.url).pathname)),'Import must not generate, upload or spend RH');
+}));
+
+test('reads NEW web points separately from zero old RH coins and retains eligibility without a numeric guess',()=>fixture(async({service,setHandler,calls})=>{
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:'0',walletInfo:{balance:'10.25',currency:'USD'}}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'NEW',converting:false,balancePoint:'427.50',paidPoint:0,bonusPoint:427.5,activityPoint:0}};
+    if(route==='/task/list')return {code:0,data:{total:2,records:[]}};
+    throw Error('Unexpected inference or mutation');
+  });
+  const connected=await service.connect(exported),status=await service.status(connected.key);
+  assert.equal(status.remainCoins,0);assert.equal(status.balancePoint,427.5);
+  assert.equal(status.balanceUnit,'POINTS');assert.equal(status.currentTaskCounts,2);
+  assert.equal(status.walletBalance,10.25);assert.equal(status.currency,'USD');
+  assert.equal(status.sessionVerified,true);assert.equal(status.billingSummaryVerified,true);
+  assert.equal(canGenerateWithAccount(status),true);
+  assert.equal(partitionAccountRefresh([{account:{id:'web'},status}]).removed.length,0);
+  assert.equal(canGenerateWithAccount({...status,balancePoint:0}),true,'RunningHub decides whether zero-point accounts have applicable web benefits');
+  assert.equal(canGenerateWithAccount({...status,billingConverting:true}),false);
+  const ranked=rankGenerationAccounts([
+    {account:{id:'empty'},status:{...status,balancePoint:0}},
+    {account:{id:'funded'},status}
+  ]);
+  assert.equal(ranked[0].account.id,'funded');
+  assert.ok(calls.every(call=>['/uc/getUserInfo','/uc/point/summary','/task/list'].includes(new URL(call.url).pathname)));
+}));
+
+test('preserves units, real zero and unknown values across OLD/NEW billing',()=>{
+  for(const v of [null,undefined,'',false,true,NaN,Infinity,-1,'not-a-number'])assert.equal(webBalanceNumber(v),null);
+  assert.equal(webBalanceNumber('1,734'),1734);assert.equal(webBalanceNumber('0.25'),0.25);
+  const old=runningHubWebBalance({id:userId,totalCoin:'1,734',virtualCoin:'50',virtualCoinDaily:'10'}, {billingVersion:'OLD',balancePoint:0});
+  assert.equal(old.balanceUnit,'RH');assert.equal(old.remainCoins,1734);
+  assert.equal(old.virtualCoin,50);assert.equal(old.virtualCoinDaily,10);
+  const missing=runningHubWebBalance({id:userId,totalCoin:'0'},undefined);
+  assert.equal(missing.balanceUnit,'UNKNOWN');assert.equal(missing.balancePoint,null);
+  assert.equal(missing.billingSummaryVerified,false);
+});
+
+test('rejects an imported token when RunningHub returns a different identity',()=>fixture(async({service,setHandler})=>{
+  setHandler(async()=>({code:0,data:{id:'2110000000000000002',totalCoin:600}}));
+  await assert.rejects(service.connect(exported),{code:'RH_WEB_IDENTITY_MISMATCH'});
+  assert.ok(!fs.existsSync(service.file));
 }));
 
 test('expired imported access token uses refresh credentials before verifying the account',()=>fixture(async({service,calls})=>{

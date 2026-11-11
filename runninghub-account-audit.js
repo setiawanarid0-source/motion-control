@@ -3,7 +3,8 @@
 const BALANCE_FIELDS=new Set([
   'remainCoins','remainMoney','totalCoins','availableCoins','availableBalance',
   'paidCoins','freeCoins','paidRHCoins','freeRHCoins','remainPaidCoins',
-  'remainFreeCoins','paidCoinBalance','freeCoinBalance','paidBalance','freeBalance'
+  'remainFreeCoins','paidCoinBalance','freeCoinBalance','paidBalance','freeBalance',
+  'balancePoint','paidPoint','bonusPoint','activityPoint','transitionCoinRemained','walletBalance','virtualCoin','virtualCoinDaily'
 ]);
 const finite=value=>value!==null&&value!==''&&typeof value!=='boolean'&&
   ['number','string'].includes(typeof value)&&Number.isFinite(Number(value))?Number(value):null;
@@ -20,6 +21,10 @@ export async function auditRunningHubAccounts({accounts,request,now=()=>new Date
         const value=finite(data[field]);if(value!==null)balances[field]=value;
       }
       return {...base,status:'verified',apiType:enumValue(data.apiType),
+        billingVersion:enumValue(data.billingVersion),balanceUnit:enumValue(data.balanceUnit),
+        ...(data.apiType==='WEB_SESSION'?{sessionVerified:data.sessionVerified===true,
+          billingSummaryVerified:data.billingSummaryVerified===true,billingConverting:data.billingConverting===true,
+          accountReference:enumValue(data.accountReference)}:{}),
         currency:enumValue(data.currency),balances,
         responseFields:Object.keys(data).filter(field=>/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(field)&&
           !/key|token|secret|password|authorization/i.test(field)).sort()};

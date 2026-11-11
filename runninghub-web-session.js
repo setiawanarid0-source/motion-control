@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import FormData from 'form-data';
 import axios from 'axios';
+import {runningHubWebBalance,webBalanceNumber} from './runninghub-web-balance.js';
 
 export const RH_WEB_ORIGIN='https://www.runninghub.ai';
 export const isRunningHubWebKey=key=>/^rhweb:[a-f0-9]{64}$/.test(String(key||''));
@@ -52,7 +53,7 @@ export function parseRunningHubSession(input){
   return {access,refresh,identify,comfyAuth:token(input.comfyAuth||find('Rh-Comfy-Auth')),
     expiresAt:Number.isFinite(Number(payload.exp))?Number(payload.exp)*1000:null};
 }
-const METHODS=new Set(['/uc/getUserInfo','/uc/token/refresh','/api/instance/access/auth',
+const METHODS=new Set(['/uc/getUserInfo','/uc/point/summary','/uc/token/refresh','/api/instance/access/auth',
   '/api/workflow/create','/task/create','/task/list','/task/cancel','/task/failedReason',
   '/api/output/v2/history']);
 
@@ -147,11 +148,13 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(authFailure(result))throw error('Sesi RunningHub kedaluwarsa. Hubungkan ulang akun.','RH_WEB_AUTH_EXPIRED',true);
     throw error('RunningHub menolak permintaan: '+redact(result?.msg||result?.message||result?.code,session),'RH_WEB_PROVIDER_REJECTED',true);
   }
-  function balance(data){
-    const value=data?.totalCoin;
-    const coins=typeof value==='number'?value:typeof value==='string'&&/^\d[\d,]*(?:\.\d+)?$/.test(value.trim())?Number(value.replaceAll(',','')):NaN;
-    if(!Number.isFinite(coins))throw error('Saldo RH web belum dapat diverifikasi. Akun dipertahankan.','RH_WEB_BALANCE_UNAVAILABLE',true);
-    return coins;
+  async function balances(profile,lookup){
+    let summary;
+    try{
+      const reply=await lookup();
+      if(Number(reply?.code)===0&&reply.data&&typeof reply.data==='object'&&!Array.isArray(reply.data))summary=reply.data;
+    }catch{}
+    return runningHubWebBalance(profile,summary);
   }
   async function connect(input){
     let session=parseRunningHubSession(input);
@@ -161,7 +164,8 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(authFailure(result)){session=await refresh(session);result=await raw(session,'/uc/getUserInfo',{});}
     const profile=requireSuccess(result,session),id=String(profile.id||profile.userId||'');
     if(!/^[A-Za-z0-9_-]{4,128}$/.test(id))throw error('Identitas akun web belum terverifikasi.','RH_WEB_PROTOCOL_ERROR',true);
-    const coins=balance(profile);
+    if(user&&id!==user)throw error('Identitas token berbeda dari akun RunningHub. Hubungkan ulang akun yang benar.','RH_WEB_IDENTITY_MISMATCH',true);
+    const funds=await balances(profile,()=>raw(session,'/uc/point/summary',{}));
     const hash=crypto.createHash('sha256').update('runninghub-web-personal:'+id).digest('hex');
     const previous=read()[hash];
     // Retain verified upload/refresh metadata when reconnecting with a raw token.
@@ -169,15 +173,17 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(identify&&!/^[A-Za-z0-9_-]{1,128}$/.test(identify))throw error('Identitas token tidak valid.','RH_WEB_INVALID_SESSION',true);
     session={...session,identify,refresh:session.refresh||previous?.refresh||'',comfyAuth:session.comfyAuth||previous?.comfyAuth||''};
     write(hash,{...session,userId:id,workflowId:previous?.workflowId||null,connectedAt:new Date(now()).toISOString()});
-    return {key:'rhweb:'+hash,status:{remainCoins:coins,currentTaskCounts:0,apiType:'WEB_SESSION',
+    return {key:'rhweb:'+hash,status:{...funds,currentTaskCounts:null,
       expiresAt:session.expiresAt?new Date(session.expiresAt).toISOString():null}};
   }
   async function status(key){
     const session=get(key),profile=requireSuccess(await post(key,'/uc/getUserInfo',{userId:session.userId}),get(key));
     if(String(profile.id||profile.userId||'')!==session.userId)throw error('Identitas sesi berubah. Hubungkan ulang akun.','RH_WEB_IDENTITY_MISMATCH',true);
     const tasks=requireSuccess(await post(key,'/task/list',{size:1,current:1,taskType:['WORKFLOW','API','CORPAPI','ExclAPI'],taskStatus:['RUNNING','QUEUED']}),get(key));
-    if(!Number.isFinite(Number(tasks.total)))throw error('Status task web belum dapat diverifikasi.','RH_WEB_PROTOCOL_ERROR',true);
-    return {remainCoins:balance(profile),currentTaskCounts:Number(tasks.total),apiType:'WEB_SESSION',
+    const total=webBalanceNumber(tasks.total);
+    if(!Number.isInteger(total))throw error('Status task web belum dapat diverifikasi.','RH_WEB_PROTOCOL_ERROR',true);
+    const funds=await balances(profile,()=>post(key,'/uc/point/summary',{}));
+    return {...funds,currentTaskCounts:total,
       expiresAt:get(key).expiresAt?new Date(get(key).expiresAt).toISOString():null};
   }
   async function upload(key,file){

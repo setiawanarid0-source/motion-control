@@ -12,6 +12,8 @@ export function partitionAccountRefresh(checked, minimum=MIN_NEW_TASK_CREDITS){
   const retained=[], removed=[];
   for(const entry of checked){
     const status=entry?.status;
+    // Old RH coins are not the web account's complete funding balance.
+    if(status?.apiType==='WEB_SESSION'){retained.push(entry);continue;}
     const credits=Number(status?.remainCoins);
     // A valid token imported below the generation threshold must survive its
     // first refresh. Normal retirement resumes after it reaches that threshold.

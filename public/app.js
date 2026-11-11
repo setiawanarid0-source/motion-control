@@ -125,20 +125,22 @@ async function loadSession(){
   }).catch(error=>console.warn('Background History recovery',error.message));
 }
 function sortedRunningHubAccounts(){
-  const coins=a=>a.status&&!a.status.error&&a.status.remainCoins!=null&&Number.isFinite(Number(a.status.remainCoins))
-    ?Number(a.status.remainCoins):null;
+  const coins=a=>{const s=a.status,value=s?.billingVersion==='NEW'?s.balancePoint:s?.remainCoins;
+    return s&&!s.error&&value!=null&&Number.isFinite(Number(value))?Number(value):null;};
   return [...state.accounts].sort((a,b)=>{
     const x=coins(a),y=coins(b);
     if(x===null&&y!==null)return 1;
     if(y===null&&x!==null)return -1;
-    if(x!==null&&y!==null&&x!==y)return y-x;
+    if(x!==null&&y!==null){
+      if((x>0)!==(y>0))return Number(y>0)-Number(x>0);
+      if((a.status?.billingVersion==='NEW')===(b.status?.billingVersion==='NEW')&&x!==y)return y-x;
+    }
     const recent=Date.parse(b.addedAt||'')-Date.parse(a.addedAt||'');
     return Number.isFinite(recent)&&recent!==0?recent:String(a.id).localeCompare(String(b.id));
   });
 }
-function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic · minimal 100 RH</option>'+sortedRunningHubAccounts().map(a=>{
-  const credits=a.status&&!a.status.error?Number(a.status.remainCoins):NaN;
-  const reason=a.canGenerate===false?(Number.isFinite(credits)&&credits<100?' (di bawah 100 RH)':' (status belum tersedia)'):'';
+function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel.value||'auto'; sel.innerHTML='<option value="auto">Automatic · akun terhubung</option>'+sortedRunningHubAccounts().map(a=>{
+  const reason=a.canGenerate===false?(a.status?.billingConverting?' (saldo sedang dikonversi)':' (status belum tersedia)'):'';
   return `<option value="${a.id}" ${a.canGenerate===false?'disabled':''}>${escapeHtml(a.name)} · Access token${reason}</option>`;
 }).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
 
@@ -169,7 +171,10 @@ async function refreshAccounts(){
 function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada akun di pool.<br>Hubungkan access token RunningHub dari panel di sebelah kiri.</div>';return;}
-  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>Access token · ${ready?'Siap digunakan':ok&&Number(s.currentTaskCounts||0)>0?'Menunggu task berjalan selesai':ok?'Saldo tidak memenuhi syarat':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>RH ${ok?Number(s.remainCoins||0).toLocaleString('id-ID'):'—'}</span><span>Tasks ${ok?Number(s.currentTaskCounts||0):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
+  const amount=value=>value!=null&&value!==''&&typeof value!=='boolean'&&Number.isFinite(Number(value))?Number(value).toLocaleString('id-ID',{maximumFractionDigits:12}):'—';
+  const funds=s=>s?.error?'Saldo —':s?.billingVersion==='NEW'?`Points ${amount(s.balancePoint)}`:
+    s?.apiType==='WEB_SESSION'&&s.billingVersion!=='OLD'?`RH lama ${amount(s.remainCoins)} · Points belum tersedia`:`RH ${amount(s?.remainCoins)}`;
+  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>Access token · ${ready?'Siap digunakan':s.billingConverting?'Saldo sedang dikonversi':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>${funds(s)}</span>${ok&&s.walletBalance>0&&s.currency?`<span>Wallet ${escapeHtml(s.currency)} ${amount(s.walletBalance)}</span>`:''}<span>Tasks ${ok?amount(s.currentTaskCounts):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
   $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{
     // Claim browser-only completed History BEFORE changing the provider key vault.
     await claimBrowserHistory();
@@ -437,7 +442,7 @@ async function resumeSubmission(){
 async function generate(){
   if((state.workflow!=='rife60'&&!state.image)||!state.video||state.submission)return;
   if(!state.accounts.some(a=>a.canGenerate===true)){
-    toast('Tidak ada akun RunningHub siap dengan saldo minimal 100 RH. Perbarui Account Pool.',true);
+    toast('Tidak ada sesi akun RunningHub yang siap. Perbarui Account Pool atau hubungkan ulang token.',true);
     return;
   }
   const fd=new FormData();

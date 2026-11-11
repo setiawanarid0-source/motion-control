@@ -42,6 +42,8 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
       fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify({method:config.method,route})+'\\n');
       if(route==='/uc/getUserInfo')return {status:200,data:{code:0,data:{id:low?${JSON.stringify(lowUserId)}:${JSON.stringify(userId)},
         totalCoin:low?fs.readFileSync(${JSON.stringify(lowBalanceFile)},'utf8'):'600'}}};
+      if(route==='/uc/point/summary')return {status:200,data:{code:0,data:{billingVersion:low?'NEW':'OLD',converting:false,
+        balancePoint:low?'427.5':'0',paidPoint:0,bonusPoint:low?'427.5':'0',activityPoint:0}}};
       if(route==='/task/list')return {status:200,data:{code:0,data:{total:0,records:config.data.taskId==='2110000000000000021'
         ?[{taskId:'2110000000000000021',taskStatus:'RUNNING'}]:[]}}};
       throw Error('Unexpected provider request: '+route);
@@ -107,7 +109,9 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
       assert.equal(response.status,200,'A valid low-balance token must be accepted');
       const connected=await response.json();
       assert.equal(connected.updated,index!==0);assert.equal(connected.account.status.remainCoins,coins);
-      assert.equal(connected.account.canGenerate,false,'Import does not change the existing generation rule');
+      assert.equal(connected.account.canGenerate,true,'A verified web session is not blocked by old RH-coin balance');
+      assert.equal(connected.account.status.balancePoint,427.5);
+      assert.equal(connected.account.status.balanceUnit,'POINTS');
       assert.ok(!JSON.stringify(connected).includes(lowAccess));
       if(lowAccountId)assert.equal(connected.account.id,lowAccountId,'Reconnect must update the same account');
       lowAccountId=connected.account.id;
@@ -122,20 +126,19 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
         assert.equal(refreshed.autoRemovedCount,0);assert.equal(refreshed.accounts.length,2);
       }
       const persisted=decrypt(fs.readFileSync(path.join(dir,'accounts.enc'),'utf8'));
-      assert.ok(persisted.accounts.find(a=>a.id===lowAccountId).lowBalanceImportAt,'Retention state must persist in the encrypted vault');
+      assert.ok(persisted.accounts.some(a=>a.id===lowAccountId),'The token account must persist in the encrypted vault');
     }
-    // Once that account reaches the pre-existing generation threshold, normal
-    // later low-balance retirement continues to work for it.
+    // Changing the obsolete RH-coin ledger must never delete a funded points account.
     fs.writeFileSync(lowBalanceFile,'100');response=await post('/api/accounts/refresh',{});
     const eligible=await response.json();assert.equal(eligible.accounts.find(a=>a.id===lowAccountId).canGenerate,true);
     const qualified=decrypt(fs.readFileSync(path.join(dir,'accounts.enc'),'utf8'));
     assert.equal(qualified.accounts.find(a=>a.id===lowAccountId).lowBalanceImportAt,undefined);
     fs.writeFileSync(lowBalanceFile,'99');response=await post('/api/accounts/refresh',{});
-    const retired=await response.json();assert.equal(retired.autoRemovedCount,1);
-    assert.ok(!retired.accounts.some(a=>a.id===lowAccountId),'Existing post-eligibility retirement remains active');
+    const retired=await response.json();assert.equal(retired.autoRemovedCount,0);
+    assert.ok(retired.accounts.some(a=>a.id===lowAccountId),'Web points accounts cannot be retired using the RH-only threshold');
     assert.ok(!fs.readFileSync(path.join(dir,'runninghub-web-sessions.enc'),'utf8').includes(access));
     const routes=fs.readFileSync(calls,'utf8').trim().split('\n').map(x=>JSON.parse(x).route);
-    assert.ok(routes.every(route=>['/uc/getUserInfo','/task/list'].includes(route)),'Connecting an account must never start inference or call OpenAPI');
+    assert.ok(routes.every(route=>['/uc/getUserInfo','/uc/point/summary','/task/list'].includes(route)),'Connecting an account must never start inference or call OpenAPI');
   }finally{
     server.kill('SIGTERM');await new Promise(resolve=>server.once('exit',resolve));fs.rmSync(dir,{recursive:true,force:true});
   }
