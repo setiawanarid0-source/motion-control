@@ -54,7 +54,8 @@ export function parseRunningHubSession(input){
     expiresAt:Number.isFinite(Number(payload.exp))?Number(payload.exp)*1000:null};
 }
 const METHODS=new Set(['/uc/getUserInfo','/uc/point/summary','/uc/token/refresh','/api/instance/access/auth',
-  '/api/workflow/upload','/api/workflow/getContent','/api/workflow/simpleList','/task/create','/task/list','/task/cancel','/task/failedReason',
+  '/api/workflow/upload','/api/workflow/getContent','/api/workflow/setContent','/api/workflow/simpleList',
+  '/api/user/task/work/valid','/task/create','/task/list','/task/cancel','/task/failedReason',
   '/api/output/v2/history']);
 
 export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=()=>Date.now()}){
@@ -172,7 +173,8 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     const identify=session.identify||profile.identify||claim(session.access)?.identify||previous?.identify||'';
     if(identify&&!/^[A-Za-z0-9_-]{1,128}$/.test(identify))throw error('Identitas token tidak valid.','RH_WEB_INVALID_SESSION',true);
     session={...session,identify,refresh:session.refresh||previous?.refresh||'',comfyAuth:session.comfyAuth||previous?.comfyAuth||''};
-    write(hash,{...session,userId:id,workflowId:previous?.workflowId||null,connectedAt:new Date(now()).toISOString()});
+    write(hash,{...session,userId:id,workflowId:previous?.workflowId||null,
+      workspaceSavedId:previous?.workspaceSavedId||null,connectedAt:new Date(now()).toISOString()});
     return {key:'rhweb:'+hash,status:{...funds,currentTaskCounts:null,
       expiresAt:session.expiresAt?new Date(session.expiresAt).toISOString():null}};
   }
@@ -223,8 +225,20 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
         const data=requireSuccess(result,get(key));
         if(String(data.userId||'')!==session.userId)
           throw error('Workspace VANTA tidak cocok dengan akun access token ini.','RH_WEB_IDENTITY_MISMATCH',true);
-        return typeof data.workflowContent==='string'&&data.workflowContent.length>2&&
-          ![true,1,'1','true'].includes(data.draft);
+        const hasContent=typeof data.workflowContent==='string'&&data.workflowContent.length>2;
+        if(hasContent&&(![true,1,'1','true'].includes(data.draft)||get(key).workspaceSavedId===id))return true;
+        // File imports are drafts too. The native Save operation materializes
+        // the owned draft in the workflow table used by /task/create.
+        const workflowContent=hasContent?data.workflowContent:JSON.stringify({last_node_id:0,last_link_id:0,
+          nodes:[],links:[],groups:[],config:{},extra:{},version:0.4});
+        const promptContent=JSON.stringify({client_id:crypto.randomUUID().replaceAll('-',''),prompt:{},
+          extra_data:{extra_pnginfo:{workflow:JSON.parse(workflowContent)}},number:0});
+        const saved=await post(key,'/api/workflow/setContent',{workflowId:id,workflowContent,promptContent,preview:null},{retryAuth:false});
+        if(Number(saved.code)!==0)requireSuccess(saved,get(key));
+        requireSuccess(await post(key,'/api/user/task/work/valid',{taskType:'WORKFLOW',id,taskCode:null,
+          workflowContent,instanceType:'default'}),get(key));
+        remember(key,{workspaceSavedId:id});
+        return true;
       };
       if(session.workflowId&&await verified(session.workflowId))return session.workflowId;
       // /create makes a contentless draft. Native file import registers a real,
@@ -240,7 +254,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
         throw error('ID workspace RunningHub tidak presisi. Task belum dikirim.','RH_WEB_PROTOCOL_ERROR',true);
       const id=String(value);
       if(!taskId(id))throw error('RunningHub belum mengembalikan ID workspace Vanta.','RH_WEB_PROTOCOL_ERROR',true);
-      remember(key,{workflowId:id});
+      remember(key,{workflowId:id,workspaceSavedId:null});
       if(!await verified(id))throw error('Workspace VANTA belum aktif di RunningHub. Task belum dikirim.','RH_WEB_WORKSPACE_NOT_FOUND',true);
       return id;
     })().catch(cause=>{
@@ -254,6 +268,9 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(!id)return {configured:false};
     const reply=await post(key,'/api/workflow/getContent',{workflowId:id,contentType:'0'});
     const data=Number(reply.code)===0?reply.data:null;
+    const validation=await post(key,'/api/user/task/work/valid',{taskType:'WORKFLOW',id,taskCode:null,
+      ...(typeof data?.workflowContent==='string'?{workflowContent:data.workflowContent}:{}),instanceType:'default'});
+    const checked=validation?.data;
     const list=await post(key,'/api/workflow/simpleList',{draft:false});
     const rows=Number(list.code)===0?recordList(list.data):[];
     const own=rows.filter(x=>x.workflowName==='VANTA Studio');
@@ -264,6 +281,10 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       draft:data?.draft==null?null:[true,1,'1','true'].includes(data.draft),
       workflowState:['string','number','boolean'].includes(typeof data?.workflowState)?data.workflowState:null,
       contentPresent:typeof data?.workflowContent==='string'&&data.workflowContent.length>2,
+      saved:get(key).workspaceSavedId===id,
+      runValidation:{code:Number.isFinite(Number(validation.code))?Number(validation.code):null,
+        canCreateTask:typeof checked?.canCreateTask==='boolean'?checked.canCreateTask:null,
+        billingVersion:typeof checked?.billingVersion==='string'?checked.billingVersion:null},
       activeListCode:Number.isFinite(Number(list.code))?Number(list.code):null,
       activeMatch:rows.some(x=>String(x.id||x.workflowId)===String(id)),
       vantaWorkspaces:own.map(x=>({reference:String(x.id||x.workflowId||'').slice(-6),
