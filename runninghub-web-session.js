@@ -54,7 +54,7 @@ export function parseRunningHubSession(input){
     expiresAt:Number.isFinite(Number(payload.exp))?Number(payload.exp)*1000:null};
 }
 const METHODS=new Set(['/uc/getUserInfo','/uc/point/summary','/uc/token/refresh','/api/instance/access/auth',
-  '/api/workflow/create','/task/create','/task/list','/task/cancel','/task/failedReason',
+  '/api/workflow/create','/api/workflow/getContent','/api/workflow/simpleList','/task/create','/task/list','/task/cancel','/task/failedReason',
   '/api/output/v2/history']);
 
 export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=()=>Date.now()}){
@@ -224,6 +224,25 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     })().finally(()=>creating.delete(key)));
     return creating.get(key);
   }
+  async function inspectWorkspace(key){
+    const session=get(key),id=session.workflowId;
+    if(!id)return {configured:false};
+    const reply=await post(key,'/api/workflow/getContent',{workflowId:id,contentType:'0'});
+    const data=Number(reply.code)===0?reply.data:null;
+    const list=await post(key,'/api/workflow/simpleList',{draft:false});
+    const rows=Number(list.code)===0?recordList(list.data):[];
+    const own=rows.filter(x=>x.workflowName==='VANTA Studio');
+    return {configured:true,reference:String(id).slice(-6),
+      contentCode:Number.isFinite(Number(reply.code))?Number(reply.code):null,
+      contentFields:data&&typeof data==='object'?Object.keys(data).filter(x=>/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(x)&&!/token|secret|key/i.test(x)):[],
+      ownerMatches:data?.userId==null?null:String(data.userId)===session.userId,
+      workflowState:['string','number','boolean'].includes(typeof data?.workflowState)?data.workflowState:null,
+      contentPresent:typeof data?.workflowContent==='string'&&data.workflowContent.length>2,
+      activeListCode:Number.isFinite(Number(list.code))?Number(list.code):null,
+      activeMatch:rows.some(x=>String(x.id||x.workflowId)===String(id)),
+      vantaWorkspaces:own.map(x=>({reference:String(x.id||x.workflowId||'').slice(-6),
+        cachedMatch:String(x.id||x.workflowId)===String(id)}))};
+  }
   async function create(key,payload){
     const graph=typeof payload.workflow==='string'?JSON.parse(payload.workflow):payload.workflow;
     if(!graph||Array.isArray(graph)||typeof graph!=='object')throw error('Graph generate tidak valid.','RH_WEB_INVALID_GRAPH',true);
@@ -278,7 +297,8 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     return {code:804,msg:'Video selesai; file web masih ditunggu.'};
   }
   async function request(route,key,body){
-    if(route==='/uc/openapi/accountStatus')return {code:0,data:await status(key)};
+    if(route==='/uc/openapi/accountStatus')return {code:0,data:{...await status(key),
+      ...(body?.inspectWorkspace?{workspace:await inspectWorkspace(key)}:{})}};
     if(route==='/task/openapi/create')return create(key,body);
     if(route==='/task/openapi/outputs')return outputs(key,body.taskId);
     if(route==='/task/openapi/cancel')return post(key,'/task/cancel',{taskId:String(body.taskId)},{retryAuth:false});
