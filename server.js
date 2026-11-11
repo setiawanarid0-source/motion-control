@@ -72,8 +72,8 @@ const workflowGraphs = {
 const workflowMeta = {
   motionflyHD: {
     id:'motionflyHD',name:MOTIONFLY_HD_NAME,
-    subtitle:'Foto + video · HD · audio sumber · ZIP',
-    detail:'Workflow MotionFly dari file yang diunggah. Mask SAM3 dihitung langsung dari referensi; keluaran mengikuti pengaturan HD, audio, preview dan ZIP pada file.',
+    subtitle:'Rasio foto · HD · audio sumber · ZIP',
+    detail:'Rasio hasil mengikuti gambar referensi, termasuk landscape, portrait, dan persegi. Mask SAM3 diproses otomatis; audio sumber, preview HD dan ZIP tetap tersedia.',
     outputKind:'video'
   },
   minimaxH3AkatzV3: {

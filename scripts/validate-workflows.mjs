@@ -6,8 +6,8 @@ import {compileMotionFlyHD} from '../motionfly-hd-workflow.js';
 const read=p=>JSON.parse(fs.readFileSync(new URL('../workflows/'+p,import.meta.url),'utf8'));
 const source=fs.readFileSync(new URL('../workflows/motionfly-hd-runninghub.json',import.meta.url));
 assert.equal(createHash('sha256').update(source).digest('hex'),
-  '1b898754f7e40298d59c52cc8a8be96e437e5508d2d498067a0e27e73098f3ee',
-  'The uploaded MotionFly editor workflow must remain byte-for-byte intact');
+  '7710061edd478ceff89695f8f676d18dcd245ea9557a8b352d487ca05c76066f',
+  'The reviewed adaptive MotionFly editor workflow must retain its validated revision');
 const editor=JSON.parse(source),motionfly=compileMotionFlyHD(editor),current=read('current-api.json');
 for(const [name,graph] of Object.entries({motionfly,current})){
   for(const [id,node] of Object.entries(graph))for(const [field,value] of Object.entries(node.inputs||{})){
@@ -27,8 +27,9 @@ for(const [name,graph] of Object.entries({motionfly,current})){
   assert.deepEqual(graph['490'].inputs.audio,['33',2]);
   assert.deepEqual(graph['490'].inputs.images,['489',0]);
   assert.equal(graph['490'].inputs.save_output,true);
-  assert.equal(graph['489'].inputs.width,1080);assert.equal(graph['489'].inputs.height,1920);
 }
+assert.equal(current['489'].inputs.width,1080);assert.equal(current['489'].inputs.height,1920);
+assert.deepEqual(motionfly['489'].inputs.width,['497',1]);assert.deepEqual(motionfly['489'].inputs.height,['497',2]);
 assert.equal(current['33'].inputs.force_rate,40,'KOH (1) rate must remain unchanged');
 assert.equal(motionfly['33'].inputs.force_rate,24,'Use the supplied workflow rate without the old R4 conversion');
 assert.equal(motionfly['33'].inputs.force_size,'Disabled');
@@ -36,12 +37,13 @@ assert.equal(motionfly['331'].inputs.seed,50);
 assert.equal(motionfly['331'].inputs.steps,6);assert.equal(motionfly['331'].inputs.cfg,1);
 assert.equal(motionfly['331'].inputs.sampler_name,'euler');assert.equal(motionfly['331'].inputs.scheduler,'simple');
 assert.equal(motionfly['331'].inputs.denoise,1);
-assert.equal(motionfly['89'].inputs.width,640);assert.equal(motionfly['89'].inputs.height,1120);
+assert.deepEqual(motionfly['89'].inputs.width,['308',1]);assert.deepEqual(motionfly['89'].inputs.height,['308',2]);
+assert.equal(motionfly['308'].inputs.keep_proportion,'total_pixels');
 for(const id of ['308','489']){
   assert.equal(motionfly[id].inputs.upscale_method,'nvidia_rtx_vsr');
   assert.equal(motionfly[id].inputs.device,'gpu');
-  assert.equal(motionfly[id].inputs.divisible_by,16);
 }
+assert.equal(motionfly['308'].inputs.divisible_by,16);assert.equal(motionfly['489'].inputs.divisible_by,8);
 assert.deepEqual(motionfly['308'].inputs.image,['30',0]);
 assert.deepEqual(motionfly['418'].inputs.reference_image,['308',0]);
 assert.equal(motionfly['418'].inputs.replacement_mode,false);
@@ -68,4 +70,4 @@ for(const [id,node] of Object.entries(motionfly)){
 }
 const broken=structuredClone(editor);broken.nodes=broken.nodes.filter(n=>String(n.id)!=='30');
 assert.throws(()=>compileMotionFlyHD(broken),/input tidak tersedia/,'Missing photo must fail before a task is submitted');
-console.log('PASS: uploaded MotionFly source preserved; complete SAM3 generation, original 24 FPS, HD/audio/preview/ZIP connected; KOH (1) unchanged.');
+console.log('PASS: adaptive MotionFly reference/HD sizing; complete SAM3 generation, original 24 FPS, HD/audio/preview/ZIP connected; KOH (1) unchanged.');

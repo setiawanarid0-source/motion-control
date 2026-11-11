@@ -1,5 +1,5 @@
 {
-  "last_link_id": 1042,
+  "last_link_id": 1047,
   "nodes": [
     {
       "mode": 0,
@@ -1704,7 +1704,6 @@
         {
           "name": "INT",
           "links": [
-            901,
             946,
             948,
             959
@@ -1826,7 +1825,7 @@
             "name": "width"
           },
           "name": "width",
-          "link": 623,
+          "link": 1043,
           "label": "width",
           "type": "INT",
           "localized_name": "width"
@@ -1836,7 +1835,7 @@
             "name": "height"
           },
           "name": "height",
-          "link": 624,
+          "link": 1044,
           "label": "height",
           "type": "INT",
           "localized_name": "height"
@@ -2854,7 +2853,6 @@
         {
           "name": "INT",
           "links": [
-            900,
             945,
             947,
             958
@@ -4791,9 +4789,7 @@
       "outputs": [
         {
           "name": "int",
-          "links": [
-            623
-          ],
+          "links": [],
           "label": "int",
           "type": "INT",
           "localized_name": "int"
@@ -4847,9 +4843,7 @@
       "outputs": [
         {
           "name": "int",
-          "links": [
-            624
-          ],
+          "links": [],
           "label": "int",
           "type": "INT",
           "localized_name": "int"
@@ -4914,14 +4908,18 @@
         },
         {
           "name": "width",
-          "links": [],
+          "links": [
+            1043
+          ],
           "label": "width",
           "type": "INT",
           "localized_name": "width"
         },
         {
           "name": "height",
-          "links": [],
+          "links": [
+            1044
+          ],
           "label": "height",
           "type": "INT",
           "localized_name": "height"
@@ -4945,7 +4943,7 @@
         640,
         1120,
         "nvidia_rtx_vsr",
-        "crop",
+        "total_pixels",
         "0, 0, 0",
         "center",
         16,
@@ -4971,7 +4969,7 @@
             "name": "width"
           },
           "name": "width",
-          "link": 900,
+          "link": null,
           "label": "width",
           "type": "INT",
           "localized_name": "width"
@@ -4981,7 +4979,7 @@
             "name": "height"
           },
           "name": "height",
-          "link": 901,
+          "link": null,
           "label": "height",
           "type": "INT",
           "localized_name": "height"
@@ -5066,7 +5064,8 @@
         "aux_id": "kijai/ComfyUI-KJNodes",
         "Node name for S&R": "ImageResizeKJv2"
       },
-      "order": 73
+      "order": 73,
+      "title": "Reference photo - adaptive aspect ratio"
     },
     {
       "outputs": [
@@ -6392,7 +6391,7 @@
       "outputs": [],
       "color": "#1b4669",
       "widgets_values": [
-        "OUTPUT HD 1080 × 1920\n\nCabang ini memperbesar frame akhir menggunakan Lanczos dan mengekspor H.264 MP4 dengan CRF 14.\n\nOutput asli tetap tersedia sebagai cadangan. Untuk mode lanskap, ubah Width = 1920 dan Height = 1080."
+        "OUTPUT HD ADAPTIF\n\nRasio hasil mengikuti gambar referensi, termasuk landscape, portrait dan persegi. Ukuran dihitung otomatis dengan jumlah piksel HD; tidak perlu mengubah Width atau Height.\n\nAudio sumber, preview dan ZIP memakai frame akhir HD yang sama."
       ],
       "inputs": [],
       "flags": {},
@@ -6945,7 +6944,7 @@
         "crop",
         "0, 0, 0",
         "center",
-        16,
+        8,
         "gpu"
       ],
       "inputs": [
@@ -6970,7 +6969,8 @@
           "name": "width",
           "label": "width",
           "type": "INT",
-          "localized_name": "width"
+          "localized_name": "width",
+          "link": 1046
         },
         {
           "widget": {
@@ -6979,7 +6979,8 @@
           "name": "height",
           "label": "height",
           "type": "INT",
-          "localized_name": "height"
+          "localized_name": "height",
+          "link": 1047
         },
         {
           "widget": {
@@ -7040,7 +7041,7 @@
       "flags": {},
       "id": 489,
       "type": "ImageResizeKJv2",
-      "title": "UPSCALE OUTPUT HD 1080x1920",
+      "title": "Final HD - reference photo aspect ratio",
       "properties": {
         "cnr_id": "comfyui-workflow-encrypt",
         "ver": "1.0.0",
@@ -7277,7 +7278,8 @@
         {
           "name": "IMAGE",
           "links": [
-            929
+            929,
+            1045
           ],
           "label": "IMAGE",
           "type": "IMAGE",
@@ -7537,6 +7539,185 @@
       "title": "496 - ZIP MP4 DARI PREVIEW 493",
       "color": "#232",
       "bgcolor": "#353"
+    },
+    {
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "links": [],
+          "label": "IMAGE",
+          "type": "IMAGE",
+          "localized_name": "IMAGE"
+        },
+        {
+          "name": "width",
+          "links": [
+            1046
+          ],
+          "label": "width",
+          "type": "INT",
+          "localized_name": "width"
+        },
+        {
+          "name": "height",
+          "links": [
+            1047
+          ],
+          "label": "height",
+          "type": "INT",
+          "localized_name": "height"
+        },
+        {
+          "name": "mask",
+          "label": "mask",
+          "type": "MASK",
+          "localized_name": "mask",
+          "links": []
+        }
+      ],
+      "size": [
+        263.9888610839844,
+        336
+      ],
+      "pos": [
+        4400,
+        800
+      ],
+      "widgets_values": [
+        1080,
+        1920,
+        "lanczos",
+        "total_pixels",
+        "0, 0, 0",
+        "center",
+        8,
+        "cpu"
+      ],
+      "inputs": [
+        {
+          "name": "image",
+          "label": "image",
+          "type": "IMAGE",
+          "localized_name": "image",
+          "link": 1045
+        },
+        {
+          "shape": 7,
+          "name": "mask",
+          "label": "mask",
+          "type": "MASK",
+          "localized_name": "mask"
+        },
+        {
+          "widget": {
+            "name": "width"
+          },
+          "name": "width",
+          "label": "width",
+          "type": "INT",
+          "localized_name": "width"
+        },
+        {
+          "widget": {
+            "name": "height"
+          },
+          "name": "height",
+          "label": "height",
+          "type": "INT",
+          "localized_name": "height"
+        },
+        {
+          "widget": {
+            "name": "upscale_method"
+          },
+          "name": "upscale_method",
+          "label": "upscale_method",
+          "type": "COMBO",
+          "localized_name": "upscale_method"
+        },
+        {
+          "widget": {
+            "name": "keep_proportion"
+          },
+          "name": "keep_proportion",
+          "label": "keep_proportion",
+          "type": "COMBO",
+          "localized_name": "keep_proportion"
+        },
+        {
+          "widget": {
+            "name": "pad_color"
+          },
+          "name": "pad_color",
+          "label": "pad_color",
+          "type": "STRING",
+          "localized_name": "pad_color"
+        },
+        {
+          "widget": {
+            "name": "crop_position"
+          },
+          "name": "crop_position",
+          "label": "crop_position",
+          "type": "COMBO",
+          "localized_name": "crop_position"
+        },
+        {
+          "widget": {
+            "name": "divisible_by"
+          },
+          "name": "divisible_by",
+          "label": "divisible_by",
+          "type": "INT",
+          "localized_name": "divisible_by"
+        },
+        {
+          "widget": {
+            "name": "device"
+          },
+          "shape": 7,
+          "name": "device",
+          "label": "device",
+          "type": "COMBO",
+          "localized_name": "device"
+        }
+      ],
+      "flags": {},
+      "id": 497,
+      "type": "ImageResizeKJv2",
+      "title": "HD size from reference photo",
+      "properties": {
+        "cnr_id": "comfyui-workflow-encrypt",
+        "ver": "1.0.0",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "crop_position": true,
+            "pad_color": true,
+            "divisible_by": true,
+            "width": true,
+            "keep_proportion": true,
+            "upscale_method": true,
+            "device": true,
+            "height": true
+          },
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "widget_ue_connectable": {
+          "crop_position": true,
+          "pad_color": true,
+          "divisible_by": true,
+          "width": true,
+          "keep_proportion": true,
+          "upscale_method": true,
+          "device": true,
+          "height": true
+        },
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "Node name for S&R": "ImageResizeKJv2"
+      },
+      "order": 0
     }
   ],
   "extra": {
@@ -7970,22 +8151,6 @@
       "MODEL"
     ],
     [
-      623,
-      287,
-      0,
-      89,
-      2,
-      "INT"
-    ],
-    [
-      624,
-      288,
-      0,
-      89,
-      3,
-      "INT"
-    ],
-    [
       626,
       74,
       0,
@@ -8128,22 +8293,6 @@
       402,
       0,
       "IMAGE"
-    ],
-    [
-      900,
-      375,
-      0,
-      308,
-      2,
-      "INT"
-    ],
-    [
-      901,
-      376,
-      0,
-      308,
-      3,
-      "INT"
     ],
     [
       902,
@@ -8744,11 +8893,51 @@
       496,
       0,
       "*"
+    ],
+    [
+      1043,
+      308,
+      1,
+      89,
+      2,
+      "INT"
+    ],
+    [
+      1044,
+      308,
+      2,
+      89,
+      3,
+      "INT"
+    ],
+    [
+      1045,
+      30,
+      0,
+      497,
+      0,
+      "IMAGE"
+    ],
+    [
+      1046,
+      497,
+      1,
+      489,
+      2,
+      "INT"
+    ],
+    [
+      1047,
+      497,
+      2,
+      489,
+      3,
+      "INT"
     ]
   ],
   "id": "5e3b2cd8-2119-4be4-87d6-b524515abe69",
   "config": {},
   "version": 0.4,
-  "last_node_id": 496,
+  "last_node_id": 497,
   "revision": 0
 }
