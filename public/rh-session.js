@@ -16,7 +16,9 @@ function exportRunningHubSession(){
       return '';
     };
     const field=name=>cookie(name)||read(localStorage,name)||read(sessionStorage,name);
-    const data={site:'runninghub.ai',access:field('Rh-Accesstoken'),refresh:field('Rh-Refreshtoken'),
+    /* The native refresh request uses localStorage, ahead of stale cookies. */
+    const refresh=read(localStorage,'Rh-Refreshtoken')||read(sessionStorage,'Rh-Refreshtoken')||cookie('Rh-Refreshtoken');
+    const data={site:'runninghub.ai',access:field('Rh-Accesstoken'),refresh,
       identify:field('Rh-Identify'),comfyAuth:field('Rh-Comfy-Auth')};
     if(!data.access){alert('Sesi belum ditemukan. Login RunningHub, lalu coba lagi.');return;}
     document.getElementById('vanta-rh-session-export')?.remove();

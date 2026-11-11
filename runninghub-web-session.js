@@ -42,18 +42,22 @@ export function parseRunningHubSession(input){
     throw error('Tempel access token atau JSON dari popup RunningHub.','RH_WEB_INVALID_SESSION',true);
   if(JSON.stringify(input).length>98304)throw error('Data sesi terlalu besar.','RH_WEB_INVALID_SESSION',true);
   const cookie=cookies(input.cookies),stores=[input.localStorage,input.sessionStorage].filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
-  const find=name=>{
-    if(cookie[name.toLowerCase()])return cookie[name.toLowerCase()];
+  const stored=name=>{
     for(const store of stores)for(const key of Object.keys(store))if(key.toLowerCase()===name.toLowerCase())return store[key];
     return '';
   };
-  // The website gives its exact auth cookie precedence over stale localStorage.
+  const find=name=>cookie[name.toLowerCase()]||stored(name);
+  // Native requests prefer the access cookie, but /uc/token/refresh explicitly
+  // sends the localStorage refresh token. A cookie can lag behind a rotation.
   const access=token(cookie['rh-accesstoken']||input.access||find('Rh-Accesstoken'));
-  const refresh=token(cookie['rh-refreshtoken']||input.refresh||find('Rh-Refreshtoken'));
+  const refresh=token(stored('Rh-Refreshtoken')||input.refresh||cookie['rh-refreshtoken']);
   if(!access||/^javascript:/i.test(access))throw error('Access token tidak ditemukan. Login RunningHub lalu salin ulang token.','RH_WEB_INVALID_SESSION',true);
   const identify=String(input.identify||find('Rh-Identify')||'');
   if(identify&&!/^[A-Za-z0-9_-]{1,128}$/.test(identify))throw error('Identitas sesi tidak valid.','RH_WEB_INVALID_SESSION',true);
   const payload=claim(access);
+  const refreshUser=claim(refresh).sub;
+  if(payload.sub&&refreshUser&&String(payload.sub)!==String(refreshUser))
+    throw error('Access token dan refresh token berasal dari akun RunningHub yang berbeda. Salin sesi dari akun yang sama.','RH_WEB_IDENTITY_MISMATCH',true);
   return {access,refresh,identify,comfyAuth:token(input.comfyAuth||find('Rh-Comfy-Auth')),
     expiresAt:Number.isFinite(Number(payload.exp))?Number(payload.exp)*1000:null};
 }
