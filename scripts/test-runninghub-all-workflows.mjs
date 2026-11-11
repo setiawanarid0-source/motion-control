@@ -94,6 +94,10 @@ try{
   assert.match(hd['30'].inputs.image,/^input-\d+\.bin$/,'Uploaded image must replace the source editor filename');
   assert.match(hd['33'].inputs.video,/^input-\d+\.bin$/,'Uploaded video must replace the source editor filename');
   assert.equal(hd['33'].inputs.force_rate,24);assert.equal(hd['331'].inputs.steps,6);
+  assert.equal(hd['308'].inputs.keep_proportion,'total_pixels');
+  assert.deepEqual(hd['89'].inputs.width,['308',1]);
+  assert.deepEqual(hd['497'].inputs.image,['30',0]);
+  assert.deepEqual(hd['489'].inputs.width,['497',1]);
   assert.deepEqual(hd['496'].inputs['images or video_path'],['494',0]);
   const missing=createH3AppearanceModel({dir,asset:{...FFP_ASSET,name:'missing-pinned-model'},
     request:async()=>{throw Error('No API key fallback');},http:{get:async()=>{throw Error('No speculative download');}}});
