@@ -186,6 +186,24 @@ test('a lost create acknowledgement never causes another paid request or an Open
   assert.ok(calls.every(c=>!c.url.includes('/openapi/')));
 }));
 
+test('workspace audit verifies the cached reference without changing workflows or creating tasks',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:'0'}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'NEW',balancePoint:30}};
+    if(route==='/task/list')return {code:0,data:{total:0,records:[]}};
+    if(route==='/api/workflow/getContent')return {code:404,msg:'WORKFLOW_NOT_EXISTS'};
+    if(route==='/api/workflow/simpleList')return {code:0,data:[{id:'2110000000000000101',workflowName:'VANTA Studio'},{id:'2110000000000000102',workflowName:'Unrelated private workflow'}]};
+    throw Error('Audit must not mutate or submit');
+  });
+  const audit=await service.request('/uc/openapi/accountStatus',key,{inspectWorkspace:true});
+  assert.equal(audit.data.workspace.contentCode,404);assert.equal(audit.data.workspace.activeMatch,false);
+  assert.deepEqual(audit.data.workspace.vantaWorkspaces,[{reference:'000101',cachedMatch:false}]);
+  assert.doesNotMatch(JSON.stringify(audit),/Unrelated|fixture-signature|2110000000000000102/);
+  assert.ok(!calls.some(x=>new URL(x.url).pathname==='/task/create'));
+}));
+
 test('provider authentication refusal on create does not replay the create request',()=>fixture(async({service,calls,setHandler})=>{
   const {key}=await service.connect(exported);
   setHandler(async config=>new URL(config.url).pathname==='/api/workflow/create'?{code:0,data:{id:'2110000000000000100'}}:{code:412,msg:'Token expired'});
