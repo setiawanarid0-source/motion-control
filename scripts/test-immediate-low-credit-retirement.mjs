@@ -6,7 +6,7 @@ import {canGenerateWithAccount} from '../runninghub-account-priority.js';
 
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const browser=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-const begin=server.indexOf('async function refreshPool(req){');
+const begin=server.indexOf('async function refreshPool(');
 const end=server.indexOf("\napp.post('/api/accounts/refresh'",begin);
 assert.ok(begin>0&&end>begin,'Use actual production refreshPool code');
 const archiveStart=server.indexOf('function scheduleAccountResultArchiving(accountId){');

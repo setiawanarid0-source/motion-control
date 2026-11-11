@@ -13,6 +13,7 @@ export const isRunningHubWebKey=key=>/^rhweb:[a-f0-9]{64}$/.test(String(key||'')
 const taskId=value=>/^\d{10,25}$/.test(String(value||''));
 const recordList=data=>Array.isArray(data)?data:Array.isArray(data?.records)?data.records:[];
 const authFailure=response=>[401,412].includes(Number(response?.code));
+const RENEW_BEFORE_MS=10*60*1000; // Same ten-minute window as the native web client.
 const error=(message,code='RH_WEB_ERROR',definite=false)=>Object.assign(new Error(message),{code,definitelyRejected:definite});
 function token(value){
   if(typeof value!=='string')return '';
@@ -89,7 +90,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
   }
   async function raw(session,route,data,{timeout=30000,form=false,refresh=false}={}){
     if(!METHODS.has(route)&&route!=='/upload/image')throw error('Operasi sesi web ini belum didukung.','RH_WEB_UNSUPPORTED_OPERATION',true);
-    const headers={Authorization:'Bearer '+(refresh?session.refresh:session.access),Accept:'application/json',
+    const headers={Authorization:'Bearer '+(refresh?session.refresh:session.access),Accept:'application/json',client:'WEB',
       ...(form?data.getHeaders():{'Content-Type':'application/json'})};
     if(route==='/upload/image'){
       headers['Rh-Comfy-Auth']=session.comfyAuth;
@@ -116,12 +117,21 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     throw error('Respons RunningHub tidak valid. Tugas tidak dikirim ulang otomatis.','RH_WEB_PROTOCOL_ERROR');
   }
   async function refresh(session){
-    if(!session.refresh)throw error('Sesi RunningHub kedaluwarsa. Login dan tempel sesi baru di Pool.','RH_WEB_AUTH_EXPIRED',true);
+    if(!session.refresh)throw error('Refresh token belum tersimpan. Hubungkan ulang akun sekali dengan JSON token lengkap agar pembaruan otomatis aktif.','RH_WEB_REFRESH_MISSING',true);
     const result=await raw(session,'/uc/token/refresh',{}, {refresh:true});
     const data=result.data,access=token(data?.access_token),next=token(data?.refresh_token)||session.refresh;
-    if(Number(result.code)!==0||!access)throw Object.assign(error('Sesi RunningHub tidak dapat diperbarui. Login dan tempel sesi baru.','RH_WEB_AUTH_EXPIRED',true),
-      {providerCode:Number.isFinite(Number(result.code))?Number(result.code):null});
+    if(Number(result.code)!==0||!access){
+      const rejected=authFailure(result);
+      throw Object.assign(error(rejected?
+        'RunningHub menolak refresh token akun ini (kode '+Number(result.code)+'). Hubungkan ulang sesi akun ini sekali.':
+        'Pembaruan token RunningHub belum berhasil. Tekan Refresh untuk mencoba kembali.',
+        rejected?'RH_WEB_REFRESH_REJECTED':'RH_WEB_REFRESH_UNAVAILABLE',rejected),
+        {providerCode:Number.isFinite(Number(result.code))?Number(result.code):null});
+    }
     const claims=claim(access);
+    const expected=String(session.userId||claim(session.access).sub||'');
+    if(!claims.sub||expected&&String(claims.sub)!==expected)
+      throw error('Identitas token hasil pembaruan berbeda dari akun ini.','RH_WEB_IDENTITY_MISMATCH',true);
     return {...session,access,refresh:next,identify:data.identify||session.identify,
       expiresAt:Number.isFinite(Number(claims.exp))?Number(claims.exp)*1000:null};
   }
@@ -144,12 +154,23 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     })().finally(()=>refreshing.delete(key)));
     return refreshing.get(key);
   }
-  async function post(key,route,data,{retryAuth=true,...options}={}){
+  async function post(key,route,data,{retryAuth=true,autoRenew=true,...options}={}){
     let session=get(key);
-    if(session.expiresAt&&session.expiresAt<=now()+60000)session=await renew(key);
+    let renewalError;
+    if(autoRenew&&session.refresh&&session.expiresAt&&session.expiresAt<=now()+RENEW_BEFORE_MS){
+      try{session=await renew(key);}
+      catch(error){
+        renewalError=error;
+        // A failed proactive renewal must not discard a still-valid access
+        // token or turn a temporary provider outage into a forced login.
+        if(session.expiresAt<=now())throw error;
+      }
+    }
     let result=await raw(session,route,data,options);
     if(retryAuth&&authFailure(result)&&!result.data?.taskId&&!result.taskId){
+      if(renewalError)throw renewalError;
       const latest=get(key);
+      if(latest.access===session.access&&!autoRenew)return result;
       session=latest.access!==session.access?latest:await renew(key);
       result=await raw(session,route,data,options);
     }
@@ -189,14 +210,24 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     return {key:'rhweb:'+hash,status:{...funds,currentTaskCounts:null,
       expiresAt:session.expiresAt?new Date(session.expiresAt).toISOString():null}};
   }
-  async function status(key){
-    const session=get(key),profile=requireSuccess(await post(key,'/uc/getUserInfo',{userId:session.userId}),get(key));
+  async function status(key,{renewTokens=false}={}){
+    let renewalError;
+    if(renewTokens){try{await renew(key);}catch(error){renewalError=error;}}
+    const readStatus=(route,data)=>post(key,route,data,{autoRenew:!renewTokens});
+    const session=get(key);
+    let profile;
+    try{profile=requireSuccess(await readStatus('/uc/getUserInfo',{userId:session.userId}),get(key));}
+    catch(error){throw renewalError||error;}
     if(String(profile.id||profile.userId||'')!==session.userId)throw error('Identitas sesi berubah. Hubungkan ulang akun.','RH_WEB_IDENTITY_MISMATCH',true);
-    const tasks=requireSuccess(await post(key,'/task/list',{size:1,current:1,taskType:['WORKFLOW','API','CORPAPI','ExclAPI'],taskStatus:['RUNNING','QUEUED']}),get(key));
+    const tasks=requireSuccess(await readStatus('/task/list',{size:1,current:1,taskType:['WORKFLOW','API','CORPAPI','ExclAPI'],taskStatus:['RUNNING','QUEUED']}),get(key));
     const total=webBalanceNumber(tasks.total);
     if(!Number.isInteger(total))throw error('Status task web belum dapat diverifikasi.','RH_WEB_PROTOCOL_ERROR',true);
-    const funds=await balances(profile,()=>post(key,'/uc/point/summary',{}));
+    const funds=await balances(profile,()=>readStatus('/uc/point/summary',{}));
     return {...funds,currentTaskCounts:total,
+      sessionRenewal:{state:renewTokens?(renewalError?'failed':'renewed'):'automatic',
+        code:renewalError?.code||null,providerCode:renewalError?.providerCode??null,
+        refreshedAt:get(key).lastRenewal?.outcome==='renewed'?get(key).lastRenewal.at:null,
+        refreshAvailable:!!get(key).refresh},
       expiresAt:get(key).expiresAt?new Date(get(key).expiresAt).toISOString():null};
   }
   async function upload(key,file){

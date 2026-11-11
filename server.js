@@ -459,8 +459,8 @@ async function rhJson(pathname, apiKey, body, timeout = 30000) {
   return runningHubWeb.request(pathname,apiKey,body);
 }
 
-async function accountStatus(apiKey) {
-  return runningHubWeb.status(apiKey);
+async function accountStatus(apiKey,options) {
+  return runningHubWeb.status(apiKey,options);
 }
 
 async function uploadToRunningHub(apiKey, file) {
@@ -735,11 +735,12 @@ app.delete('/api/accounts/:id', async (req, res) => {
   }catch(error){res.status(503).json({error:String(error.message||'Penghapusan ditunda: penyimpanan task belum siap.').slice(0,220)});}
 });
 
-async function refreshPool(req){
+async function refreshPool(req,{renewTokens=false}={}){
   const {deviceId,accounts}=getPersistentAccounts(req);
   const checked=await Promise.all(accounts.map(async account=>{
-    try{return {account,status:await accountStatus(account.key)};}
-    catch(error){return {account,status:{error:error.message}};}
+    try{return {account,status:await accountStatus(account.key,{renewTokens})};}
+    catch(error){return {account,status:{error:error.message,errorCode:error.code||null,
+      providerCode:error.providerCode??null,sessionRenewal:{state:'failed',code:error.code||null}}};}
   }));
   // Access-token accounts may hold points or web benefits instead of RH coins.
   // Never delete them using the legacy RH-only retirement threshold.
@@ -773,13 +774,15 @@ async function refreshPool(req){
     if(changed)saveVaultAccounts(deviceId,next);
   }
   const remaining=loadGlobalAccounts();
-  return {accounts:remaining.map(a=>{
+  const renewed=checked.filter(x=>x.status.sessionRenewal?.state==='renewed').length;
+  const failed=checked.filter(x=>x.status.sessionRenewal?.state==='failed').length;
+  return {tokenRenewal:renewTokens?{requested:checked.length,renewed,failed}:null,accounts:remaining.map(a=>{
     const status=checked.find(x=>x.account.id===a.id)?.status||null;
     return publicAccount(a,status);
   }),autoRemovedCount,minimumCredits:MIN_POOL_CREDITS};
 }
 app.post('/api/accounts/refresh',async(req,res)=>{
-  try{res.json(await refreshPool(req));}
+  try{res.json(await refreshPool(req,{renewTokens:true}));}
   catch(error){res.status(502).json({error:'Tidak dapat memperbarui Account Pool saat ini.'});}
 });
 

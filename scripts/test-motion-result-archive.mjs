@@ -51,7 +51,7 @@ try{
 
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const scope=(start,end)=>server.slice(server.indexOf(start),server.indexOf(end,server.indexOf(start)));
-const manual=scope("app.delete('/api/accounts/:id'","async function refreshPool(req)");
+const manual=scope("app.delete('/api/accounts/:id'","async function refreshPool(");
 assert.ok(manual.includes('taskRegistry.retireAccount(removing);'),
   'Manual account removal MUST preserve encrypted task credentials');
 assert.ok(manual.includes('scheduleAccountResultArchiving(removing.id);'),
@@ -59,7 +59,7 @@ assert.ok(manual.includes('scheduleAccountResultArchiving(removing.id);'),
 assert.ok(!manual.includes('await ensureAccountResultsArchived'),
   'Manual removal cannot block on object-store archival');
 assert.ok(!manual.includes('motionResults.remove('),'Account removal must never delete output');
-const auto=scope('async function refreshPool(req)',"app.post('/api/accounts/refresh'");
+const auto=scope('async function refreshPool(',"app.post('/api/accounts/refresh'");
 assert.ok(auto.includes('taskRegistry.retireAccount(account)'));
 assert.ok(auto.includes('scheduleAccountResultArchiving(account.id)'));
 assert.ok(!auto.includes('await ensureAccountResultsArchived'),
