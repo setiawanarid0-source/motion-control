@@ -23,7 +23,9 @@ try{
     assert.ok(!route.includes('/openapi/'),'No request may fall back to API-key transport');
     if(route==='/uc/getUserInfo')return {status:200,data:{code:0,data:{id:'2110000000000000001',totalCoin:'600'}}};
     if(route==='/api/workflow/upload')return {status:200,data:{code:0,data:{workflowId:'2110000000000000100'}}};
-    if(route==='/api/workflow/getContent')return {status:200,data:{code:0,data:{userId:'2110000000000000001',workflowContent:'{"nodes":[]}',draft:false}}};
+    if(route==='/api/workflow/getContent')return {status:200,data:{code:0,data:{userId:'2110000000000000001',workflowContent:'{"nodes":[]}',draft:true}}};
+    if(route==='/api/workflow/setContent')return {status:200,data:{code:0,data:null}};
+    if(route==='/api/user/task/work/valid')return {status:200,data:{code:0,data:{billingVersion:'NEW',canCreateTask:true}}};
     if(route==='/upload/image'){
       await new Promise((resolve,reject)=>{config.data.on('end',resolve);config.data.on('error',reject);config.data.resume();});
       return {status:200,data:{name:'input-'+calls.length+'.bin'}};

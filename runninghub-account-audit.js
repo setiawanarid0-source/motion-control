@@ -16,6 +16,10 @@ function workspaceAudit(value){
     contentFields:Array.isArray(value.contentFields)?value.contentFields.filter(x=>typeof x==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(x)&&!/key|token|secret|password|authorization/i.test(x)):[],
     ownerMatches:typeof value.ownerMatches==='boolean'?value.ownerMatches:null,
     draft:typeof value.draft==='boolean'?value.draft:null,
+    saved:value.saved===true,
+    runValidation:{code:finite(value.runValidation?.code),
+      canCreateTask:typeof value.runValidation?.canCreateTask==='boolean'?value.runValidation.canCreateTask:null,
+      billingVersion:enumValue(value.runValidation?.billingVersion)},
     workflowState:finite(value.workflowState)??enumValue(value.workflowState),
     contentPresent:value.contentPresent===true,activeMatch:value.activeMatch===true,
     vantaWorkspaces:Array.isArray(value.vantaWorkspaces)?value.vantaWorkspaces.slice(0,10).map(x=>({reference:enumValue(x.reference),cachedMatch:x.cachedMatch===true})):[]};

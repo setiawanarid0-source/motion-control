@@ -31,7 +31,9 @@ async function fixture(run){
     if(route==='/uc/token/refresh')return {code:0,data:{access_token:jwt(userId,time/1000+7200),refresh_token:'fixture-refreshed-token'}};
     if(route==='/task/list')return {code:0,data:{total:1,records:config.data.taskId?[{taskId:renderId,taskStatus:'SUCCESS'}]:[]}};
     if(route==='/api/workflow/upload')return {code:0,data:{workflowId:'2110000000000000100'}};
-    if(route==='/api/workflow/getContent')return {code:0,data:{id:'2110000000000000100',userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(route==='/api/workflow/getContent')return {code:0,data:{id:'2110000000000000100',userId,workflowContent:'{"nodes":[]}',draft:true}};
+    if(route==='/api/workflow/setContent')return {code:0,data:null};
+    if(route==='/api/user/task/work/valid')return {code:0,data:{billingVersion:'NEW',canCreateTask:true}};
     if(route==='/task/create')return {code:0,data:{taskId:renderId,taskStatus:'QUEUED'}};
     if(route==='/api/output/v2/history')return {code:0,data:[
       {taskId:'2110000000000000998',fileUrl:'https://example.com/wrong.mp4',outputType:'mp4',nodeId:'490'},
@@ -145,7 +147,7 @@ test('expired imported access token uses refresh credentials before verifying th
   assert.notEqual(calls[1].headers.Authorization,'Bearer '+exported.access);
 }));
 
-test('web create uses the editor body, applies existing input overrides and never saves an existing editor',()=>fixture(async({service,calls})=>{
+test('web create initializes its owned workspace once, applies existing input overrides and never opens an editor',()=>fixture(async({service,calls})=>{
   const {key}=await service.connect(exported);
   const graph={'3':{class_type:'VHS_VideoCombine',inputs:{images:['2',0],save_output:true,frame_rate:60}},
     '1':{class_type:'VHS_LoadVideo',inputs:{video:'old.mp4'}}};
@@ -166,13 +168,14 @@ test('web create uses the editor body, applies existing input overrides and neve
     assert.ok(!JSON.stringify(c.data).includes(key));
     assert.ok(!JSON.stringify(c.data).includes(exported.access));
     assert.ok(!Object.hasOwn(c.data,'apiKey'));assert.ok(!Object.hasOwn(c.data,'retainSeconds'));
-    assert.notEqual(new URL(c.url).pathname,'/api/workflow/setContent');
+    if(new URL(c.url).pathname==='/api/workflow/setContent')assert.equal(c.data.workflowId,'2110000000000000100');
   }
   assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,1);
   // The private workspace is reused, including after reconnect.
   await service.connect(exported);
   await service.request('/task/openapi/create',key,{workflow:JSON.stringify(graph)});
   assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/workflow/upload').length,1);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/workflow/setContent').length,1,'Reconnecting must retain initialization of the VANTA-only workspace');
 }));
 
 test('a lost create acknowledgement never causes another paid request or an OpenAPI fallback',()=>fixture(async({service,calls,setHandler})=>{
@@ -196,6 +199,7 @@ test('workspace audit verifies the cached reference without changing workflows o
     if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'NEW',balancePoint:30}};
     if(route==='/task/list')return {code:0,data:{total:0,records:[]}};
     if(route==='/api/workflow/getContent')return {code:404,msg:'WORKFLOW_NOT_EXISTS'};
+    if(route==='/api/user/task/work/valid')return {code:380,msg:'WORKFLOW_NOT_EXISTS'};
     if(route==='/api/workflow/simpleList')return {code:0,data:[{id:'2110000000000000101',workflowName:'VANTA Studio'},{id:'2110000000000000102',workflowName:'Unrelated private workflow'}]};
     throw Error('Audit must not mutate or submit');
   });
@@ -206,26 +210,26 @@ test('workspace audit verifies the cached reference without changing workflows o
   assert.ok(!calls.some(x=>new URL(x.url).pathname==='/task/create'));
 }));
 
-test('repairs an owned contentless draft by native file import once before any GPU submission',()=>fixture(async({service,calls,setHandler})=>{
+test('materializes an owned empty draft once using native Save and read-only validation before GPU submission',()=>fixture(async({service,calls,setHandler,decrypt,encrypt})=>{
   const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
-  const old='2110000000000000100',replacement='2110000000000000101';let multipart='';
+  const id='2110000000000000100';let saved=false;
   setHandler(async config=>{
     const route=new URL(config.url).pathname;
-    if(route==='/api/workflow/getContent')return {code:0,data:{userId,
-      workflowContent:config.data.workflowId===old?null:'{"nodes":[]}',draft:config.data.workflowId===old}};
-    if(route==='/api/workflow/upload'){
-      assert.match(config.headers['content-type'],/multipart\/form-data/);
-      await new Promise((resolve,reject)=>{config.data.on('data',b=>{multipart+=b.toString();});config.data.on('end',resolve);config.data.on('error',reject);config.data.resume();});
-      return {code:0,data:{id:replacement}};
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:saved?'{"nodes":[]}':null,draft:true}};
+    if(route==='/api/workflow/setContent'){
+      assert.equal(config.data.workflowId,id);
+      assert.deepEqual(JSON.parse(config.data.workflowContent).nodes,[]);
+      assert.deepEqual(JSON.parse(config.data.promptContent).prompt,{});
+      saved=true;return {code:0,data:null};
     }
-    throw Error('Workspace repair cannot run, save or cancel a task');
+    if(route==='/api/user/task/work/valid')return {code:0,data:{billingVersion:'NEW',canCreateTask:true}};
+    throw Error('Workspace repair cannot run, import another workspace or cancel a task');
   });
-  assert.deepEqual(await Promise.all([service.prepare(key),service.prepare(key)]),[replacement,replacement]);
-  assert.match(multipart,/name="workflowFile"; filename="vanta-workspace.json"/);
-  assert.match(multipart,/"nodes":\[\]/);assert.match(multipart,/VANTA Studio/);
-  assert.equal(await service.prepare(key),replacement);
-  assert.equal(calls.filter(x=>new URL(x.url).pathname==='/api/workflow/upload').length,1);
-  assert.ok(calls.every(x=>['/api/workflow/getContent','/api/workflow/upload'].includes(new URL(x.url).pathname)));
+  const state=decrypt(fs.readFileSync(service.file,'utf8'));delete state.sessions[key.slice(6)].workspaceSavedId;fs.writeFileSync(service.file,encrypt(state));
+  assert.deepEqual(await Promise.all([service.prepare(key),service.prepare(key)]),[id,id]);
+  assert.equal(await service.prepare(key),id);
+  assert.equal(calls.filter(x=>new URL(x.url).pathname==='/api/workflow/setContent').length,1);
+  assert.ok(calls.every(x=>['/api/workflow/getContent','/api/workflow/setContent','/api/user/task/work/valid'].includes(new URL(x.url).pathname)));
 }));
 
 test('workspace ownership and unknown lookup failures fail before submission instead of importing repeatedly',()=>fixture(async({service,calls,setHandler})=>{
