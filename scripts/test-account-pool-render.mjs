@@ -51,7 +51,7 @@ assert.deepEqual(removed.map(x=>x.url),['/api/accounts/account-alpha','/api/acco
 assert.ok(removed.every(x=>x.method==='DELETE'));
 state.accounts=[
   {id:'account-alpha',name:'Account 1',canGenerate:true,status:{apiType:'WEB_SESSION',sessionVerified:true,
-    billingVersion:'NEW',remainCoins:0,balancePoint:427.5,walletBalance:10.25,currency:'USD',currentTaskCounts:2}},
+    billingVersion:'NEW',remainCoins:0,transitionCoinRemained:0,balancePoint:427.5,walletBalance:10.25,currency:'USD',currentTaskCounts:2}},
   {id:'account-beta',name:'Account 2',canGenerate:true,status:{apiType:'WEB_SESSION',sessionVerified:true,
     billingVersion:'UNKNOWN',remainCoins:null,balancePoint:null,currentTaskCounts:null}}
 ];
@@ -61,7 +61,9 @@ assert.ok(accountList.innerHTML.includes('Wallet USD 10,25'),'Wallet currency mu
 assert.ok(accountList.innerHTML.includes('Tasks 2'));
 assert.ok(accountList.innerHTML.includes('RH lama — · Points belum tersedia'));
 assert.ok(accountList.innerHTML.includes('Tasks —'),'Unknown task counts must not become zero');
-assert.ok(!accountList.innerHTML.includes('RH 0'),'A funded points account must not be presented as RH zero');
+assert.ok(accountList.innerHTML.includes('RH 0'),'Known zero RH must remain visible alongside points');
+state.accounts[0].status.transitionCoinRemained=null;context.renderAccounts();
+assert.ok(accountList.innerHTML.includes('RH —'),'Unknown RH must remain unknown instead of being fabricated as zero');
 assert.ok(!accountList.innerHTML.includes('Saldo tidak memenuhi syarat'));
 state.accounts[0].status.transitionCoinRemained=1734;
 context.renderAccounts();assert.ok(accountList.innerHTML.includes('RH 1.734'),'Available transition RH must remain visible alongside points');
