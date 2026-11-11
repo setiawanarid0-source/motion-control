@@ -35,6 +35,10 @@ export function rankGenerationAccounts(checked,minimum=MIN_ELIGIBLE_CREDITS){
       // Compare balances within the same unit; never invent a points/RH rate.
       const creditDiff=points(x.status)===points(y.status)?Number(b)-Number(a):0;
       if(Number.isFinite(creditDiff)&&creditDiff)return creditDiff;
+      if(points(x.status)&&points(y.status)&&Number(a)===Number(b)){
+        const transitionDiff=Number(y.status.transitionCoinRemained||0)-Number(x.status.transitionCoinRemained||0);
+        if(Number.isFinite(transitionDiff)&&transitionDiff)return transitionDiff;
+      }
       const ageDiff=timeOf(y.account.addedAt)-timeOf(x.account.addedAt);
       if(ageDiff)return ageDiff;
       const unusedDiff=Number(!y.account.lastUsedAt)-Number(!x.account.lastUsedAt);

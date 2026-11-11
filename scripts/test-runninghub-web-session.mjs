@@ -112,6 +112,10 @@ test('reads NEW web points separately from zero old RH coins and retains eligibi
     {account:{id:'funded'},status}
   ]);
   assert.equal(ranked[0].account.id,'funded');
+  assert.equal(rankGenerationAccounts([
+    {account:{id:'new',addedAt:'2026-11-11T00:00:00Z'},status:{...status,transitionCoinRemained:0}},
+    {account:{id:'old',addedAt:'2026-11-10T00:00:00Z'},status:{...status,transitionCoinRemained:1734}}
+  ])[0].account.id,'old','Equal points must preserve priority for available transition RH');
   assert.ok(calls.every(call=>['/uc/getUserInfo','/uc/point/summary','/task/list'].includes(new URL(call.url).pathname)));
 }));
 

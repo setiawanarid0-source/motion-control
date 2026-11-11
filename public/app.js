@@ -134,6 +134,10 @@ function sortedRunningHubAccounts(){
     if(x!==null&&y!==null){
       if((x>0)!==(y>0))return Number(y>0)-Number(x>0);
       if((a.status?.billingVersion==='NEW')===(b.status?.billingVersion==='NEW')&&x!==y)return y-x;
+      if(a.status?.billingVersion==='NEW'&&b.status?.billingVersion==='NEW'&&x===y){
+        const rh=Number(b.status.transitionCoinRemained||0)-Number(a.status.transitionCoinRemained||0);
+        if(Number.isFinite(rh)&&rh)return rh;
+      }
     }
     const recent=Date.parse(b.addedAt||'')-Date.parse(a.addedAt||'');
     return Number.isFinite(recent)&&recent!==0?recent:String(a.id).localeCompare(String(b.id));
@@ -174,7 +178,7 @@ function renderAccounts(){
   const amount=value=>value!=null&&value!==''&&typeof value!=='boolean'&&Number.isFinite(Number(value))?Number(value).toLocaleString('id-ID',{maximumFractionDigits:12}):'—';
   const funds=s=>s?.error?'Saldo —':s?.billingVersion==='NEW'?`Points ${amount(s.balancePoint)}`:
     s?.apiType==='WEB_SESSION'&&s.billingVersion!=='OLD'?`RH lama ${amount(s.remainCoins)} · Points belum tersedia`:`RH ${amount(s?.remainCoins)}`;
-  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>Access token · ${ready?'Siap digunakan':s.billingConverting?'Saldo sedang dikonversi':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>${funds(s)}</span>${ok&&s.walletBalance>0&&s.currency?`<span>Wallet ${escapeHtml(s.currency)} ${amount(s.walletBalance)}</span>`:''}<span>Tasks ${ok?amount(s.currentTaskCounts):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
+  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>Access token · ${ready?'Siap digunakan':s.billingConverting?'Saldo sedang dikonversi':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>${funds(s)}</span>${ok&&s.billingVersion==='NEW'&&s.transitionCoinRemained>0?`<span>RH ${amount(s.transitionCoinRemained)}</span>`:''}${ok&&s.walletBalance>0&&s.currency?`<span>Wallet ${escapeHtml(s.currency)} ${amount(s.walletBalance)}</span>`:''}<span>Tasks ${ok?amount(s.currentTaskCounts):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
   $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{
     // Claim browser-only completed History BEFORE changing the provider key vault.
     await claimBrowserHistory();
