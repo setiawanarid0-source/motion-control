@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import FormData from 'form-data';
 import axios from 'axios';
 import {runningHubWebBalance,webBalanceNumber} from './runninghub-web-balance.js';
+import {extractTaskFailure} from './task-failure.js';
 
 export const RH_WEB_ORIGIN='https://www.runninghub.ai';
 export const isRunningHubWebKey=key=>/^rhweb:[a-f0-9]{64}$/.test(String(key||''));
@@ -317,11 +318,32 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       return {...result,msg:'TASK_QUEUE_MAXED'};
     return result;
   }
-  async function detail(key,id){
+  async function lookupTask(key,id){
     if(!taskId(id))throw error('Task ID tidak valid.','RH_WEB_INVALID_TASK',true);
-    const data=requireSuccess(await post(key,'/task/list',{size:1,current:1,taskId:String(id)}),get(key));
-    const record=recordList(data).find(x=>String(x.taskId)===String(id));
-    return record||null;
+    const filter={size:1,current:1,taskId:String(id),taskType:['WORKFLOW','API','ExclAPI','CORPAPI'],
+      taskStatus:['RUNNING','QUEUED','SUCCESS','FAILED']};
+    const workflowId=get(key).workflowId,lookups=[];
+    for(const scoped of workflowId?[true,false]:[false]){
+      const data=requireSuccess(await post(key,'/task/list',{...filter,...(scoped?{workflowId}:{})}),get(key));
+      const rows=recordList(data),record=rows.find(x=>String(x.taskId)===String(id));
+      lookups.push({workflowScoped:scoped,responseFields:Object.keys(data||{}).filter(x=>/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(x)),
+        total:webBalanceNumber(data?.total),recordCount:rows.length,
+        recordFields:rows[0]?Object.keys(rows[0]).filter(x=>/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(x)&&!/key|token|secret|password|prompt|url/i.test(x)):[],
+        statuses:rows.map(x=>String(x.taskStatus||'')).filter(x=>/^[A-Z_]{1,30}$/.test(x)).slice(0,5),matched:Boolean(record)});
+      if(record)return {record,lookups};
+    }
+    return {record:null,lookups};
+  }
+  async function detail(key,id){return (await lookupTask(key,id)).record;}
+  async function inspectTask(key,id){
+    const {record,lookups}=await lookupTask(key,id);
+    const result={taskId:String(id),found:Boolean(record),lookups,
+      taskStatus:typeof record?.taskStatus==='string'&&/^[A-Z_]{1,30}$/.test(record.taskStatus)?record.taskStatus:null};
+    if(record&&['FAILED','ERROR','CANCELED','CANCELLED'].includes(record.taskStatus)){
+      const failed=await post(key,'/task/failedReason',{taskId:String(id)});
+      result.failure=extractTaskFailure({data:{failedReason:failed?.data||record.errorMessage||record.errorType}});
+    }
+    return result;
   }
   async function outputs(key,id){
     const task=await detail(key,id);
@@ -357,5 +379,5 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     }
     throw error('Operasi RunningHub ini belum mendukung access token. Task belum dikirim.','RH_WEB_UNSUPPORTED_OPERATION',true);
   }
-  return {connect,status,upload,request,prepare:workspace,file};
+  return {connect,status,upload,request,prepare:workspace,inspectTask,file};
 }
