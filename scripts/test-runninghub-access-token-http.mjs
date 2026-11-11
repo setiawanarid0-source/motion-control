@@ -103,6 +103,16 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
     const metadata=await response.json();assert.equal(metadata.accounts[0].lastRenewal.outcome,'renewed');
     assert.equal(metadata.accounts[0].refreshAvailable,true);
     assert.doesNotMatch(JSON.stringify(metadata),/fixture-refresh|fixture-rotated|fixture-new-signature/);
+    assert.equal((await fetch(base+'/api/accounts/status')).status,401);
+    const providerBefore=fs.readFileSync(calls,'utf8');
+    response=await fetch(base+'/api/accounts/status',{headers});assert.equal(response.status,200);
+    const snapshot=await response.json();
+    assert.equal(snapshot.poolRefresh.automatic,true);
+    assert.equal(snapshot.poolRefresh.checkIntervalSeconds,120);assert.equal(snapshot.poolRefresh.renewIntervalSeconds,3600);
+    assert.equal(snapshot.poolRefresh.lastTokenRefreshAt,metadata.accounts[0].lastRenewedAt);
+    assert.equal(snapshot.accounts[0].status.currentTaskCounts,0);
+    assert.equal(fs.readFileSync(calls,'utf8'),providerBefore,'Reading the Pool receipt must not trigger refresh or provider polling');
+    assert.doesNotMatch(JSON.stringify(snapshot),/fixture-refresh|fixture-rotated|fixture-new-signature/);
     response=await post('/api/accounts/refresh',{});
     assert.equal((await response.json()).tokenRenewal.renewed,1,'Refresh must acquire a new token even while the current one is still valid');
     response=await post('/api/runninghub/access-token',{session:access},{...headers,Origin:'https://attacker.example'});

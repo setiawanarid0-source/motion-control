@@ -48,6 +48,7 @@ const ctx={
     throw Error('Storage unavailable');
   },
   publicAccount:(account,status)=>({id:account.id,status}),
+  poolSnapshot:()=>({poolRefresh:{}}),
   console:{info:()=>{},warn:message=>events.push('warn:'+message)}
 };
 vm.runInNewContext(code+'\nthis.runRefresh=refreshPool;',ctx);

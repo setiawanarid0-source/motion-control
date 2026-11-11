@@ -14,6 +14,8 @@ const taskId=value=>/^\d{10,25}$/.test(String(value||''));
 const recordList=data=>Array.isArray(data)?data:Array.isArray(data?.records)?data.records:[];
 const authFailure=response=>[401,412].includes(Number(response?.code));
 const RENEW_BEFORE_MS=10*60*1000; // Same ten-minute window as the native web client.
+export const RH_AUTO_RENEW_INTERVAL_MS=60*60*1000;
+const reconnectCodes=new Set(['RH_WEB_REFRESH_REJECTED','RH_WEB_REFRESH_MISSING','RH_WEB_IDENTITY_MISMATCH']);
 const error=(message,code='RH_WEB_ERROR',definite=false)=>Object.assign(new Error(message),{code,definitelyRejected:definite});
 function token(value){
   if(typeof value!=='string')return '';
@@ -135,22 +137,24 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     return {...session,access,refresh:next,identify:data.identify||session.identify,
       expiresAt:Number.isFinite(Number(claims.exp))?Number(claims.exp)*1000:null};
   }
-  async function renew(key){
+  async function renew(key,{source='automatic'}={}){
     if(!refreshing.has(key))refreshing.set(key,(async()=>{
       const old=get(key);let next;
       try{next=await refresh(old);}
       catch(error){
         const latest=get(key);
         if(latest.access!==old.access||latest.refresh!==old.refresh)return latest;
-        remember(key,{lastRenewal:{at:new Date(now()).toISOString(),outcome:'failed',
+        remember(key,{lastRenewal:{at:new Date(now()).toISOString(),outcome:'failed',source,
           code:error.code,providerCode:error.providerCode??null}});
         throw error;
       }
       // Re-importing a session while refresh is in flight must win.
       const latest=get(key);
       if(latest.access!==old.access||latest.refresh!==old.refresh)return latest;
+      const at=new Date(now()).toISOString();
       return remember(key,{access:next.access,refresh:next.refresh,identify:next.identify,expiresAt:next.expiresAt,
-        lastRenewal:{at:new Date(now()).toISOString(),outcome:'renewed'}});
+        lastRenewedAt:at,...(source==='automatic'?{lastAutomaticRenewedAt:at}:{}),
+        lastRenewal:{at,outcome:'renewed',source}});
     })().finally(()=>refreshing.delete(key)));
     return refreshing.get(key);
   }
@@ -210,10 +214,19 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     return {key:'rhweb:'+hash,status:{...funds,currentTaskCounts:null,
       expiresAt:session.expiresAt?new Date(session.expiresAt).toISOString():null}};
   }
-  async function status(key,{renewTokens=false}={}){
+  async function readAccountStatus(key,{renewTokens=false,automatic=false}={}){
+    const stored=get(key);
     let renewalError;
-    if(renewTokens){try{await renew(key);}catch(error){renewalError=error;}}
-    const readStatus=(route,data)=>post(key,route,data,{autoRenew:!renewTokens});
+    if(automatic&&stored.lastRenewal?.outcome==='failed'&&reconnectCodes.has(stored.lastRenewal.code)){
+      renewalError=Object.assign(error(stored.lastRenewal.code==='RH_WEB_REFRESH_REJECTED'?
+        'RunningHub menolak refresh token akun ini (kode '+stored.lastRenewal.providerCode+'). Hubungkan ulang sesi akun ini sekali.':
+        'Sesi akun perlu dihubungkan ulang agar pembaruan otomatis dapat dilanjutkan.',stored.lastRenewal.code,true),
+        {providerCode:stored.lastRenewal.providerCode??null});
+    }
+    const last=stored.lastRenewedAt||(stored.lastRenewal?.outcome==='renewed'?stored.lastRenewal.at:null)||stored.connectedAt;
+    if(automatic&&!renewalError&&stored.refresh&&now()-Date.parse(last||'')>=RH_AUTO_RENEW_INTERVAL_MS)renewTokens=true;
+    if(renewTokens){try{await renew(key,{source:automatic?'automatic':'manual'});}catch(error){renewalError=error;}}
+    const readStatus=(route,data)=>post(key,route,data,{autoRenew:!renewTokens&&!renewalError});
     const session=get(key);
     let profile;
     try{profile=requireSuccess(await readStatus('/uc/getUserInfo',{userId:session.userId}),get(key));}
@@ -224,11 +237,38 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(!Number.isInteger(total))throw error('Status task web belum dapat diverifikasi.','RH_WEB_PROTOCOL_ERROR',true);
     const funds=await balances(profile,()=>readStatus('/uc/point/summary',{}));
     return {...funds,currentTaskCounts:total,
-      sessionRenewal:{state:renewTokens?(renewalError?'failed':'renewed'):'automatic',
+      sessionRenewal:{state:renewalError?'failed':renewTokens?'renewed':'automatic',
         code:renewalError?.code||null,providerCode:renewalError?.providerCode??null,
-        refreshedAt:get(key).lastRenewal?.outcome==='renewed'?get(key).lastRenewal.at:null,
+        refreshedAt:get(key).lastRenewedAt||(get(key).lastRenewal?.outcome==='renewed'?get(key).lastRenewal.at:null),
         refreshAvailable:!!get(key).refresh},
       expiresAt:get(key).expiresAt?new Date(get(key).expiresAt).toISOString():null};
+  }
+  async function status(key,options={}){
+    let result,failure;
+    try{result=await readAccountStatus(key,options);}
+    catch(error){
+      failure=error;
+      const session=get(key),renewal=session.lastRenewal;
+      result={error:String(error.message).slice(0,240),errorCode:error.code||null,
+        providerCode:error.providerCode??null,
+        sessionRenewal:{state:renewal?.outcome==='renewed'?'renewed':'failed',
+          code:renewal?.code||error.code||null,refreshedAt:session.lastRenewedAt||null}};
+    }
+    const at=new Date(now()).toISOString(),previous=get(key).poolSnapshot||{};
+    result={...result,checkedAt:at,stale:false};
+    remember(key,{poolSnapshot:{checkedAt:at,status:result,
+      lastAutomaticCheckAt:options.automatic?at:previous.lastAutomaticCheckAt||null,
+      lastSuccessfulCheckAt:failure?previous.lastSuccessfulCheckAt||null:at}});
+    if(failure){failure.poolStatus=result;throw failure;}
+    return result;
+  }
+  function cachedStatus(key){
+    const snapshot=get(key).poolSnapshot;
+    if(!snapshot?.status)return null;
+    const result=structuredClone(snapshot.status);
+    result.stale=now()-Date.parse(snapshot.checkedAt)>5*60*1000||
+      !result.error&&Number.isFinite(Date.parse(result.expiresAt||''))&&Date.parse(result.expiresAt)<=now();
+    return result;
   }
   async function upload(key,file){
     let session=get(key);
@@ -424,9 +464,14 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
   function sessionAudit(key){
     const session=get(key),accessClaims=claim(session.access),refreshClaims=claim(session.refresh);
     const expiry=value=>Number.isFinite(Number(value))?new Date(Number(value)*1000).toISOString():null;
+    const lastRenewedAt=session.lastRenewedAt||(session.lastRenewal?.outcome==='renewed'?session.lastRenewal.at:null);
     return {accessExpiresAt:expiry(accessClaims.exp),refreshAvailable:!!session.refresh,
       refreshExpiresAt:expiry(refreshClaims.exp),refreshIdentityMatches:refreshClaims.sub&&accessClaims.sub?
-        String(refreshClaims.sub)===String(accessClaims.sub):null,lastRenewal:session.lastRenewal||null};
+        String(refreshClaims.sub)===String(accessClaims.sub):null,lastRenewal:session.lastRenewal||null,
+      lastRenewedAt,lastAutomaticRenewedAt:session.lastAutomaticRenewedAt||null,
+      lastCheckedAt:session.poolSnapshot?.checkedAt||null,
+      lastAutomaticCheckAt:session.poolSnapshot?.lastAutomaticCheckAt||null,
+      reconnectRequired:!session.refresh||session.lastRenewal?.outcome==='failed'&&reconnectCodes.has(session.lastRenewal.code)};
   }
-  return {connect,status,upload,request,prepare:workspace,inspectTask,sessionAudit,file};
+  return {connect,status,cachedStatus,upload,request,prepare:workspace,inspectTask,sessionAudit,file};
 }

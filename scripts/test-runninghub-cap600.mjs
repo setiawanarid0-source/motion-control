@@ -56,7 +56,7 @@ assert.ok(backend.includes('if(!canGenerateWithAccount(status,MIN_POOL_CREDITS))
   'Manual selection must enforce minimum only after fresh balance check');
 assert.ok(backend.includes('rankGenerationAccounts(checked,MIN_POOL_CREDITS)'),
   'Automatic selection must use minimum and highest balance after live refresh');
-assert.ok(server.includes('canGenerate: canGenerateWithAccount(status, MIN_POOL_CREDITS)'),
+assert.ok(server.includes('canGenerate: !status?.stale&&canGenerateWithAccount(status, MIN_POOL_CREDITS)'),
   'Browser account readiness must accurately match backend minimum');
 assert.ok(server.includes('partitionAccountRefresh(checked,MIN_POOL_CREDITS)'),
   'Old below-100 automatic retirement preserved; high balances never removed');
