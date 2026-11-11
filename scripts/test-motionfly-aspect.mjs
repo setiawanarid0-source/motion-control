@@ -17,6 +17,7 @@ assert.equal(graph['308'].inputs.width,640);assert.equal(graph['308'].inputs.hei
 assert.equal(graph['308'].inputs.upscale_method,'nvidia_rtx_vsr');
 assert.deepEqual(graph['89'].inputs.width,['308',1]);
 assert.deepEqual(graph['89'].inputs.height,['308',2]);
+assert.equal(graph['89'].inputs.keep_proportion,'pad','A differently shaped driver must retain its complete motion frame');
 assert.deepEqual(graph['418'].inputs.width,['89',1]);
 assert.deepEqual(graph['418'].inputs.height,['89',2]);
 assert.deepEqual(graph['497'].inputs.image,['30',0],'Final sizing must use the original photo, not the driver or rounded latent canvas');
@@ -47,6 +48,20 @@ function geometry(photo,driver){
       if(mode==='total_pixels'){
         const pixels=width*height,aspect=input.width/input.height;
         width=Math.trunc(Math.sqrt(pixels*aspect));height=Math.trunc(Math.sqrt(pixels/aspect));
+      }else if(mode==='pad'){
+        // The fitted content and centered padding fill the requested canvas.
+        // At divisible_by=2 and a multiple-of-16 target, native padding rounds
+        // back to exactly that target, preserving the entire source frame.
+        assert.equal(width%16,0);assert.equal(height%16,0);
+        const ratio=Math.min(width/input.width,height/input.height);
+        const contentWidth=Math.round(input.width*ratio),contentHeight=Math.round(input.height*ratio);
+        assert.ok(contentWidth<=width&&contentHeight<=height,'Fit must keep the complete driver inside the photo canvas');
+        assert.ok(contentWidth>0&&contentHeight>0);
+        assert.equal(node.inputs.divisible_by,2);
+        const paddedWidth=contentWidth-contentWidth%2+(width-contentWidth);
+        const paddedHeight=contentHeight-contentHeight%2+(height-contentHeight);
+        assert.equal(paddedWidth+paddedWidth%2,width);
+        assert.equal(paddedHeight+paddedHeight%2,height);
       }else assert.equal(mode,'crop');
       const divisible=node.inputs.divisible_by;
       if(divisible>1){width-=width%divisible;height-=height%divisible;}

@@ -1799,7 +1799,7 @@
         640,
         1120,
         "lanczos",
-        "crop",
+        "pad",
         "0, 0, 0",
         "center",
         2,
@@ -1920,7 +1920,8 @@
         "aux_id": "kijai/ComfyUI-KJNodes",
         "Node name for S&R": "ImageResizeKJv2"
       },
-      "order": 55
+      "order": 55,
+      "title": "Motion guide - fit full frame to photo canvas"
     },
     {
       "mode": 0,
