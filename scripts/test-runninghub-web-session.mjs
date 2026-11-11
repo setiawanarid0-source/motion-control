@@ -282,6 +282,31 @@ test('output lookup keeps the exact task ID and does not substitute another rend
   assert.equal(late.code,804);assert.equal(late.data,undefined);
 }));
 
+test('web monitoring includes native task filters and recovers queued, running and failed accepted tasks without resubmission',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);let state='QUEUED';
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/task/list'){
+      // The consumer list defaults do not include this workflow task. A
+      // taskId alone therefore returns an empty list despite acceptance.
+      if(!config.data.taskType?.includes('WORKFLOW')||!config.data.taskStatus?.includes(state))
+        return {code:0,data:{total:0,records:[]}};
+      assert.equal(config.data.taskId,renderId);
+      return {code:0,data:{total:1,records:[{taskId:renderId,taskStatus:state,promptContent:'private-inputs'}]}};
+    }
+    if(route==='/task/failedReason')return {code:0,data:{node_id:'33',exception_type:'FixtureError',exception_message:'Fixture input rejected',traceback:'private trace'}};
+    throw Error('Monitoring cannot start inference');
+  });
+  assert.equal((await service.request('/task/openapi/outputs',key,{taskId:renderId})).code,813);
+  state='RUNNING';assert.equal((await service.request('/task/openapi/outputs',key,{taskId:renderId})).code,804);
+  state='FAILED';assert.equal((await service.request('/task/openapi/outputs',key,{taskId:renderId})).code,805);
+  const audit=await service.inspectTask(key,renderId);
+  assert.equal(audit.taskStatus,'FAILED');assert.equal(audit.found,true);
+  assert.equal(audit.failure.nodeId,'33');assert.equal(audit.failure.message,'Fixture input rejected');
+  assert.doesNotMatch(JSON.stringify(audit),/private-inputs|private trace|fixture-signature/);
+  assert.ok(calls.every(x=>!['/task/create','/task/cancel'].includes(new URL(x.url).pathname)));
+}));
+
 test('media uses the native image multipart field, including original MP4 bytes',()=>fixture(async({service,dir,setHandler})=>{
   const {key}=await service.connect(exported),source=path.join(dir,'fixture.mp4');fs.writeFileSync(source,'original-mp4-bytes');
   let multipart='';

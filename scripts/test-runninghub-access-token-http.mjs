@@ -99,6 +99,12 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
     assert.equal(response.status,200);assert.equal((await response.json()).accountId,'old');
     const restored=decrypt(fs.readFileSync(path.join(dir,'task-registry.enc'),'utf8'));
     assert.equal(restored.tasks[0].key,stored.accounts[0].key);
+    assert.equal((await fetch(base+'/api/tasks/2110000000000000021/audit')).status,401);
+    assert.equal((await fetch(base+'/api/tasks/2110000000000000022/audit',{headers})).status,404);
+    response=await fetch(base+'/api/tasks/2110000000000000021/audit',{headers});
+    assert.equal(response.status,200);
+    const diagnosis=await response.json();assert.equal(diagnosis.found,true);assert.equal(diagnosis.taskStatus,'RUNNING');
+    assert.ok(!JSON.stringify(diagnosis).includes(access));
     // These are real authenticated HTTP endpoints, including the immediate
     // refresh/reload used by the Connect button. Only the provider is mocked.
     let lowAccountId;

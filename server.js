@@ -1111,6 +1111,15 @@ app.get('/api/tasks/history',(req,res)=>{
   try{res.setHeader('Cache-Control','private, no-store');res.json({tasks:taskRegistry.publicList()});}
   catch(error){res.status(503).json({error:'Riwayat server sementara tidak tersedia.'});}
 });
+// Read-only inspection of an already registered task. No create or cancellation.
+app.get('/api/tasks/:taskId/audit',async(req,res)=>{
+  const taskId=String(req.params.taskId||''),account=registeredAccount(taskId);
+  if(!/^\d{10,25}$/.test(taskId)||!account||!isRunningHubWebKey(account.key))
+    return res.status(404).json({error:'Task tidak ditemukan.'});
+  res.setHeader('Cache-Control','private, no-store');
+  try{res.json(await runningHubWeb.inspectTask(account.key,taskId));}
+  catch{res.status(502).json({error:'Detail status RunningHub belum dapat dibaca.'});}
+});
 // Recover existing browser History into encrypted server registry BEFORE Account Pool cleanup.
 // Never creates a paid RunningHub task.
 app.post('/api/tasks/claim',async(req,res)=>{
