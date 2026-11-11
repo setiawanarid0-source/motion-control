@@ -65,6 +65,60 @@ test('accepts the original popup and persists only the four needed credential fi
     {...exported,access:'bad\r\nAuthorization: injected'}])assert.throws(()=>parseRunningHubSession(input));
 });
 
+test('legacy imports use the native localStorage refresh token instead of a stale cookie',()=>{
+  const cookieRefresh='fixture-stale-cookie-refresh',storageRefresh='fixture-current-storage-refresh';
+  const parsed=parseRunningHubSession({...exported,
+    cookies:'Rh-Refreshtoken='+encodeURIComponent(cookieRefresh),
+    localStorage:{'Rh-Refreshtoken':storageRefresh},
+    sessionStorage:{'Rh-Refreshtoken':'fixture-older-tab-refresh'}});
+  assert.equal(parsed.refresh,storageRefresh);
+  assert.equal(parseRunningHubSession({site:'runninghub.ai',access:exported.access,
+    cookies:'Rh-Refreshtoken='+cookieRefresh}).refresh,cookieRefresh);
+  assert.throws(()=>parseRunningHubSession({...exported,refresh:jwt('2110000000000000002')}),
+    {code:'RH_WEB_IDENTITY_MISMATCH'});
+});
+
+test('the actual one-line exporter selects the rotated native refresh token without network requests',()=>{
+  const nodes=[],alerts=[];
+  const element=tag=>{const node={tag,style:{},append(){},remove(){}};nodes.push(node);return node;};
+  const storageRefresh='fixture-current-storage-refresh';
+  const context={window:{},location:{hostname:'www.runninghub.ai'},alert:message=>alerts.push(message),
+    document:{cookie:'Rh-Accesstoken='+encodeURIComponent(exported.access)+'; Rh-Refreshtoken=fixture-stale-cookie-refresh',
+      getElementById:()=>null,createElement:element,body:{append(){}}},
+    localStorage:{getItem:name=>name==='Rh-Refreshtoken'?storageRefresh:''},
+    sessionStorage:{getItem:()=>''}};
+  vm.runInNewContext(fs.readFileSync(new URL('../public/rh-session.js',import.meta.url),'utf8'),context);
+  vm.runInNewContext(context.window.vantaRunningHubSessionCode.slice('javascript:'.length),context);
+  assert.deepEqual(alerts,[]);
+  const data=JSON.parse(nodes.find(node=>node.tag==='textarea').value);
+  assert.equal(data.access,exported.access);assert.equal(data.refresh,storageRefresh);
+  assert.deepEqual(Object.keys(data).sort(),['site','access','refresh','identify','comfyAuth'].sort());
+  assert.equal(parseRunningHubSession(data).refresh,storageRefresh);
+});
+
+test('a stale-cookie import renews through the current native token and keeps its rotation after restart',()=>fixture(async({service,setHandler,reopen})=>{
+  const current='fixture-current-storage-refresh',rotated='fixture-current-backend-rotation';
+  const {key}=await service.connect({...exported,cookies:'Rh-Refreshtoken=fixture-stale-cookie-refresh',
+    localStorage:{'Rh-Refreshtoken':current}});
+  let grant=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/token/refresh'){
+      assert.equal(config.headers.Authorization,'Bearer '+(grant?rotated:current));
+      grant++;return {code:0,data:{access_token:jwt(userId,time/1000+7200+grant),refresh_token:rotated}};
+    }
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:0}};
+    if(route==='/uc/point/summary')return {code:0,data:{balancePoint:0}};
+    if(route==='/task/list')return {code:0,data:{total:0,records:[]}};
+    throw Error('unexpected route');
+  });
+  await service.status(key,{renewTokens:true});
+  const restarted=reopen();
+  await restarted.status(key,{renewTokens:true});
+  assert.equal(grant,2);
+  assert.equal(restarted.sessionAudit(key).lastRenewal.outcome,'renewed');
+}));
+
 test('connect is read-only on RunningHub, verifies balance, encrypts credentials and keeps a stable reference',()=>fixture(async({service,calls})=>{
   const first=await service.connect(JSON.stringify(exported));
   assert.ok(isRunningHubWebKey(first.key));assert.equal(first.status.remainCoins,600);
