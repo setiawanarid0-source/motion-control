@@ -545,7 +545,7 @@ async function pollTask(){
     }
     if(data.state==='failed') finishFailed(data.message||'Task gagal.',data.failure||null);
     if(data.state==='success'){
-      const results=selectTaskOutputs(data.outputs, state.task.workflow.outputKind);
+      const results=selectTaskOutputs(data.outputs, state.task.workflow.outputKind,state.task.taskId,state.task.accountId);
       if(!results.videoUrl) return finishFailed('RunningHub tidak mengembalikan video mask/generasi.');
       results.cameraQA=data.cameraQA||null;
       results.deliveryNote=data.deliveryNote||null;
@@ -560,14 +560,17 @@ async function pollTask(){
       error:'Status terbaru belum tersedia. Pemeriksaan akan diulang.',runtimeMs:null});
   }
 }
-function selectTaskOutputs(outputs,kind){
+function selectTaskOutputs(outputs,kind,taskId,accountId){
   const items=Array.isArray(outputs)?outputs:[];
+  const archive=items.find(o=>/zip/i.test(String(o.fileType||''))||/\.zip(?:\?|$)/i.test(String(o.fileUrl||'')));
   const video=(kind==='diagnostic'?items.find(o=>String(o.nodeId)==='393'):null)
     ||items.find(o=>String(o.fileType||'').toLowerCase().includes('video')||/\.mp4(?:\?|$)/i.test(String(o.fileUrl||'')));
   const referenceMask=kind==='diagnostic'
     ?(items.find(o=>String(o.nodeId)==='394')||items.find(o=>String(o.fileType||'').toLowerCase().includes('image')))
     :null;
-  return {videoUrl:video?.fileUrl||null,referenceMaskUrl:referenceMask?.fileUrl||null};
+  const preview=(video||archive)&&taskId&&accountId?'/api/tasks/'+encodeURIComponent(taskId)+'/preview?accountId='+
+    encodeURIComponent(accountId)+'&deviceId='+encodeURIComponent(getDeviceId()):null;
+  return {videoUrl:preview||video?.fileUrl||null,referenceMaskUrl:referenceMask?.fileUrl||null};
 }
 function finishFailed(msg,failure=null){
   clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
@@ -835,7 +838,7 @@ async function pollHistoryTasks(){
         }else if(data.state==='failed'){
           updateHistory(item.taskId,{accountId,status:'failed',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),error:data.message||'Task gagal.',...(data.failure?{diagnosis:formatTaskDiagnosis(data.failure,data.message),diagnosisChecked:true}:{})});
         }else if(data.state==='success'){
-          const outputs=selectTaskOutputs(data.outputs,item.outputKind);
+          const outputs=selectTaskOutputs(data.outputs,item.outputKind,item.taskId,accountId);
           if(!outputs.videoUrl)throw new Error('Output video tidak tersedia pada respons RunningHub.');
           updateHistory(item.taskId,{accountId,status:'success',finishedAt:new Date().toISOString(),runtimeMs:historyElapsed(item),resultUrl:outputs.videoUrl,referenceMaskUrl:outputs.referenceMaskUrl,cameraQA:data.cameraQA||null,
             deliveryNote:data.deliveryNote||null,statusDetail:null,error:null});

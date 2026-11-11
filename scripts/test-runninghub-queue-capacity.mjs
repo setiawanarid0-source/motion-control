@@ -1,3 +1,4 @@
+import {withOriginalVideoArchive} from '../runninghub-output.js';
 import assert from 'node:assert/strict';
 import {isRunningHubWebKey} from '../runninghub-web-session.js';
 import fs from 'node:fs';
@@ -51,12 +52,12 @@ assert.equal(graphValidationError({...absentNode,taskId:'2109126366731984999'}),
 assert.equal(graphValidationError({msg:JSON.stringify({result:false,error:{type:'execution_error'}})}),null);
 const uploads=[],requests=[];
 let nextReply=0;
-const context={
+const context={withOriginalVideoArchive,
   isRunningHubWebKey,runningHubWeb:{prepare:async()=>{}},
   uploadToRunningHub:async(key,file)=>{uploads.push([key,file.originalname]);return 'uploaded-'+file.originalname;},
   prepareDiagnosticAssets:()=>null,
   runningHubInstanceType:mode=>mode==='plus'?'plus':'default',
-  workflowGraphs:{current:{nodes:'unchanged'},rife60:JSON.parse(fs.readFileSync(new URL('../workflows/rife60-api.json',import.meta.url),'utf8'))},
+  workflowGraphs:{current:JSON.parse(fs.readFileSync(new URL('../workflows/current-api.json',import.meta.url),'utf8')),rife60:JSON.parse(fs.readFileSync(new URL('../workflows/rife60-api.json',import.meta.url),'utf8'))},
   rifeGraphForSourceFps,RIFE_TARGET_FPS,
   explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,mayTryNextAccountAfterCreate,
   graphValidationError,isDefinitelyRejectedGraph,

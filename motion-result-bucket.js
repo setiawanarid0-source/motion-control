@@ -3,6 +3,7 @@
 // No arbitrary per-video 128MB limit. Multipart streaming avoids loading media
 // into memory or into /data. A separate scheduler deletes objects on expiry.
 import axios from 'axios';
+import fs from 'node:fs';
 import {S3Client, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand,
   ListObjectsV2Command} from '@aws-sdk/client-s3';
 import {Upload} from '@aws-sdk/lib-storage';
@@ -12,13 +13,13 @@ export const RESULT_BUCKET_PREFIX='motion-results/v1/';
 const TASK_ID=/^\d{10,25}$/;
 const isNotFound=e=>e?.$metadata?.httpStatusCode===404||
   e?.name==='NotFound'||e?.name==='NoSuchKey';
-function validProviderUrl(raw){
+export function validProviderUrl(raw){
   try{
     const u=new URL(String(raw||''));
     if(u.protocol!=='https:'||u.username||u.password)return false;
     const h=u.hostname.toLowerCase();
     if(h==='localhost'||h.endsWith('.localhost')||h.endsWith('.internal')||
-       h==='::1'||/^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(h))return false;
+       h==='::1'||h.startsWith('[')||/^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(h))return false;
     return true;
   }catch{return false;}
 }
@@ -47,7 +48,8 @@ export function createMotionResultBucket({env=process.env,client,request=axios.g
     if(!Number.isFinite(finished))return null;
     const expires=finished+MOTION_VIDEO_RETENTION_MS;
     if(!allowExpired&&clock()>=expires)return null;
-    return RESULT_BUCKET_PREFIX+task.taskId+'/'+expires+'.mp4';
+    return RESULT_BUCKET_PREFIX+task.taskId+'/'+expires+
+      (task.resultSource==='workflow-zip-v1'?'-original':'')+'.mp4';
   }
   async function exists(task){
     const objectKey=key(task);
@@ -55,26 +57,29 @@ export function createMotionResultBucket({env=process.env,client,request=axios.g
     try{await s3.send(new HeadObjectCommand({Bucket:bucket,Key:objectKey}));return true;}
     catch(error){if(isNotFound(error))return false;throw error;}
   }
-  async function mirror(task){
+  async function mirror(task,{sourceFile,sha256}={}){
     if(!ready)throw Error('Railway Motion Results bucket is not configured');
     const objectKey=key(task);
     if(!objectKey)throw Error('Video has already expired or has invalid completion time');
-    if(!validProviderUrl(task.resultUrl))throw Error('Invalid RunningHub result URL');
+    if(!sourceFile&&!validProviderUrl(task.resultUrl))throw Error('Invalid RunningHub result URL');
+    if(task.resultSource==='workflow-zip-v1'&&!sourceFile)
+      throw Error('Original ZIP video requires verified extracted MP4 bytes');
     if(pending.has(objectKey))return pending.get(objectKey);
     const promise=(async()=>{
       if(await exists(task))return objectKey;
-      const upstream=await request(task.resultUrl,{
+      const upstream=sourceFile?{headers:{'content-type':'video/mp4'},data:fs.createReadStream(sourceFile)}:await request(task.resultUrl,{
         responseType:'stream',timeout:120000,maxRedirects:3,
         validateStatus:status=>status===200
       });
       try{
         const mime=String(upstream.headers?.['content-type']||'').toLowerCase();
         if(mime.includes('text/html')||mime.includes('application/json'))throw Error('Provider returned non-video content');
-        if(clock()>=Number(objectKey.split('/').at(-1).replace('.mp4','')))
+        if(clock()>=Date.parse(task.finishedAt)+MOTION_VIDEO_RETENTION_MS)
           throw Error('Video completed more than 72 hours ago');
         await uploader({client:s3,params:{
           Bucket:bucket,Key:objectKey,Body:upstream.data,ContentType:'video/mp4',
-          Metadata:{completedat:String(Date.parse(task.finishedAt))}
+          Metadata:{completedat:String(Date.parse(task.finishedAt)),
+            ...(sourceFile?{source:'workflow-zip-v1',originalsha256:String(sha256||'')}: {})}
         },queueSize:2,partSize:8*1024*1024,leavePartsOnError:false});
         return objectKey;
       }finally{upstream.data?.destroy?.();}
@@ -96,9 +101,11 @@ export function createMotionResultBucket({env=process.env,client,request=axios.g
     }catch(error){if(isNotFound(error))return null;throw error;}
   }
   async function remove(task){
-    const objectKey=key(task,{allowExpired:true});
-    if(!objectKey||!ready)return;
-    await s3.send(new DeleteObjectCommand({Bucket:bucket,Key:objectKey}));
+    if(!ready)return;
+    for(const resultSource of ['provider-video-v1','workflow-zip-v1']){
+      const objectKey=key({...task,resultSource},{allowExpired:true});
+      if(objectKey)await s3.send(new DeleteObjectCommand({Bucket:bucket,Key:objectKey}));
+    }
   }
   async function prune(){
     if(!ready)return 0;
@@ -109,7 +116,7 @@ export function createMotionResultBucket({env=process.env,client,request=axios.g
         ...(token?{ContinuationToken:token}:{})
       }));
       for(const object of page.Contents||[]){
-        const match=String(object.Key||'').match(/^motion-results\/v1\/\d{10,25}\/(\d+)\.mp4$/);
+        const match=String(object.Key||'').match(/^motion-results\/v1\/\d{10,25}\/(\d+)(?:-original)?\.mp4$/);
         if(match&&clock()>=Number(match[1])){
           await s3.send(new DeleteObjectCommand({Bucket:bucket,Key:object.Key}));
           removed++;
