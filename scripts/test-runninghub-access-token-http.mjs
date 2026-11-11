@@ -23,6 +23,9 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
   };
   const legacy='legacy-rh-api-key-fixture-delete',userId='2110000000000000001';
   const access='eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(JSON.stringify({sub:userId,exp:Date.now()/1000+3600})).toString('base64url')+'.fixture-signature';
+  const lowUserId='2110000000000000002';
+  const lowAccess='eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(JSON.stringify({sub:lowUserId,exp:Date.now()/1000+3600})).toString('base64url')+'.fixture-signature';
+  const lowBalanceFile=path.join(dir,'low-balance.json');fs.writeFileSync(lowBalanceFile,'0');
   fs.writeFileSync(path.join(dir,'accounts.enc'),encrypt({accounts:[{id:'old',key:legacy}]}));
   fs.writeFileSync(path.join(dir,'task-registry.enc'),encrypt({version:2,tasks:[
     {taskId:'2110000000000000021',accountId:'old',key:legacy,status:'success',resultUrl:'https://files.runninghub.ai/original.mp4',finishedAt:new Date().toISOString()}
@@ -34,9 +37,11 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
     import fs from 'node:fs';
     axios.request=async config=>{
       const route=new URL(config.url).pathname;
-      if(config.headers.Authorization!==${JSON.stringify('Bearer '+access)})throw Error('Unexpected fixture authentication');
+      const low=config.headers.Authorization===${JSON.stringify('Bearer '+lowAccess)};
+      if(!low&&config.headers.Authorization!==${JSON.stringify('Bearer '+access)})throw Error('Unexpected fixture authentication');
       fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify({method:config.method,route})+'\\n');
-      if(route==='/uc/getUserInfo')return {status:200,data:{code:0,data:{id:${JSON.stringify(userId)},totalCoin:'600'}}};
+      if(route==='/uc/getUserInfo')return {status:200,data:{code:0,data:{id:low?${JSON.stringify(lowUserId)}:${JSON.stringify(userId)},
+        totalCoin:low?fs.readFileSync(${JSON.stringify(lowBalanceFile)},'utf8'):'600'}}};
       if(route==='/task/list')return {status:200,data:{code:0,data:{total:0,records:config.data.taskId==='2110000000000000021'
         ?[{taskId:'2110000000000000021',taskStatus:'RUNNING'}]:[]}}};
       throw Error('Unexpected provider request: '+route);
@@ -92,6 +97,42 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
     assert.equal(response.status,200);assert.equal((await response.json()).accountId,'old');
     const restored=decrypt(fs.readFileSync(path.join(dir,'task-registry.enc'),'utf8'));
     assert.equal(restored.tasks[0].key,stored.accounts[0].key);
+    // These are real authenticated HTTP endpoints, including the immediate
+    // refresh/reload used by the Connect button. Only the provider is mocked.
+    let lowAccountId;
+    const importRoutes=['/api/runninghub/access-token','/api/accounts','/api/runninghub/web-session'];
+    for(const [index,coins]of [0,0.25,99].entries()){
+      fs.writeFileSync(lowBalanceFile,String(coins));
+      response=await post(importRoutes[index],{session:lowAccess});
+      assert.equal(response.status,200,'A valid low-balance token must be accepted');
+      const connected=await response.json();
+      assert.equal(connected.updated,index!==0);assert.equal(connected.account.status.remainCoins,coins);
+      assert.equal(connected.account.canGenerate,false,'Import does not change the existing generation rule');
+      assert.ok(!JSON.stringify(connected).includes(lowAccess));
+      if(lowAccountId)assert.equal(connected.account.id,lowAccountId,'Reconnect must update the same account');
+      lowAccountId=connected.account.id;
+      response=await fetch(base+'/api/session',{headers});
+      assert.ok((await response.json()).accounts.some(a=>a.id===lowAccountId),'Token must survive a session reload');
+      for(let check=0;check<2;check++){
+        response=await post('/api/accounts/refresh',{});assert.equal(response.status,200);
+        const refreshed=await response.json();
+        const account=refreshed.accounts.find(a=>a.id===lowAccountId);
+        assert.ok(account,'Refresh must not immediately remove a new low-balance import');
+        assert.equal(account.status.remainCoins,coins);assert.equal(account.status.currentTaskCounts,0);
+        assert.equal(refreshed.autoRemovedCount,0);assert.equal(refreshed.accounts.length,2);
+      }
+      const persisted=decrypt(fs.readFileSync(path.join(dir,'accounts.enc'),'utf8'));
+      assert.ok(persisted.accounts.find(a=>a.id===lowAccountId).lowBalanceImportAt,'Retention state must persist in the encrypted vault');
+    }
+    // Once that account reaches the pre-existing generation threshold, normal
+    // later low-balance retirement continues to work for it.
+    fs.writeFileSync(lowBalanceFile,'100');response=await post('/api/accounts/refresh',{});
+    const eligible=await response.json();assert.equal(eligible.accounts.find(a=>a.id===lowAccountId).canGenerate,true);
+    const qualified=decrypt(fs.readFileSync(path.join(dir,'accounts.enc'),'utf8'));
+    assert.equal(qualified.accounts.find(a=>a.id===lowAccountId).lowBalanceImportAt,undefined);
+    fs.writeFileSync(lowBalanceFile,'99');response=await post('/api/accounts/refresh',{});
+    const retired=await response.json();assert.equal(retired.autoRemovedCount,1);
+    assert.ok(!retired.accounts.some(a=>a.id===lowAccountId),'Existing post-eligibility retirement remains active');
     assert.ok(!fs.readFileSync(path.join(dir,'runninghub-web-sessions.enc'),'utf8').includes(access));
     const routes=fs.readFileSync(calls,'utf8').trim().split('\n').map(x=>JSON.parse(x).route);
     assert.ok(routes.every(route=>['/uc/getUserInfo','/task/list'].includes(route)),'Connecting an account must never start inference or call OpenAPI');

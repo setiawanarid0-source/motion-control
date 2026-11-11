@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {partitionAccountRefresh} from '../account-eligibility.js';
+import {canGenerateWithAccount} from '../runninghub-account-priority.js';
 
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const browser=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
@@ -34,7 +35,7 @@ const ctx={
     if(!statusByKey.has(key))throw Error('RunningHub temporarily unreachable');
     return statusByKey.get(key);
   },
-  partitionAccountRefresh,MIN_POOL_CREDITS:100,
+  partitionAccountRefresh,canGenerateWithAccount,MIN_POOL_CREDITS:100,
   loadGlobalAccounts:()=>structuredClone(live),
   saveVaultAccounts:(_deviceId,next)=>{events.push('save:'+next.map(x=>x.id).join(','));live=structuredClone(next);},
   taskRegistry:{
@@ -73,4 +74,20 @@ assert.ok(browser.includes("body:'{}'"),'Client must trigger refresh without ret
 assert.ok(!browser.includes('allowRetirement:state.historyClaimed===true'));
 assert.ok(server.includes('setInterval(()=>{void checkPoolBalancesInBackground();},2*60*1000)'),
   'Auto cleanup must continue when the VANTA browser is closed');
+// A token re-imported while an older status request was pending must not be
+// deleted, or lose its retention state, when that stale response arrives.
+for(const scenario of ['retire','qualify']){
+  events.length=0;
+  const account={id:'concurrent',key:'f'.repeat(16),...(scenario==='qualify'?{lowBalanceImportAt:'old-import'}:{})};
+  live=[account];let release;
+  ctx.accountStatus=()=>new Promise(resolve=>{release=resolve;});
+  const pending=ctx.runRefresh({headers:{},body:{}});
+  live=[{...account,lowBalanceImportAt:'new-import'}];
+  release({remainCoins:scenario==='retire'?12:100,currentTaskCounts:0});
+  const refreshed=await pending;
+  assert.equal(refreshed.autoRemovedCount,0);
+  assert.equal(live.length,1);
+  assert.equal(live[0].lowBalanceImportAt,'new-import');
+  assert.ok(!events.some(x=>x.startsWith('escrow:')),'A stale check cannot retire a newly imported token');
+}
 console.log('PASS: 0/99/12 RH accounts auto-remove (even active tasks), >=100 and unknown balances stay, escrow precedes deletion, archiving does not block.');

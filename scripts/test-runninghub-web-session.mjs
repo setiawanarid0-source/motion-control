@@ -66,13 +66,22 @@ test('connect is read-only on RunningHub, verifies balance, encrypts credentials
   assert.equal(first.key,second.key,'reconnect must not invalidate accepted task credentials');
 }));
 
-test('never stores an unverified or below-minimum account',()=>fixture(async({service,setHandler})=>{
-  setHandler(async()=>({code:0,data:{id:userId,totalCoin:'99'}}));
-  await assert.rejects(service.connect(exported),{code:'RH_WEB_LOW_BALANCE'});
-  assert.ok(!fs.existsSync(service.file));
+test('never stores an account whose balance cannot be verified',()=>fixture(async({service,setHandler})=>{
   setHandler(async()=>({code:0,data:{id:userId}}));
   await assert.rejects(service.connect(exported),{code:'RH_WEB_BALANCE_UNAVAILABLE'});
   assert.ok(!fs.existsSync(service.file));
+}));
+
+test('accepts and reconnects valid tokens at every balance without a 100 RH import threshold',()=>fixture(async({service,setHandler,calls})=>{
+  let key;
+  for(const coins of [0,0.25,12,99,100,600,1734]){
+    setHandler(async()=>({code:0,data:{id:userId,totalCoin:String(coins)}}));
+    const connected=await service.connect(exported);
+    assert.equal(connected.status.remainCoins,coins);
+    if(key)assert.equal(connected.key,key,'Balance changes must not create a different credential reference');
+    key=connected.key;
+  }
+  assert.ok(calls.every(call=>new URL(call.url).pathname==='/uc/getUserInfo'),'Import must not generate, upload or spend RH');
 }));
 
 test('expired imported access token uses refresh credentials before verifying the account',()=>fixture(async({service,calls})=>{

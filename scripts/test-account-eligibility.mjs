@@ -16,3 +16,8 @@ const checks=[
 const partition=partitionAccountRefresh(checks);
 assert.deepEqual(partition.removed.map(x=>x.account.id),['low','active-low']);
 assert.deepEqual(partition.retained.map(x=>x.account.id),['ready','offline','unknown']);
+const imported=[0,0.25,99].map((remainCoins,index)=>({
+  account:{id:'new-'+index,lowBalanceImportAt:'2026-11-11T00:00:00.000Z'},status:{remainCoins}
+}));
+assert.equal(partitionAccountRefresh(imported).removed.length,0,'New low-balance token imports must remain stored');
+assert.equal(partitionAccountRefresh(imported).retained.length,3);
