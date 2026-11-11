@@ -6,7 +6,7 @@ import {compileMotionFlyHD} from '../motionfly-hd-workflow.js';
 const read=p=>JSON.parse(fs.readFileSync(new URL('../workflows/'+p,import.meta.url),'utf8'));
 const source=fs.readFileSync(new URL('../workflows/motionfly-hd-runninghub.json',import.meta.url));
 assert.equal(createHash('sha256').update(source).digest('hex'),
-  '7710061edd478ceff89695f8f676d18dcd245ea9557a8b352d487ca05c76066f',
+  '77aaf68ba641159c1bce3cebb85e3a77e480be3a012879d311717592fcf02a30',
   'The reviewed adaptive MotionFly editor workflow must retain its validated revision');
 const editor=JSON.parse(source),motionfly=compileMotionFlyHD(editor),current=read('current-api.json');
 for(const [name,graph] of Object.entries({motionfly,current})){
@@ -38,6 +38,7 @@ assert.equal(motionfly['331'].inputs.steps,6);assert.equal(motionfly['331'].inpu
 assert.equal(motionfly['331'].inputs.sampler_name,'euler');assert.equal(motionfly['331'].inputs.scheduler,'simple');
 assert.equal(motionfly['331'].inputs.denoise,1);
 assert.deepEqual(motionfly['89'].inputs.width,['308',1]);assert.deepEqual(motionfly['89'].inputs.height,['308',2]);
+assert.equal(motionfly['89'].inputs.keep_proportion,'pad');
 assert.equal(motionfly['308'].inputs.keep_proportion,'total_pixels');
 for(const id of ['308','489']){
   assert.equal(motionfly[id].inputs.upscale_method,'nvidia_rtx_vsr');
