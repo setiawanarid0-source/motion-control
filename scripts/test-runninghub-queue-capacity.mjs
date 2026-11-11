@@ -210,6 +210,16 @@ async function runRifeReplies(replies,{accountId='auto',workflow='rife60',accoun
 }
 const refused={code:402,msg:paidMessage};
 const accepted={code:0,msg:'success',data:{taskId:'2119000000000000001',taskStatus:'RUNNING'}};
+await runRifeReplies([{code:380,msg:'WORKFLOW_NOT_EXISTS'}]);
+assert.equal(attempts,1);assert.equal(saved.stage,'error');assert.equal(registered.length,0);
+assert.equal(saved.failureCode,'RH_WEB_WORKSPACE_NOT_FOUND');assert.match(saved.error,/WORKFLOW_NOT_EXISTS/);
+ui.data=saved;vm.runInContext('displaySubmissionFailure(data);',ui);
+assert.equal(fields.get('#taskStatus').textContent,'Workflow tidak ditemukan');
+assert.doesNotMatch(fields.get('#taskFailureDetail').textContent,/belum pasti|saldo/i);
+for(const reply of [{code:0,msg:'WORKFLOW_NOT_EXISTS'},
+  {code:380,msg:'WORKFLOW_NOT_EXISTS',taskId:'2119000000000000001'}]){
+  await runRifeReplies([reply]);assert.equal(attempts,1);assert.equal(saved.stage,'uncertain');
+}
 const rerouted=await runRifeReplies([refused,accepted]);
 assert.equal(attempts,2);assert.equal(saved.stage,'accepted');
 assert.equal(registered.length,1,'Exactly one accepted task is registered');
