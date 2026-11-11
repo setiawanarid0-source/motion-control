@@ -15,6 +15,7 @@ const jwt=(sub=userId,exp=time/1000+3600)=>'eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(J
 const exported={site:'runninghub.ai',access:jwt(),refresh:'fixture-refresh-token',identify:'fixture_identify',comfyAuth:'fixture-comfy-token'};
 async function fixture(run){
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-rh-web-')),calls=[],secret=crypto.randomBytes(32);
+  let clock=time;
   const encrypt=value=>{
     const iv=crypto.randomBytes(12),c=crypto.createCipheriv('aes-256-gcm',secret,iv);
     const content=Buffer.concat([c.update(JSON.stringify(value)),c.final()]);
@@ -43,8 +44,9 @@ async function fixture(run){
   const http={request:async config=>{
     calls.push(config);return {status:200,data:await handler(config)};
   }};
-  const service=createRunningHubWebSession({dir,encrypt,decrypt,http,now:()=>time});
-  try{await run({dir,calls,service,encrypt,decrypt,setHandler:fn=>{handler=fn;}});}
+  const reopen=()=>createRunningHubWebSession({dir,encrypt,decrypt,http,now:()=>clock});
+  const service=reopen();
+  try{await run({dir,calls,service,encrypt,decrypt,reopen,advance:ms=>{clock+=ms;},setHandler:fn=>{handler=fn;}});}
   finally{fs.rmSync(dir,{recursive:true,force:true});}
 }
 
@@ -490,4 +492,68 @@ test('parallel manual refreshes share one grant and a cross-account renewal neve
   });
   await assert.rejects(service.status(key,{renewTokens:true}),{code:'RH_WEB_IDENTITY_MISMATCH'});
   assert.equal(service.sessionAudit(key).accessExpiresAt,expiry);
+}));
+
+test('backend renews hourly without browser requests and persists separate check and token timestamps across restarts',()=>fixture(async({service,calls,advance,reopen,dir})=>{
+  const {key}=await service.connect({...exported,access:jwt(userId,time/1000+30*86400)});
+  await service.status(key,{automatic:true});
+  assert.equal(service.sessionAudit(key).lastAutomaticCheckAt,new Date(time).toISOString());
+  assert.equal(service.sessionAudit(key).lastRenewedAt,null,'A balance check must not claim that a token was renewed');
+  advance(60*60*1000);
+  await service.status(key,{automatic:true});
+  const audit=service.sessionAudit(key),renewedAt=new Date(time+3600000).toISOString();
+  assert.equal(audit.lastRenewedAt,renewedAt);assert.equal(audit.lastAutomaticRenewedAt,renewedAt);
+  assert.equal(audit.lastRenewal.source,'automatic');
+  const grants=()=>calls.filter(c=>new URL(c.url).pathname==='/uc/token/refresh').length;
+  assert.equal(grants(),1);
+  advance(2*60*1000);await service.status(key,{automatic:true});
+  assert.equal(grants(),1,'Two-minute checks must not rotate the token on every tick');
+  const before=calls.length,restarted=reopen(),restored=restarted.sessionAudit(key);
+  assert.equal(restored.lastRenewedAt,renewedAt);
+  assert.equal(restored.lastAutomaticCheckAt,new Date(time+3720000).toISOString());
+  assert.equal(restarted.cachedStatus(key).currentTaskCounts,1);
+  assert.equal(restarted.cachedStatus(key).stale,false);
+  advance(6*60*1000);assert.equal(restarted.cachedStatus(key).stale,true);
+  assert.equal(calls.length,before,'Reading persisted receipts must not contact RunningHub');
+  assert.ok(!fs.readFileSync(service.file,'utf8').includes(exported.refresh));
+  assert.ok(!JSON.stringify({audit:restored,cached:restarted.cachedStatus(key)}).includes('fixture-refreshed-token'));
+}));
+
+test('a rejected account cannot stop healthy backend refreshes or advance its last successful token timestamp',()=>fixture(async({service,setHandler,advance})=>{
+  const other='2110000000000000002';let rejectedGrants=0,healthyGrants=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'OLD'}};
+    if(route==='/uc/getUserInfo'){
+      const sub=JSON.parse(Buffer.from(config.headers.Authorization.split('.')[1],'base64url')).sub;
+      return {code:0,data:{id:sub,totalCoin:500}};
+    }
+    throw Error('Unexpected setup request');
+  });
+  const failed=await service.connect({...exported,access:jwt(userId,time/1000+30*86400),refresh:'fixture-bad-refresh'});
+  const healthy=await service.connect({...exported,access:jwt(other,time/1000+30*86400),refresh:'fixture-good-refresh'});
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/token/refresh'){
+      if(config.headers.Authorization==='Bearer fixture-bad-refresh'){rejectedGrants++;return {code:412};}
+      healthyGrants++;return {code:0,data:{access_token:jwt(other,time/1000+60*86400),refresh_token:'fixture-good-refresh'}};
+    }
+    const sub=JSON.parse(Buffer.from(config.headers.Authorization.split('.')[1],'base64url')).sub;
+    if(sub===userId)return {code:412};
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:other,totalCoin:500}};
+    if(route==='/task/list')return {code:0,data:{total:0}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'OLD'}};
+    throw Error('Unexpected read');
+  });
+  advance(3600000);
+  const results=await Promise.allSettled([service.status(failed.key,{automatic:true}),service.status(healthy.key,{automatic:true})]);
+  assert.equal(results[0].status,'rejected');assert.equal(results[1].status,'fulfilled');
+  assert.equal(rejectedGrants,1);assert.equal(healthyGrants,1);
+  assert.equal(service.sessionAudit(failed.key).lastRenewedAt,null);
+  assert.equal(service.sessionAudit(failed.key).reconnectRequired,true);
+  assert.equal(service.cachedStatus(failed.key).errorCode,'RH_WEB_REFRESH_REJECTED');
+  advance(120000);
+  await assert.rejects(service.status(failed.key,{automatic:true}),{code:'RH_WEB_REFRESH_REJECTED'});
+  assert.equal(rejectedGrants,1,'An explicitly rejected grant must wait for reconnection or manual Refresh');
+  assert.equal(service.sessionAudit(failed.key).lastAutomaticCheckAt,new Date(time+3720000).toISOString());
 }));

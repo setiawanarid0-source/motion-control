@@ -1,5 +1,5 @@
 const state = {
-  view: 'create', workflow: 'motionflyHD', mode: 'standard', session: null, accounts: [],
+  view: 'create', workflow: 'motionflyHD', mode: 'standard', session: null, accounts: [],poolRefresh:null,poolReading:false,
   image: null, video: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false, historyFilter: 'all',
   registeredTaskIds: new Set(), submission:null, submissionTimer:null, submissionPolling:false,
@@ -112,6 +112,7 @@ async function syncServerHistory(){
 async function loadSession(){
   state.session=await api('/api/session');
   state.accounts=state.session.accounts||[];
+  state.poolRefresh=state.session.poolRefresh||null;renderPoolRefresh();
   renderAccountSelect();renderAccounts();updatePoolSummary();
   // Balance-based removal is independent from browser History recovery.
   // Retired account credentials remain encrypted on the server so legacy tasks
@@ -149,9 +150,12 @@ function renderAccountSelect(){ const sel=$('#accountSelect'); const current=sel
 }).join(''); sel.value=[...sel.options].some(o=>o.value===current&&!o.disabled)?current:'auto'; }
 
 async function refreshAccounts(event){
+  const manual=event?.type==='click';
+  if(!manual&&state.poolReading)return;
+  if(!manual)state.poolReading=true;
   const refreshBtn=$('#refreshAccounts');
-  if(refreshBtn){ refreshBtn.disabled=true; refreshBtn.classList.add('refreshing'); }
-  if(!state.accounts.length){
+  if(manual&&refreshBtn){ refreshBtn.disabled=true; refreshBtn.classList.add('refreshing'); }
+  if(manual&&!state.accounts.length){
     state.accounts=[];
     renderAccounts();
     updatePoolSummary();
@@ -159,9 +163,9 @@ async function refreshAccounts(event){
     return;
   }
   try{
-    const data=await api('/api/accounts/refresh',{method:'POST',
-      body:'{}'});
+    const data=manual?await api('/api/accounts/refresh',{method:'POST',body:'{}'}):await api('/api/accounts/status');
     state.accounts=data.accounts||[];
+    state.poolRefresh=data.poolRefresh||state.poolRefresh;renderPoolRefresh();
     renderAccounts();
     updatePoolSummary();
     renderAccountSelect();
@@ -172,10 +176,27 @@ async function refreshAccounts(event){
     }
     if(data.autoRemovedCount>0)toast(`${data.autoRemovedCount} akun dikeluarkan dari pilihan generasi. Task lama tetap dipantau.`);
   }catch(e){
-    toast(e.message,true);
+    if(manual)toast(e.message,true);
+    else console.warn('Pool status synchronization pending',e.message);
   }finally{
-    if(refreshBtn){ refreshBtn.disabled=false; refreshBtn.classList.remove('refreshing'); }
+    if(!manual)state.poolReading=false;
+    if(manual&&refreshBtn){ refreshBtn.disabled=false; refreshBtn.classList.remove('refreshing'); }
   }
+}
+function renderPoolRefresh(){
+  const data=state.poolRefresh||{};
+  const timestamp=value=>{
+    const date=new Date(value||'');
+    return Number.isFinite(date.getTime())?date.toLocaleString('id-ID',{
+      day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Jakarta'})+' WIB':null;
+  };
+  const checked=$('#poolLastChecked'),renewed=$('#poolLastTokenRefresh'),notice=$('#poolRefreshNotice');
+  if(checked)checked.textContent=timestamp(data.lastAutomaticCheckAt)?
+    'Pemeriksaan otomatis: '+timestamp(data.lastAutomaticCheckAt):'Menunggu pemeriksaan otomatis';
+  if(renewed)renewed.textContent=timestamp(data.lastTokenRefreshAt)?
+    'Token terakhir diperbarui: '+timestamp(data.lastTokenRefreshAt):'Token belum diperbarui';
+  if(notice){notice.textContent=data.reconnectRequired?data.reconnectRequired+' akun perlu dihubungkan ulang':'';
+    notice.hidden=!data.reconnectRequired;}
 }
 function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
 function renderAccounts(){
@@ -186,6 +207,7 @@ function renderAccounts(){
   const renewal=s=>{
     if(s.error)return '';
     const value=s.sessionRenewal;
+    if(value?.refreshAvailable===false)return 'Access token masih aktif; refresh token belum tersimpan untuk pembaruan otomatis.';
     if(value?.state==='failed')return value.code==='RH_WEB_REFRESH_MISSING'?
       'Access token masih aktif; refresh token belum tersimpan untuk pembaruan otomatis.':
       value.code==='RH_WEB_REFRESH_REJECTED'?'Access token masih aktif; refresh token ditolak RunningHub.':
@@ -1066,7 +1088,7 @@ function startHistoryMonitor(){
     }
     renderLiveTaskDuration();
   },1000);
-  setInterval(syncServerHistory,30000);
+  setInterval(()=>{void syncServerHistory();if(!document.hidden)void refreshAccounts();},30000);
   pollHistoryTasks();
   inspectRecentFailedTasks();
 }

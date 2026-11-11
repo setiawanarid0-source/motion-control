@@ -321,6 +321,23 @@ a:focus-visible,button:focus-visible{outline-offset:3px}
 #view-accounts #refreshAccounts.refreshing span[aria-hidden="true"]{
   animation:refreshSpin .8s linear infinite;
 }
+#view-accounts .account-pool-title>.pool-refresh-controls{
+  display:flex;align-items:flex-start;gap:12px;flex:0 1 auto;max-width:360px;
+}
+.pool-refresh-status{display:grid;gap:4px;min-width:0;text-align:right;
+  font-size:11px;line-height:1.5;color:var(--studio-muted);font-variant-numeric:tabular-nums}
+.pool-refresh-status strong{font-size:12px;font-weight:650;color:var(--studio-focus)}
+.pool-refresh-status .pool-refresh-notice{color:#edb895}
+.pool-refresh-status [hidden]{display:none}
+@media(max-width:780px){
+  #view-accounts .account-pool-title{flex-wrap:wrap}
+  #view-accounts .account-pool-title>div:first-child{flex:1 1 100%}
+  #view-accounts .account-pool-title>.pool-refresh-controls{
+    flex:1 1 100%;max-width:none;padding:12px;border:1px solid var(--studio-border);
+    border-radius:14px;background:var(--studio-surface);
+  }
+  .pool-refresh-status{flex:1;text-align:left;font-size:12px}
+}
 #view-history .history-duration{
   display:block;
   margin-top:9px;

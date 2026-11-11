@@ -40,7 +40,7 @@ import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionCon
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import * as akatzV3 from './h3-akatz-v3-motion.js';
 import {installAkatzEditorDownload} from './h3-runninghub-export.js';
-import {createRunningHubWebSession,isRunningHubWebKey} from './runninghub-web-session.js';
+import {createRunningHubWebSession,isRunningHubWebKey,RH_AUTO_RENEW_INTERVAL_MS} from './runninghub-web-session.js';
 import {migrateRunningHubAccessTokens} from './runninghub-token-migration.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -449,8 +449,19 @@ function publicAccount(account, status = null) {
     lastUsedAt: account.lastUsedAt || null,
     connectionMode: 'access-token',
     status,
-    canGenerate: canGenerateWithAccount(status, MIN_POOL_CREDITS),
+    canGenerate: !status?.stale&&canGenerateWithAccount(status, MIN_POOL_CREDITS),
   };
+}
+function poolSnapshot(accounts=loadGlobalAccounts()){
+  const metadata=accounts.map(account=>{try{return runningHubWeb.sessionAudit(account.key);}catch{return {};}});
+  const latest=field=>metadata.map(item=>item[field]).filter(value=>Number.isFinite(Date.parse(value||''))).sort().at(-1)||null;
+  return {accounts:accounts.map(account=>{
+    let status=null;try{status=runningHubWeb.cachedStatus(account.key);}catch{}
+    return publicAccount(account,status);
+  }),poolRefresh:{automatic:true,checkIntervalSeconds:120,renewIntervalSeconds:RH_AUTO_RENEW_INTERVAL_MS/1000,
+    lastCheckedAt:latest('lastCheckedAt'),lastAutomaticCheckAt:latest('lastAutomaticCheckAt'),
+    lastTokenRefreshAt:latest('lastRenewedAt'),lastAutomaticTokenRefreshAt:latest('lastAutomaticRenewedAt'),
+    reconnectRequired:metadata.filter(item=>item.reconnectRequired).length}};
 }
 
 async function rhJson(pathname, apiKey, body, timeout = 30000) {
@@ -683,7 +694,7 @@ app.get('/api/session', async (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);
   if (!deviceId) return res.status(400).json({ error: 'Device session tidak tersedia. Reload halaman.' });
   res.json({
-    accounts: accounts.map(a => publicAccount(a)),
+    ...poolSnapshot(accounts),
     workflowsReady: true,
     storage: 'persistent',
   });
@@ -710,7 +721,8 @@ async function connectRunningHubAccount(req,res){
     }
     delete account.lowBalanceImportAt; // Web funding is not limited to old RH coins.
     saveVaultAccounts(deviceId,accounts);
-    res.json({account:publicAccount(account,connected.status),updated});
+    const status=await accountStatus(connected.key).catch(()=>connected.status);
+    res.json({account:publicAccount(account,status),updated});
   }catch(error){res.status(400).json({error:error.message||'Access token RunningHub belum dapat diverifikasi.'});}
 }
 app.post('/api/accounts',connectRunningHubAccount);
@@ -735,11 +747,11 @@ app.delete('/api/accounts/:id', async (req, res) => {
   }catch(error){res.status(503).json({error:String(error.message||'Penghapusan ditunda: penyimpanan task belum siap.').slice(0,220)});}
 });
 
-async function refreshPool(req,{renewTokens=false}={}){
+async function refreshPool(req,{renewTokens=false,automatic=false}={}){
   const {deviceId,accounts}=getPersistentAccounts(req);
   const checked=await Promise.all(accounts.map(async account=>{
-    try{return {account,status:await accountStatus(account.key,{renewTokens})};}
-    catch(error){return {account,status:{error:error.message,errorCode:error.code||null,
+    try{return {account,status:await accountStatus(account.key,{renewTokens,automatic})};}
+    catch(error){return {account,status:error.poolStatus||{error:error.message,errorCode:error.code||null,
       providerCode:error.providerCode??null,sessionRenewal:{state:'failed',code:error.code||null}}};}
   }));
   // Access-token accounts may hold points or web benefits instead of RH coins.
@@ -779,11 +791,15 @@ async function refreshPool(req,{renewTokens=false}={}){
   return {tokenRenewal:renewTokens?{requested:checked.length,renewed,failed}:null,accounts:remaining.map(a=>{
     const status=checked.find(x=>x.account.id===a.id)?.status||null;
     return publicAccount(a,status);
-  }),autoRemovedCount,minimumCredits:MIN_POOL_CREDITS};
+  }),poolRefresh:poolSnapshot(remaining).poolRefresh,autoRemovedCount,minimumCredits:MIN_POOL_CREDITS};
 }
 app.post('/api/accounts/refresh',async(req,res)=>{
   try{res.json(await refreshPool(req,{renewTokens:true}));}
   catch(error){res.status(502).json({error:'Tidak dapat memperbarui Account Pool saat ini.'});}
+});
+app.get('/api/accounts/status',(_req,res)=>{
+  res.setHeader('Cache-Control','private, no-store');
+  res.json(poolSnapshot());
 });
 
 // Read provider balance fields without a create probe or Account Pool mutation.
@@ -1485,12 +1501,12 @@ setTimeout(()=>monitorRegisteredTasks(),1200).unref();
 let scheduledPoolCheck=null;
 function checkPoolBalancesInBackground(){
   if(scheduledPoolCheck)return scheduledPoolCheck;
-  scheduledPoolCheck=refreshPool({headers:{},body:{}}).catch(error=>
+  scheduledPoolCheck=refreshPool({headers:{},body:{}},{automatic:true}).catch(error=>
     console.warn('Background account balance refresh deferred',String(error.message||error).slice(0,130))
   ).finally(()=>{scheduledPoolCheck=null;});
   return scheduledPoolCheck;
 }
-setTimeout(()=>{void checkPoolBalancesInBackground();},15000).unref();
+setTimeout(()=>{void checkPoolBalancesInBackground();},1500).unref();
 setInterval(()=>{void checkPoolBalancesInBackground();},2*60*1000).unref();
 if(/^\d{10,25}$/.test(process.env.VANTA_REFERENCE_AUDIT_TASK||'')){
   console.log('Reference availability audit',process.env.VANTA_REFERENCE_AUDIT_TASK,

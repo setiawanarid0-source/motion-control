@@ -19,6 +19,8 @@ jobs:
         run: npm install --no-save --no-audit --no-fund playwright-core@1.56.1
       - name: Test Agent layout in real Chrome at mobile and desktop widths
         run: node scripts/test-agent-mobile-browser.mjs
+      - name: Test Account Pool refresh status at mobile and desktop widths
+        run: node scripts/test-pool-refresh-browser.mjs
       - name: Attach before-release responsive screenshots
         if: always()
         uses: actions/upload-artifact@v4

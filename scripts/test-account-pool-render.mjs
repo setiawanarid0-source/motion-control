@@ -80,11 +80,15 @@ assert.ok(accountList.innerHTML.includes('Belum ada akun'));
 const refreshStart=source.indexOf('async function refreshAccounts(');
 const refreshEnd=source.indexOf('function updatePoolSummary(',refreshStart);
 const feedback=[],refreshButton={classList:{add(){},remove(){}}};let requests=0,failed=0;
-const refreshContext={state:{accounts:[{id:'fixture'}]},$:()=>refreshButton,
+const labels={poolLastChecked:{},poolLastTokenRefresh:{},poolRefreshNotice:{}};
+const refreshContext={state:{accounts:[{id:'fixture'}]},$:selector=>selector==='#refreshAccounts'?refreshButton:labels[selector.slice(1)]||null,
   renderAccounts(){},updatePoolSummary(){},renderAccountSelect(){},
   api:async(route,options)=>{
-    requests++;assert.equal(route,'/api/accounts/refresh');assert.equal(options.method,'POST');
-    return {accounts:[{id:'fixture'}],tokenRenewal:{requested:1,renewed:failed?0:1,failed}};
+    requests++;
+    if(options){assert.equal(route,'/api/accounts/refresh');assert.equal(options.method,'POST');}
+    else assert.equal(route,'/api/accounts/status','Background UI synchronization only reads backend receipts');
+    return {accounts:[{id:'fixture'}],tokenRenewal:options?{requested:1,renewed:failed?0:1,failed}:null,
+      poolRefresh:{lastAutomaticCheckAt:'2026-11-11T11:00:00Z',lastTokenRefreshAt:'2026-11-11T10:00:00Z',reconnectRequired:failed}};
   },toast:(message,error)=>feedback.push({message,error})};
 vm.runInNewContext(source.slice(refreshStart,refreshEnd)+'\nthis.refresh=refreshAccounts;',refreshContext);
 await refreshContext.refresh({type:'click'});
@@ -94,4 +98,7 @@ failed=1;await refreshContext.refresh({type:'click'});
 assert.equal(feedback[1].error,true);assert.match(feedback[1].message,/1 akun belum bisa diperbarui/);
 await refreshContext.refresh();assert.equal(feedback.length,2,'Background loading must not show a click completion toast');
 assert.equal(requests,3);
+assert.match(labels.poolLastChecked.textContent,/18[.:]00 WIB/);
+assert.match(labels.poolLastTokenRefresh.textContent,/17[.:]00 WIB/);
+assert.equal(labels.poolRefreshNotice.hidden,false);
 console.log('PASS: Account Pool with 0/2 accounts renders, each Remove button binds and works.');
