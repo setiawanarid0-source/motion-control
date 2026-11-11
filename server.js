@@ -26,7 +26,8 @@ import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-vide
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {H3_DEFAULT_PROFILE,prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
-import {selectFinalVideoOutput} from './runninghub-output.js';
+import {selectFinalVideoOutput,selectOriginalVideoArchive,withOriginalVideoArchive} from './runninghub-output.js';
+import {createOriginalVideoDelivery,ORIGINAL_VIDEO_SOURCE} from './original-video-delivery.js';
 import {compileMotionFlyHD,MOTIONFLY_HD_NAME} from './motionfly-hd-workflow.js';
 import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
 import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h3-safe-benchmark.js';
@@ -142,6 +143,12 @@ const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
 const runningHubWeb=createRunningHubWebSession({dir:DATA_DIR,encrypt,decrypt});
 const motionResults=createMotionResultArchive({dir:path.join(DATA_DIR,'motion-results')});
 const bucketResults=createMotionResultBucket();
+const originalDelivery=createOriginalVideoDelivery({registry:taskRegistry,bucket:bucketResults,archive:motionResults,
+  outputs:async task=>{
+    const data=await rhJson('/task/openapi/outputs',task.key,{apiKey:task.key,taskId:task.taskId},30000);
+    if(Number(data?.code)!==0||!Array.isArray(data.data))throw Error('Keluaran RunningHub belum tersedia.');
+    return data.data;
+  }});
 const privateMedia=createPrivateMediaBucket();
 configureReferenceMedia(privateMedia);
 let mediaStorageReady=false;
@@ -157,8 +164,10 @@ function scheduleResultMirror(task){
   resultMirrorAttempts.set(task.taskId,Date.now());
   // Railway bucket is independent of the 256MB account vault and of
   // individual RunningHub accounts; no 128MB video restriction.
-  void (bucketResults.ready?bucketResults.mirror(task):
-    motionResults.mirror(task.taskId,task.resultUrl)).catch(err=>
+  void originalDelivery.ensure(task.taskId).then(original=>{
+    if(original)return;
+    return bucketResults.ready?bucketResults.mirror(task):motionResults.mirror(task.taskId,task.resultUrl);
+  }).catch(err=>
     console.warn('VANTA result archive deferred',String(task.taskId),
       String(err.message||err).slice(0,130)));
 }
@@ -216,8 +225,11 @@ function writeTaskState(taskId,result){
   if(result.state==='success'){
     const outputs=Array.isArray(result.outputs)?result.outputs:[];
     const video=selectFinalVideoOutput(outputs);
+    const zip=selectOriginalVideoArchive(outputs);
     const mask=outputs.find(x=>String(x.nodeId)==='394');
-    patch.resultUrl=video?.fileUrl||null;
+    patch.resultUrl=video?.fileUrl||previous?.resultUrl||(zip&&previous?.accountId?
+      '/api/tasks/'+encodeURIComponent(taskId)+'/preview?accountId='+encodeURIComponent(previous.accountId):null);
+    if(zip){patch.resultArchiveUrl=zip.fileUrl;patch.resultArchiveExpected=true;}
     patch.referenceMaskUrl=mask?.fileUrl||null;
     patch.cameraQA=result.cameraQA||null;
     patch.finishedAt=previous?.finishedAt||now;
@@ -269,7 +281,7 @@ async function runningHubTaskState(taskId,account,accountId){
     // RunningHub generates native 40 FPS frames within Current / R4 Full workflows.
     // The website never runs an additional post-generation FPS conversion.
     const video=selectFinalVideoOutput(outputs);
-    if(video){
+    if(video&&!selectOriginalVideoArchive(outputs)){
       const qa=await cameraStatus(taskId,video.fileUrl,accountId);
       if(qa)return {...qa,rawCode:code,providerRuntimeSeconds:providerExecutionSeconds(data)};
     }
@@ -492,6 +504,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
       h3Source.appearanceLoraFile=await h3CharacterModel.ensure(apiKey);
     selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
   }
+  selectedGraph=withOriginalVideoArchive(selectedGraph);
   const payload = {
     apiKey,
     workflowId,
@@ -560,7 +573,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     const tips = data?.data?.promptTips;
     throw new Error(data?.msg || tips || 'RunningHub gagal membuat task.');
   }
-  return { ...data.data, submittedAt };
+  return { ...data.data, submittedAt, resultArchiveExpected:true };
 }
 
 const upload = multer({
@@ -879,6 +892,7 @@ async function handleGeneration(req,res){
           taskRegistry.add({taskId:String(task.taskId),accountId:account.id,
             accountName:account.name,key:account.key,workflow:workflowMeta[workflowKey].name,
             outputKind:workflowMeta[workflowKey].outputKind||'video',mode,
+            resultArchiveExpected:task.resultArchiveExpected,
             video:videoFile.originalname,submittedAt:task.submittedAt,
             status:task.taskStatus==='RUNNING'?'running':'queued',
             inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):null});
@@ -1079,7 +1093,11 @@ async function resolveTaskVideoUrl(account, taskId) {
     err.statusCode = 409;
     throw err;
   }
-  const output = selectFinalVideoOutput(data.data)||data.data[0];
+  if(selectOriginalVideoArchive(data.data)){
+    const err=new Error('Pulihkan task ke History untuk mengambil MP4 asli dari ZIP.');
+    err.statusCode=409;throw err;
+  }
+  const output = selectFinalVideoOutput(data.data);
   const fileUrl = String(output?.fileUrl || '');
   if (!/^https?:\/\//i.test(fileUrl)) {
     const err = new Error('URL hasil video tidak valid.');
@@ -1117,7 +1135,13 @@ app.get('/api/tasks/:taskId/audit',async(req,res)=>{
   if(!/^\d{10,25}$/.test(taskId)||!account||!isRunningHubWebKey(account.key))
     return res.status(404).json({error:'Task tidak ditemukan.'});
   res.setHeader('Cache-Control','private, no-store');
-  try{res.json(await runningHubWeb.inspectTask(account.key,taskId));}
+  try{
+    const report=await runningHubWeb.inspectTask(account.key,taskId);
+    const task=taskRegistry.get(taskId);
+    report.delivery=req.query.verifyDelivery==='1'?await originalDelivery.verify(taskId):{
+      source:task.resultSource||null,bytes:task.resultOriginalBytes??null,sha256:task.resultOriginalSHA256||null};
+    res.json(report);
+  }
   catch{res.status(502).json({error:'Detail status RunningHub belum dapat dibaca.'});}
 });
 // Recover existing browser History into encrypted server registry BEFORE Account Pool cleanup.
@@ -1257,7 +1281,15 @@ app.get('/api/tasks/:taskId/preview', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
+  try{await originalDelivery.ensure(req.params.taskId);}
+  catch{return res.status(502).json({error:'Video asli dari ZIP belum siap. Muat ulang untuk mencoba kembali.'});}
   if(await streamBucketVideo(req,res))return;
+  const originalTask=taskRegistry.get(req.params.taskId);
+  if(originalTask?.resultSource===ORIGINAL_VIDEO_SOURCE){
+    const file=motionResults.readOriginal(originalTask);
+    if(!file)return res.status(503).json({error:'Arsip video asli sementara tidak tersedia.'});
+    res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(file);
+  }
   const archived=motionResults.read(req.params.taskId);
   if(archived){res.setHeader('Cache-Control','private, no-store');res.type('video/mp4');return res.sendFile(archived);}
   const final40=readLegacyFinal40(req.params.taskId);
@@ -1301,7 +1333,15 @@ app.get('/api/tasks/:taskId/download', async (req, res) => {
   const accountId = String(req.query?.accountId || '');
   const account = taskAccount(req,req.params.taskId,accountId);
   if (!account) return res.status(404).json({ error: 'Task tidak tersedia untuk akun ini.' });
+  try{await originalDelivery.ensure(req.params.taskId);}
+  catch{return res.status(502).json({error:'Video asli dari ZIP belum siap. Muat ulang untuk mencoba kembali.'});}
   if(await streamBucketVideo(req,res,{download:true}))return;
+  const originalTask=taskRegistry.get(req.params.taskId);
+  if(originalTask?.resultSource===ORIGINAL_VIDEO_SOURCE){
+    const file=motionResults.readOriginal(originalTask);
+    if(!file)return res.status(503).json({error:'Arsip video asli sementara tidak tersedia.'});
+    res.setHeader('Cache-Control','private, no-store');return res.download(file,'motion-'+req.params.taskId+'.mp4');
+  }
   const archived=motionResults.read(req.params.taskId);
   if(archived)return res.download(archived,'motion-'+req.params.taskId+'.mp4');
   const final40=readLegacyFinal40(req.params.taskId);
@@ -1421,7 +1461,8 @@ setInterval(()=>motionResults.prune().catch(e=>console.warn('Result archive clea
 // Opportunistic, low-volume restoration for completed jobs from before this fix.
 setInterval(()=>{
   const candidates=taskRegistry.publicList().filter(t=>t.status==='success'&&t.resultUrl&&
-    !motionResults.read(t.taskId)).slice(0,2);
+    Date.now()-Date.parse(t.finishedAt||'')<MOTION_VIDEO_RETENTION_MS&&
+    Date.now()-(resultMirrorAttempts.get(t.taskId)||0)>=15*60*1000).slice(0,2);
   for(const task of candidates)scheduleResultMirror(task);
   for(const [id,at]of resultMirrorAttempts)if(Date.now()-at>60*60*1000)resultMirrorAttempts.delete(id);
 },45000).unref();

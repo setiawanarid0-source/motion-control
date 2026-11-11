@@ -28,6 +28,26 @@ export function createMotionResultArchive({dir,request=axios.get,clock=()=>Date.
   if(!dir)throw Error('Result archive directory required');
   const pending=new Map();
   const filename=id=>TASK_ID.test(String(id||''))?path.join(dir,String(id)+'.mp4'):null;
+  const originalFilename=id=>TASK_ID.test(String(id||''))?path.join(dir,String(id)+'-original.mp4'):null;
+  function readOriginal(task){
+    const file=originalFilename(task?.taskId),finished=Date.parse(task?.finishedAt||'');
+    if(!file||!Number.isFinite(finished)||clock()>=finished+ttl)return null;
+    try{const st=fs.statSync(file);return st.isFile()&&st.size>1024?file:null;}catch{return null;}
+  }
+  async function storeOriginal(task,source){
+    const dest=originalFilename(task?.taskId),finished=Date.parse(task?.finishedAt||'');
+    if(!dest||!Number.isFinite(finished)||clock()>=finished+ttl)throw Error('Original video has expired');
+    await fs.promises.mkdir(dir,{recursive:true,mode:0o700});
+    const size=(await fs.promises.stat(source)).size,space=fs.statfsSync(dir);
+    if(Number(space.bavail)*Number(space.bsize)-RESERVED_FREE_BYTES<size)
+      throw Error('Ruang arsip VANTA tidak cukup untuk video asli.');
+    const tmp=dest+'.tmp-'+process.pid+'-'+clock();
+    try{
+      await fs.promises.copyFile(source,tmp,fs.constants.COPYFILE_EXCL);
+      await fs.promises.utimes(tmp,new Date(finished),new Date(finished));
+      await fs.promises.rename(tmp,dest);return dest;
+    }finally{await fs.promises.rm(tmp,{force:true});}
+  }
   function read(id){
     const file=filename(id);
     if(!file)return null;
@@ -85,7 +105,7 @@ export function createMotionResultArchive({dir,request=axios.get,clock=()=>Date.
   }
   async function prune(){
     try{for(const name of await fs.promises.readdir(dir)){
-      if(!/^\d{10,25}\.mp4$/.test(name))continue;
+      if(!/^\d{10,25}(?:-original)?\.mp4$/.test(name))continue;
       const file=path.join(dir,name);
       try{
         const st=await fs.promises.stat(file);
@@ -95,6 +115,6 @@ export function createMotionResultArchive({dir,request=axios.get,clock=()=>Date.
   }
   // Removing a Pool account MUST NOT invoke this method. Only an explicit
   // History removal or independent expiry may delete archived media.
-  async function remove(id){const file=filename(id);if(file)await fs.promises.rm(file,{force:true});}
-  return {read,mirror,prune,remove,pending,dir};
+  async function remove(id){for(const file of [filename(id),originalFilename(id)])if(file)await fs.promises.rm(file,{force:true});}
+  return {read,mirror,readOriginal,storeOriginal,prune,remove,pending,dir};
 }

@@ -1,3 +1,4 @@
+import {withOriginalVideoArchive} from '../runninghub-output.js';
 import {isRunningHubWebKey} from '../runninghub-web-session.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -7,7 +8,7 @@ import {runningHubInstanceType} from '../runninghub-instance.js';
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
 const file='api-lora-usa/'+'a'.repeat(32)+'.safetensors';let payload;const provisioned=[];
-const context={isRunningHubWebKey,workflowGraphs:{minimaxH3:{revision:H3_REVISION}},h3GraphForInputs,runningHubInstanceType,
+const context={withOriginalVideoArchive,isRunningHubWebKey,workflowGraphs:{minimaxH3:{revision:H3_REVISION}},h3GraphForInputs,runningHubInstanceType,
   h3AppearanceModel:{ensure:async()=>{provisioned.push('ffp');return file;}},
   h3CharacterModel:{ensure:async()=>{provisioned.push('character');return file;}},
   uploadToRunningHub:async(key,f)=>'api/'+f.originalname,

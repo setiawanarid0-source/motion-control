@@ -18,6 +18,8 @@ const publicEntry=t=>({
   failureV2CheckedAt:t.failureV2CheckedAt||null,
   inputDiagnostics:t.inputDiagnostics||null,
   resultUrl:t.resultUrl||null,referenceMaskUrl:t.referenceMaskUrl||null,
+  resultSource:t.resultSource||null,resultOriginalSHA256:t.resultOriginalSHA256||null,
+  resultOriginalBytes:t.resultOriginalBytes??null,
   error:t.error||null,cameraQA:t.cameraQA||null
 });
 export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
@@ -76,6 +78,7 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
       mode:task.mode||'lite',video:task.video||'',submittedAt,
       status:task.status||'queued',finishedAt:null,lastCheckedAt:null,
       resultUrl:null,referenceMaskUrl:null,error:null,cameraQA:null,
+      resultArchiveExpected:task.resultArchiveExpected===true,
       statusDetail:null,providerCode:null,deliveryNote:null,
       providerRuntimeSeconds:null,providerTimingCheckedAt:null,inputDiagnostics:task.inputDiagnostics||null
     };
@@ -101,7 +104,8 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     if(DONE.has(t.status)&&!DONE.has(patch.status))return publicEntry(t);
     const permitted=['status','lastCheckedAt','resultUrl','referenceMaskUrl','error','cameraQA','finishedAt',
       'statusDetail','providerCode','deliveryNote','providerRuntimeSeconds','providerTimingCheckedAt',
-      'failureAuditCheckedAt','failureCategory','failureV2CheckedAt'];
+      'failureAuditCheckedAt','failureCategory','failureV2CheckedAt',
+      'resultArchiveExpected','resultArchiveUrl','resultSource','resultOriginalSHA256','resultOriginalBytes'];
     for(const key of permitted)if(Object.hasOwn(patch,key))t[key]=patch[key];
     if(DONE.has(t.status)&&!t.finishedAt)t.finishedAt=new Date(now()).toISOString();
     if(t.status==='success')t.error=null;

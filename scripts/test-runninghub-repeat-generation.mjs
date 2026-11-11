@@ -15,7 +15,7 @@ function section(start,end){
 const actualUpdate=section('function updateGenerate(){','function workflowName(){');
 const actualGenerate=section('async function generate(){','function showTask(data){');
 const actualAccept=section('function completedSubmission(data){','async function checkSubmission(){');
-const actualPoll=section('async function pollTask(){','function selectTaskOutputs(outputs,kind){');
+const actualPoll=section('async function pollTask(){','function selectTaskOutputs(');
 const generateControl=actualUpdate+actualGenerate;
 assert.ok(!actualUpdate.includes('!state.task'),'Accepted task must not disable new submission');
 assert.ok(!actualGenerate.includes('state.submission||state.task'),'Prior accepted task must not block Generate');

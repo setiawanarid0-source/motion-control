@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {selectFinalVideoOutput} from '../runninghub-output.js';
+import {selectFinalVideoOutput,selectOriginalVideoArchive,withOriginalVideoArchive} from '../runninghub-output.js';
 
 const crop={nodeId:494,fileType:'mp4',fileUrl:'https://example.test/face-qa.mp4'};
 const render={nodeId:'490',fileType:'mp4',fileUrl:'https://example.test/native-render.mp4?signature=fixture'};
@@ -11,4 +11,14 @@ assert.equal(selectFinalVideoOutput([mask,crop,legacy]),legacy);
 assert.equal(selectFinalVideoOutput([mask,crop]),crop,'Other video workflows keep their existing fallback');
 assert.equal(selectFinalVideoOutput([mask]),undefined);
 assert.equal(selectFinalVideoOutput(null),undefined);
+const zip={nodeId:'',fileType:'zip',fileUrl:'https://example.test/original.zip?signature=fixture'};
+assert.equal(selectOriginalVideoArchive([render,zip]),zip,'Native web outputs omit node IDs');
+assert.equal(selectOriginalVideoArchive([zip,render]),zip);
+assert.equal(selectOriginalVideoArchive([render]),undefined);
+assert.throws(()=>selectOriginalVideoArchive([zip,{...zip,fileUrl:'https://example.test/other.zip'}]),/beberapa ZIP/);
+const graph={'490':{class_type:'VHS_VideoCombine',inputs:{images:['12',0],audio:['13',0],frame_rate:24,crf:16,save_output:true}}};
+const original=structuredClone(graph),wrapped=withOriginalVideoArchive(graph);
+assert.deepEqual(graph,original,'Original model graph must not be mutated');
+assert.deepEqual(wrapped['490'],graph['490']);
+assert.equal(withOriginalVideoArchive(wrapped),wrapped,'Do not add a second ZIP chain');
 console.log('PASS: final native render selection across provider output order, diagnostic clips and legacy output nodes');

@@ -1,3 +1,4 @@
+import {withOriginalVideoArchive} from '../runninghub-output.js';
 import {isRunningHubWebKey} from '../runninghub-web-session.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -173,7 +174,7 @@ for(const [frames,wanted] of [[125,[124,1]],[333,[124,119,90]],[334,[124,119,68,
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
 const calls=[];let payload,submitted=0,uploaded=0;
-const context={isRunningHubWebKey,AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,akatzGraphForInputs,akatzSeedNodeInfo,runningHubInstanceType,
+const context={withOriginalVideoArchive,isRunningHubWebKey,AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,akatzGraphForInputs,akatzSeedNodeInfo,runningHubInstanceType,
   DATA_DIR:'/fixture-only',assertH3MotionContextSchema:async()=>{calls.push('schema');},
   workflowGraphs:{minimaxH3Akatz:{revision:AKATZ_REVISION}},
   h3AkatzModels:{character:{ensure:async()=>{calls.push('character');return character;}},

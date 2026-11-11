@@ -12,6 +12,7 @@ import * as akatzV3 from '../h3-akatz-v3-motion.js';
 import {rifeGraphForSourceFps,RIFE_TARGET_FPS} from '../rife-video.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
 import {compileMotionFlyHD} from '../motionfly-hd-workflow.js';
+import {withOriginalVideoArchive} from '../runninghub-output.js';
 
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-all-token-'));
 try{
@@ -53,7 +54,7 @@ try{
   workflowGraphs.minimaxH3Akatz={};workflowGraphs.minimaxH3AkatzV3={};
   const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
   const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
-  const context={isRunningHubWebKey,runningHubWeb,workflowGraphs,h3GraphForInputs,akatzGraphForInputs,akatzV3,akatzSeedNodeInfo,
+  const context={isRunningHubWebKey,runningHubWeb,workflowGraphs,h3GraphForInputs,akatzGraphForInputs,akatzV3,akatzSeedNodeInfo,withOriginalVideoArchive,
     AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,RIFE_TARGET_FPS,rifeGraphForSourceFps,runningHubInstanceType,h3AppearanceModel,h3CharacterModel,h3AkatzModels,
     DATA_DIR:dir,assertH3MotionContextSchema:async()=>{},
     uploadToRunningHub:(credential,file)=>runningHubWeb.upload(credential,file),
@@ -72,6 +73,17 @@ try{
     submitted[workflowKey]=created.at(-1);
   }
   assert.equal(created.length,6,'Every active workflow selection must reach the token task transport');
+  for(const graph of Object.values(submitted)){
+    const zip=Object.values(graph).find(n=>n.class_type==='CompressImages');
+    assert.ok(zip,'All six active workflows must export their original MP4 in a ZIP');
+    const select=graph[zip.inputs['images or video_path'][0]];
+    assert.equal(select.class_type,'VHS_SelectFilename');assert.equal(select.inputs.index,-1);
+    const video=graph[select.inputs.filenames[0]];
+    assert.equal(video.class_type,'VHS_VideoCombine');assert.equal(video.inputs.save_output,false);
+    const final=graph['490']||graph['3'];
+    for(const field of ['images','audio','frame_rate','crf','pix_fmt','format'])
+      assert.deepEqual(video.inputs[field],final.inputs[field],field+' must retain the final video recipe');
+  }
   const native=submitted.minimaxH3Akatz,v3=submitted.minimaxH3AkatzV3,hd=submitted.motionflyHD;
   assert.equal(native['7'].inputs.file_name,'api-lora-usa/'+'3'.repeat(32)+'.safetensors');
   assert.equal(v3['7'].inputs.file_name,native['7'].inputs.file_name);
