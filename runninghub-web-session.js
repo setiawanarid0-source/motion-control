@@ -339,6 +339,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     const {record,lookups}=await lookupTask(key,id);
     const result={taskId:String(id),found:Boolean(record),lookups,
       taskStatus:typeof record?.taskStatus==='string'&&/^[A-Z_]{1,30}$/.test(record.taskStatus)?record.taskStatus:null};
+    if(record?.taskStatus==='SUCCESS')result.outputs=(await outputs(key,id)).data||[];
     if(record&&['FAILED','ERROR','CANCELED','CANCELLED'].includes(record.taskStatus)){
       const failed=await post(key,'/task/failedReason',{taskId:String(id)});
       result.failure=extractTaskFailure({data:{failedReason:failed?.data||record.errorMessage||record.errorType}});
