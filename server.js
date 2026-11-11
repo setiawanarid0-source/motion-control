@@ -690,10 +690,7 @@ async function connectRunningHubAccount(req,res){
         addedAt:new Date().toISOString(),lastUsedAt:null};
       accounts.push(account);
     }
-    // Connecting a valid token has no minimum RH balance. Keep a low-balance
-    // import in the pool instead of immediately retiring it on load/refresh.
-    if(Number(connected.status.remainCoins)<MIN_POOL_CREDITS)account.lowBalanceImportAt=new Date().toISOString();
-    else delete account.lowBalanceImportAt;
+    delete account.lowBalanceImportAt; // Web funding is not limited to old RH coins.
     saveVaultAccounts(deviceId,accounts);
     res.json({account:publicAccount(account,connected.status),updated});
   }catch(error){res.status(400).json({error:error.message||'Access token RunningHub belum dapat diverifikasi.'});}
@@ -726,8 +723,8 @@ async function refreshPool(req){
     try{return {account,status:await accountStatus(account.key)};}
     catch(error){return {account,status:{error:error.message}};}
   }));
-  // Existing eligible accounts still retire below 100 RH. A token imported
-  // below that balance stays stored until it first becomes eligible.
+  // Access-token accounts may hold points or web benefits instead of RH coins.
+  // Never delete them using the legacy RH-only retirement threshold.
   // Unknown/network-error balances are preserved rather than guessed.
   const {removed}=partitionAccountRefresh(checked,MIN_POOL_CREDITS);
   let autoRemovedCount=0;
@@ -832,7 +829,7 @@ async function handleGeneration(req,res){
       if(!chosen||!isRunningHubWebKey(chosen.key))throw new Error('Akun access token yang dipilih tidak ditemukan.');
       const status=await accountStatus(chosen.key);
       if(!canGenerateWithAccount(status,MIN_POOL_CREDITS))
-        throw new Error('Akun ini tidak dapat digunakan. Generasi RunningHub memerlukan saldo minimal 100 RH.');
+        throw new Error(status.billingConverting?'Saldo RunningHub sedang dikonversi. Coba lagi setelah selesai.':'Sesi akun RunningHub belum siap. Perbarui Account Pool atau hubungkan ulang token.');
       candidates=[chosen];
     }else{
       // Both automatic and manual selection accept access-token references only.
@@ -843,7 +840,7 @@ async function handleGeneration(req,res){
       }));
       candidates=rankGenerationAccounts(checked,MIN_POOL_CREDITS)
         .map(x=>x.account);
-      if(!candidates.length)throw new Error('Tidak ada akun RunningHub yang siap dengan saldo minimal 100 RH.');
+      if(!candidates.length)throw new Error('Tidak ada sesi akun RunningHub yang siap. Perbarui Account Pool atau hubungkan ulang token.');
     }
     // Verify both input previews and encrypted task registry before a paid submission.
     req.progress?.('saving_references');
@@ -1405,8 +1402,8 @@ setInterval(()=>{
 },45000).unref();
 setInterval(()=>monitorRegisteredTasks(),25000).unref();
 setTimeout(()=>monitorRegisteredTasks(),1200).unref();
-// Refresh balances even when no browser is open. Previously eligible accounts
-// still retire below 100 RH; new low-balance token imports remain stored.
+// Refresh balances even when no browser is open. Web-token accounts remain
+// stored even if their old RH-coin ledger is zero.
 // Do not start overlapping provider status checks or auto-delete on API errors.
 let scheduledPoolCheck=null;
 function checkPoolBalancesInBackground(){

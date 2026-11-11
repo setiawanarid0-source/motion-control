@@ -49,6 +49,22 @@ await buttons[0].onclick();
 await buttons[1].onclick();
 assert.deepEqual(removed.map(x=>x.url),['/api/accounts/account-alpha','/api/accounts/account-beta']);
 assert.ok(removed.every(x=>x.method==='DELETE'));
+state.accounts=[
+  {id:'account-alpha',name:'Account 1',canGenerate:true,status:{apiType:'WEB_SESSION',sessionVerified:true,
+    billingVersion:'NEW',remainCoins:0,balancePoint:427.5,walletBalance:10.25,currency:'USD',currentTaskCounts:2}},
+  {id:'account-beta',name:'Account 2',canGenerate:true,status:{apiType:'WEB_SESSION',sessionVerified:true,
+    billingVersion:'UNKNOWN',remainCoins:null,balancePoint:null,currentTaskCounts:null}}
+];
+context.renderAccounts();
+assert.ok(accountList.innerHTML.includes('Points 427,5'),'NEW billing must display the real points balance');
+assert.ok(accountList.innerHTML.includes('Wallet USD 10,25'),'Wallet currency must remain separate from RH and points');
+assert.ok(accountList.innerHTML.includes('Tasks 2'));
+assert.ok(accountList.innerHTML.includes('RH lama — · Points belum tersedia'));
+assert.ok(accountList.innerHTML.includes('Tasks —'),'Unknown task counts must not become zero');
+assert.ok(!accountList.innerHTML.includes('RH 0'),'A funded points account must not be presented as RH zero');
+assert.ok(!accountList.innerHTML.includes('Saldo tidak memenuhi syarat'));
+state.accounts[0].status.balancePoint=0.0001;
+context.renderAccounts();assert.ok(accountList.innerHTML.includes('Points 0,0001'),'Small nonzero balances must not round to zero');
 state.accounts=[];
 assert.doesNotThrow(()=>context.renderAccounts(),'Empty Account Pool still renders safely');
 assert.ok(accountList.innerHTML.includes('Belum ada akun'));
