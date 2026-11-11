@@ -244,8 +244,10 @@ function displaySubmissionFailure(data,{restored=false}={}){
   const rejectedGraph=/prompt_outputs_failed_validation|RUNNINGHUB_WORKFLOW_VALIDATION/i.test(msg);
   const capacityFull=/TASK_QUEUE_MAXED/i.test(String(data.error||''));
   const paidBalanceRequired=data?.failureCode==='RUNNINGHUB_PAID_BALANCE_REQUIRED';
+  const missingWorkflow=data?.failureCode==='RH_WEB_WORKSPACE_NOT_FOUND';
   $('#taskSection').classList.remove('hidden');
   $('#taskStatus').textContent=ambiguous?'Status penerimaan belum pasti':
+    missingWorkflow?'Workflow tidak ditemukan':
     paidBalanceRequired?'Pengiriman ditolak RunningHub':
     capacityFull?'Antrean akun penuh':
     rejectedGraph?'Workflow ditolak RunningHub':

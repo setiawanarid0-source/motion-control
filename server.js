@@ -526,6 +526,11 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     // Any task ID or an explicit success code keeps the response ambiguous.
     const paidRefusal=/^Insufficient paid RH coins\. Consumer API keys can only spend paid RH coins; free RH coins are not accepted\.$/i;
     const messages=[data?.msg,data?.message,data?.data?.message,data?.data?.error];
+    if(data&&['number','string'].includes(typeof data.code)&&Number.isFinite(Number(data.code))&&Number(data.code)!==0&&
+      !data?.data?.taskId&&!data?.taskId&&messages.some(message=>message==='WORKFLOW_NOT_EXISTS')){
+      const error=new Error('RunningHub tidak menemukan workspace workflow VANTA pada akun ini (WORKFLOW_NOT_EXISTS). Task tidak dibuat.');
+      error.code='RH_WEB_WORKSPACE_NOT_FOUND';error.definitelyRejected=true;throw error;
+    }
     if(data&&typeof data==='object'&&['number','string'].includes(typeof data.code)&&
       Number.isFinite(Number(data.code))&&Number(data.code)!==0&&!data?.data?.taskId&&!data?.taskId&&
       messages.some(message=>typeof message==='string'&&paidRefusal.test(message.replace(/\s+/g,' ').trim()))){
@@ -929,7 +934,10 @@ async function handleGeneration(req,res){
             continue;
           }
         }
-        if(['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE','RUNNINGHUB_PAID_BALANCE_REQUIRED'].includes(error.code)){
+        if(['H3_MODEL_PREPARATION_FAILED','RUNNINGHUB_INSUFFICIENT_BALANCE','RUNNINGHUB_PAID_BALANCE_REQUIRED','RH_WEB_WORKSPACE_NOT_FOUND'].includes(error.code)){
+          req.submissionAttempted=false;break;
+        }
+        if(error.definitelyRejected===true&&/^RH_WEB_/.test(String(error.code))){
           req.submissionAttempted=false;break;
         }
         if(videoOnly)console.warn('RIFE task attempt failed',
@@ -965,7 +973,7 @@ async function handleGeneration(req,res){
   } catch (error) {
     cleanup();
     res.status(400).json({ error: error.message || 'Generate gagal.',
-      ...(error.code==='RUNNINGHUB_PAID_BALANCE_REQUIRED'?{failureCode:error.code}:{}) });
+      ...(['RUNNINGHUB_PAID_BALANCE_REQUIRED','RH_WEB_WORKSPACE_NOT_FOUND'].includes(error.code)?{failureCode:error.code}:{}) });
   }
 }
 
@@ -1339,6 +1347,14 @@ if (!fs.existsSync(GLOBAL_ACCOUNT_VAULT) && !startupGlobalAccounts.length && sta
   saveGlobalAccounts(startupLegacyAccounts);
 }
 console.log(`Account vault startup: global=${loadGlobalAccounts().length}, legacy=${startupLegacyAccounts.length}`);
+// Repair old VANTA-only empty drafts before the next Generate. This imports a
+// blank workflow on each connected account; it never submits /task/create.
+void (async()=>{
+  for(const account of loadGlobalAccounts().filter(a=>isRunningHubWebKey(a.key))){
+    try{await runningHubWeb.prepare(account.key);console.info('RunningHub workspace verified',account.name);}
+    catch(error){console.warn('RunningHub workspace preparation deferred',account.name,String(error.code||'unavailable'));}
+  }
+})();
 console.info('RunningHub model receipts',JSON.stringify({ffp:Boolean(h3AppearanceModel.cachedFile()),character:Boolean(h3CharacterModel.cachedFile()),akatz:Boolean(h3AkatzModels.character.cachedFile()),turbo:Boolean(h3AkatzModels.turbo.cachedFile())}));
 // Cache-only reuse authorizes existing MD5 paths for the other pool accounts.
 // This cannot download weights, PUT bytes, create inference, retry or cancel.

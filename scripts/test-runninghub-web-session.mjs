@@ -30,7 +30,8 @@ async function fixture(run){
     if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'OLD',converting:false,balancePoint:0}};
     if(route==='/uc/token/refresh')return {code:0,data:{access_token:jwt(userId,time/1000+7200),refresh_token:'fixture-refreshed-token'}};
     if(route==='/task/list')return {code:0,data:{total:1,records:config.data.taskId?[{taskId:renderId,taskStatus:'SUCCESS'}]:[]}};
-    if(route==='/api/workflow/create')return {code:0,data:{workflowId:'2110000000000000100'}};
+    if(route==='/api/workflow/upload')return {code:0,data:{workflowId:'2110000000000000100'}};
+    if(route==='/api/workflow/getContent')return {code:0,data:{id:'2110000000000000100',userId,workflowContent:'{"nodes":[]}',draft:false}};
     if(route==='/task/create')return {code:0,data:{taskId:renderId,taskStatus:'QUEUED'}};
     if(route==='/api/output/v2/history')return {code:0,data:[
       {taskId:'2110000000000000998',fileUrl:'https://example.com/wrong.mp4',outputType:'mp4',nodeId:'490'},
@@ -171,13 +172,14 @@ test('web create uses the editor body, applies existing input overrides and neve
   // The private workspace is reused, including after reconnect.
   await service.connect(exported);
   await service.request('/task/openapi/create',key,{workflow:JSON.stringify(graph)});
-  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/workflow/create').length,1);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/workflow/upload').length,1);
 }));
 
 test('a lost create acknowledgement never causes another paid request or an OpenAPI fallback',()=>fixture(async({service,calls,setHandler})=>{
   const {key}=await service.connect(exported);
   setHandler(async config=>{
-    if(new URL(config.url).pathname==='/api/workflow/create')return {code:0,data:{id:'2110000000000000100'}};
+    if(new URL(config.url).pathname==='/api/workflow/upload')return {code:0,data:{id:'2110000000000000100'}};
+    if(new URL(config.url).pathname==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
     if(new URL(config.url).pathname==='/task/create')throw Error('Lost response after task acceptance');
     throw Error('unexpected');
   });
@@ -204,12 +206,64 @@ test('workspace audit verifies the cached reference without changing workflows o
   assert.ok(!calls.some(x=>new URL(x.url).pathname==='/task/create'));
 }));
 
+test('repairs an owned contentless draft by native file import once before any GPU submission',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  const old='2110000000000000100',replacement='2110000000000000101';let multipart='';
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,
+      workflowContent:config.data.workflowId===old?null:'{"nodes":[]}',draft:config.data.workflowId===old}};
+    if(route==='/api/workflow/upload'){
+      assert.match(config.headers['content-type'],/multipart\/form-data/);
+      await new Promise((resolve,reject)=>{config.data.on('data',b=>{multipart+=b.toString();});config.data.on('end',resolve);config.data.on('error',reject);config.data.resume();});
+      return {code:0,data:{id:replacement}};
+    }
+    throw Error('Workspace repair cannot run, save or cancel a task');
+  });
+  assert.deepEqual(await Promise.all([service.prepare(key),service.prepare(key)]),[replacement,replacement]);
+  assert.match(multipart,/name="workflowFile"; filename="vanta-workspace.json"/);
+  assert.match(multipart,/"nodes":\[\]/);assert.match(multipart,/VANTA Studio/);
+  assert.equal(await service.prepare(key),replacement);
+  assert.equal(calls.filter(x=>new URL(x.url).pathname==='/api/workflow/upload').length,1);
+  assert.ok(calls.every(x=>['/api/workflow/getContent','/api/workflow/upload'].includes(new URL(x.url).pathname)));
+}));
+
+test('workspace ownership and unknown lookup failures fail before submission instead of importing repeatedly',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  setHandler(async()=>({code:0,data:{userId:'2110000000000000002',workflowContent:'{"nodes":[]}',draft:false}}));
+  await assert.rejects(service.prepare(key),{code:'RH_WEB_IDENTITY_MISMATCH',definitelyRejected:true});
+  setHandler(async()=>{throw Error('Lookup timeout');});
+  await assert.rejects(service.prepare(key),{code:'RH_WEB_WORKSPACE_UNAVAILABLE',definitelyRejected:true});
+  assert.ok(calls.every(x=>new URL(x.url).pathname==='/api/workflow/getContent'));
+}));
+
 test('provider authentication refusal on create does not replay the create request',()=>fixture(async({service,calls,setHandler})=>{
   const {key}=await service.connect(exported);
-  setHandler(async config=>new URL(config.url).pathname==='/api/workflow/create'?{code:0,data:{id:'2110000000000000100'}}:{code:412,msg:'Token expired'});
+  await service.prepare(key);
+  setHandler(async config=>new URL(config.url).pathname==='/api/workflow/getContent'?{code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}}:{code:412,msg:'Token expired'});
   const response=await service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"Fixture","inputs":{}}}'});
   assert.equal(response.code,412);
   assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,1);
+}));
+
+test('only an explicit taskless missing-workflow refusal invalidates the cached reference, without replaying',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  let reply;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(route==='/task/create')return reply;
+    throw Error('No automatic re-import or create replay');
+  });
+  for(reply of [{msg:'WORKFLOW_NOT_EXISTS'},{code:0,msg:'WORKFLOW_NOT_EXISTS'},
+    {code:380,msg:'WORKFLOW_NOT_EXISTS',data:{taskId:renderId}}]){
+    await service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"Fixture","inputs":{}}}'});
+    assert.equal(await service.prepare(key),'2110000000000000100');
+  }
+  reply={code:380,msg:'WORKFLOW_NOT_EXISTS'};
+  await service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"Fixture","inputs":{}}}'});
+  assert.equal(calls.filter(x=>new URL(x.url).pathname==='/task/create').length,4);
+  assert.ok(!calls.some(x=>new URL(x.url).pathname==='/api/workflow/upload'));
 }));
 
 test('output lookup keeps the exact task ID and does not substitute another render',()=>fixture(async({service,calls,setHandler})=>{
@@ -289,7 +343,8 @@ test('credential refresh preserves a workspace created concurrently',()=>fixture
     if(route==='/uc/getUserInfo')return config.headers.Authorization==='Bearer '+exported.access
       ?{code:412}:{code:0,data:{id:userId,totalCoin:'600'}};
     if(route==='/uc/token/refresh')return new Promise(resolve=>{finishRefresh=resolve;});
-    if(route==='/api/workflow/create')return {code:0,data:{id:'2110000000000000100'}};
+    if(route==='/api/workflow/upload')return {code:0,data:{id:'2110000000000000100'}};
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
     if(route==='/task/list')return {code:0,data:{total:0,records:[]}};
     throw Error('unexpected');
   });
@@ -298,7 +353,7 @@ test('credential refresh preserves a workspace created concurrently',()=>fixture
   await service.prepare(key);
   finishRefresh({code:0,data:{access_token:jwt(userId,time/1000+7200),refresh_token:'fixture-new-refresh'}});
   await check;await service.prepare(key);
-  assert.equal(calls.filter(x=>new URL(x.url).pathname==='/api/workflow/create').length,1);
+  assert.equal(calls.filter(x=>new URL(x.url).pathname==='/api/workflow/upload').length,1);
 }));
 
 test('export code is one-line JavaScript and contains only the intended session exporter',()=>{
