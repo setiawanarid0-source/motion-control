@@ -7,6 +7,7 @@ import FormData from 'form-data';
 import axios from 'axios';
 import {runningHubWebBalance,webBalanceNumber} from './runninghub-web-balance.js';
 import {extractTaskFailure} from './task-failure.js';
+import {safeTaskMetrics} from './rife-task-audit.js';
 
 export const RH_WEB_ORIGIN='https://www.runninghub.ai';
 export const isRunningHubWebKey=key=>/^rhweb:[a-f0-9]{64}$/.test(String(key||''));
@@ -423,6 +424,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
   async function inspectTask(key,id){
     const {record,lookups}=await lookupTask(key,id);
     const result={taskId:String(id),found:Boolean(record),lookups,
+      taskMetrics:safeTaskMetrics(record),
       taskStatus:typeof record?.taskStatus==='string'&&/^[A-Z_]{1,30}$/.test(record.taskStatus)?record.taskStatus:null};
     if(record?.taskStatus==='SUCCESS')result.outputs=(await outputs(key,id)).data||[];
     if(record&&['FAILED','ERROR','CANCELED','CANCELLED'].includes(record.taskStatus)){

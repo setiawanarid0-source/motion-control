@@ -24,6 +24,7 @@ import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
 import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
+import {auditRifeTasks} from './rife-task-audit.js';
 import {H3_DEFAULT_PROFILE,prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {selectFinalVideoOutput,selectOriginalVideoArchive,withOriginalVideoArchive} from './runninghub-output.js';
@@ -318,6 +319,10 @@ async function monitorRegisteredTasks(){
           error:'Koneksi RunningHub belum tersedia. Pemeriksaan akan diulang.'});
       }
     }));
+    await auditRifeTasks({tasks:taskRegistry.publicList().map(task=>({...task,
+      rifeAuditCheckedAt:taskRegistry.get(task.taskId)?.rifeAuditCheckedAt})),
+      query:task=>runningHubWeb.inspectTask(taskRegistry.get(task.taskId).key,task.taskId),
+      update:taskRegistry.update,log:report=>console.info('RIFE provider receipt',JSON.stringify(report))});
     await auditCompletedH3Timings({tasks:taskRegistry.publicList(),
       query:task=>{
         const original=taskRegistry.get(task.taskId);
