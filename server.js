@@ -320,7 +320,8 @@ async function monitorRegisteredTasks(){
       }
     }));
     await auditRifeTasks({tasks:taskRegistry.publicList().map(task=>({...task,
-      rifeAuditCheckedAt:taskRegistry.get(task.taskId)?.rifeAuditCheckedAt})),
+      rifeAuditCheckedAt:taskRegistry.get(task.taskId)?.rifeAuditCheckedAt,
+      rifeAuditVersion:taskRegistry.get(task.taskId)?.rifeAuditVersion})),
       query:task=>runningHubWeb.inspectTask(taskRegistry.get(task.taskId).key,task.taskId),
       update:taskRegistry.update,log:report=>console.info('RIFE provider receipt',JSON.stringify(report))});
     await auditCompletedH3Timings({tasks:taskRegistry.publicList(),
