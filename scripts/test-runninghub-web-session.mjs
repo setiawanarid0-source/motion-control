@@ -363,6 +363,23 @@ test('web monitoring includes native task filters and recovers queued, running a
   assert.ok(calls.every(x=>!['/task/create','/task/cancel'].includes(new URL(x.url).pathname)));
 }));
 
+test('native running progress and completed execution seconds pass through without exposing unrelated task fields',()=>fixture(async({service,setHandler,calls})=>{
+  const {key}=await service.connect(exported);let state='RUNNING';
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/task/list')return {code:0,data:{records:[{taskId:renderId,taskStatus:state,
+      taskExecutedTime:'78',netWssUrl:'wss://www.runninghub.ai/ws?token=fixture-progress',promptContent:'private-inputs'}]}};
+    if(route==='/api/output/v2/history')return {code:0,data:[{taskId:renderId,fileUrl:'https://example.com/correct.mp4',outputType:'mp4'}]};
+    throw Error('No generation, cancellation or editor mutation is permitted');
+  });
+  const running=await service.request('/task/openapi/outputs',key,{taskId:renderId});
+  assert.equal(running.data.netWssUrl,'wss://www.runninghub.ai/ws?token=fixture-progress');
+  state='SUCCESS';const done=await service.request('/task/openapi/outputs',key,{taskId:renderId});
+  assert.equal(done.data[0].taskCostTime,78);
+  assert.ok(!JSON.stringify([running,done]).includes('private-inputs'));
+  assert.ok(!calls.some(x=>['/task/create','/task/cancel'].includes(new URL(x.url).pathname)));
+}));
+
 test('media uses the native image multipart field, including original MP4 bytes',()=>fixture(async({service,dir,setHandler})=>{
   const {key}=await service.connect(exported),source=path.join(dir,'fixture.mp4');fs.writeFileSync(source,'original-mp4-bytes');
   let multipart='';

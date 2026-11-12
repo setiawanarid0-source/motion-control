@@ -45,7 +45,7 @@ assert.ok(css.includes('.nora-viewer-photo{position:static;')&&
   'Fullscreen button must be small and anchored to the stage right-bottom, not the portrait image');
 assert.ok(css.includes('.nora-image-fullscreen-trigger svg{width:16px;height:16px}'),
   'Fullscreen icon must be compact');
-assert.ok(html.includes('/history-gallery.js?v=20261024-image-fullscreen-v1')&&
+assert.ok(html.includes('/history-gallery.js?v=20261112-rife-live-progress')&&
   html.includes('/history-gallery.css?v=20261024-image-fullscreen-stage-v2'),
   'Mobile browsers must receive fresh viewer JS and CSS');
 assert.ok(gallery.includes("e.key==='ArrowRight'")&&gallery.includes("e.key==='ArrowLeft'"));
@@ -148,6 +148,24 @@ assert.ok(!fakeEl('noraViewerMedia').innerHTML.includes('data-nora-fullscreen'),
 win.vantaGallery.close();
 assert.ok(motionGrid.includes('Memproses'),'Active Motion must clearly show status');
 assert.equal((motionGrid.match(/class="nora-gallery-tile"/g)||[]).length,2);
+const rife={taskId:'2110000000000000111',workflow:'RIFE · ≤60 → 60 FPS',status:'running',
+  mode:'plus',startedAt:'2026-11-12T09:43:00Z',account:'Account 01',
+  inputDiagnostics:{width:1664,height:1240},statusDetail:'Interpolasi ke 60 FPS · 10/120',
+  providerProgress:{lastUpdatedAt:'2026-11-12T09:44:00Z'}};
+win.vantaGallery.renderMotion([rife]);win.vantaGallery.open('motion',rife.taskId);
+assert.ok(fakeEl('noraViewerError').textContent.includes('10/120'));
+assert.ok(fakeEl('noraViewerMeta').innerHTML.includes('1664 × 1240'));
+assert.ok(fakeEl('noraViewerMeta').innerHTML.includes('Progres terakhir'));
+win.vantaGallery.renderMotion([{...rife,statusDetail:'Mengemas ZIP'}]);
+assert.equal(fakeEl('noraViewerError').textContent,'Mengemas ZIP','An already open viewer follows backend progress');
+const finished={...rife,status:'success',statusDetail:null,resultUrl:'https://vanta.test/rife.mp4'};
+win.vantaGallery.renderMotion([finished]);
+assert.ok(fakeEl('noraViewerStatus').innerHTML.includes('Berhasil'),'Polling updates terminal state inside the open viewer');
+assert.ok(fakeEl('noraViewerMedia').innerHTML.includes('<video '),'Completed output replaces the waiting placeholder automatically');
+fakeEl('noraViewerMedia').innerHTML='playing-video-preserved';
+win.vantaGallery.renderMotion([finished]);
+assert.equal(fakeEl('noraViewerMedia').innerHTML,'playing-video-preserved','Repeated status reads must preserve the active player');
+win.vantaGallery.close();
 
 
 // Numbered page regression: each page replaces the previous 12 cards, unlike

@@ -68,11 +68,13 @@ try{
     const h3Source=workflowKey==='minimaxH3'?{...source,inferenceProfile:H3_DEFAULT_PROFILE}:
       workflowKey.startsWith('minimaxH3Akatz')?{...source,inferenceProfile:AKATZ_PROFILE}:undefined;
     const result=await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey,mode:'plus',
-      imageFile:{...media,mimetype:'image/png'},videoFile:media,sourceFps:30,h3Source});
+      imageFile:{...media,mimetype:'image/png'},videoFile:media,sourceFps:30,
+      rifeSource:workflowKey==='rife60'?{width:1920,height:1080}:undefined,h3Source});
     assert.match(result.taskId,/^\d{19}$/);assert.ok(result.submittedAt);
     submitted[workflowKey]=created.at(-1);
   }
   assert.equal(created.length,6,'Every active workflow selection must reach the token task transport');
+  assert.equal(submitted.rife60['2'].inputs.batch_size,8,'Actual Plus token payload receives the adaptive batch');
   for(const graph of Object.values(submitted)){
     const zip=Object.values(graph).find(n=>n.class_type==='CompressImages');
     assert.ok(zip,'All six active workflows must export their original MP4 in a ZIP');
