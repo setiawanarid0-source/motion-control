@@ -1,6 +1,6 @@
 // The kie.ai image surface is independent of the RunningHub UI/state.
 (()=>{
-  const kie={mode:'create',models:[],accounts:[],tasks:[],filter:'all',selectedTask:null,polling:false,busy:false,accountPolling:false,lastAccountsSync:0};
+  const kie={mode:'create',models:[],accounts:[],tasks:[],filter:'all',selectedTask:null,polling:false,busy:false,accountPolling:false,lastAccountsSync:0,accountsRevision:0};
   const el=id=>document.getElementById(id);
   const esc=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const fmt=n=>Number(n??0).toLocaleString('id-ID',{maximumFractionDigits:2});
@@ -42,22 +42,23 @@
   },{passive:true});
   function updateProviderIndicator(){
     const kiePage=['image-create','image-history','kie-accounts'].includes(state.view);
-    const count=kiePage?kie.accounts.filter(a=>a.state==='ready'&&Number(a.credits)>0).length:
+    const count=kiePage?kie.accounts.length:
       state.accounts.filter(a=>a.canGenerate===true).length;
     const title=document.querySelector('.balance-pill span'),unit=el('poolReadyUnit');
-    if(title)title.textContent=kiePage?'kie.ai ready':'Pool ready';
+    if(title)title.textContent=kiePage?'kie.ai pool':'Pool ready';
     if(unit)unit.textContent=kiePage?'akun kie.ai':'akun siap';
     el('poolCredits').textContent=String(count);
     if(kiePage){
-      el('poolCount').textContent=count+' akun kie.ai siap';
+      el('poolCount').textContent=count+' akun kie.ai';
       document.querySelector('.sidebar-foot small').textContent='kie.ai pool';
-      el('poolDot').classList.toggle('ready',count>0);
+      el('poolDot').classList.toggle('ready',kie.accounts.some(a=>a.state==='ready'&&Number(a.credits)>0));
     }else{
       el('poolCount').textContent=count+' akun siap';
       document.querySelector('.sidebar-foot small').textContent='RunningHub pool';
       el('poolDot').classList.toggle('ready',count>0);
     }
   }
+  window.vantaKiePoolSummary=updateProviderIndicator;
   window.vantaKieNavigation=view=>{
     updateProviderIndicator();
     if(view==='image-create'){loadModels();loadAccounts();loadTasks();}
@@ -158,12 +159,10 @@
     showRefImages();
   }
   function accountDisplayName(a){
-    // Distinguish legacy accounts with the same display name without
-    // renaming API keys, account IDs or historical task ownership.
-    const duplicates=kie.accounts.filter(x=>x.name===a.name).length;
-    return duplicates>1?a.name+' · '+String(a.id).slice(0,6):a.name;
+    return a.name;
   }
   function drawAccounts(){
+    kie.accounts=kie.accounts.map((a,index)=>({...a,name:'Account '+String(index+1).padStart(2,'0')}));
     const select=el('kieAccountSelect'),current=select.value;
     select.innerHTML='<option value="auto">Automatic · akun dengan kredit tersedia</option>'+
       kie.accounts.map(a=>'<option value="'+esc(a.id)+'">'+esc(accountDisplayName(a))+' · '+(a.credits==null?'saldo —':fmt(a.credits)+' kredit')+'</option>').join('');
@@ -179,13 +178,16 @@
   }
   async function loadAccounts(){
     if(kie.accountPolling)return;
+    const revision=kie.accountsRevision;
     kie.accountPolling=true;
     try{
       const d=await api('/api/kie/accounts');
+      if(revision!==kie.accountsRevision)return;
       kie.accounts=d.accounts||[];
       kie.lastAccountsSync=Date.now();
       drawAccounts();
     }catch(e){
+      if(revision!==kie.accountsRevision)return;
       console.warn('kie.ai account sync',e.message);
       // Never present stale balances as current after a failed refresh request.
       kie.accounts=kie.accounts.map(a=>({...a,credits:null,state:'unavailable'}));
@@ -194,21 +196,23 @@
     finally{kie.accountPolling=false;}
   }
   async function refreshAccounts(){
+    const revision=kie.accountsRevision;
     const b=el('kieRefreshAccounts');b.disabled=true;
-    try{const d=await api('/api/kie/accounts/refresh',{method:'POST',body:'{}'});kie.accounts=d.accounts||[];kie.lastAccountsSync=Date.now();drawAccounts();toast('Saldo terbaru diperiksa langsung ke kie.ai.');}
+    try{const d=await api('/api/kie/accounts/refresh',{method:'POST',body:'{}'});if(revision!==kie.accountsRevision)return;kie.accounts=d.accounts||[];kie.lastAccountsSync=Date.now();drawAccounts();toast('Saldo terbaru diperiksa langsung ke kie.ai.');}
     catch(e){toast(e.message,true);}finally{b.disabled=false;}
   }
   async function addAccount(){
     const key=el('kieKeyInput').value.trim();if(!key)return toast('Masukkan API key kie.ai.',true);
     const b=el('kieAddAccount');b.disabled=true;b.textContent='Memeriksa…';
-    try{await api('/api/kie/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});el('kieKeyInput').value='';
-      await loadAccounts();toast('Akun kie.ai berhasil ditambahkan.');}
+    try{const d=await api('/api/kie/accounts',{method:'POST',body:JSON.stringify({apiKey:key})});el('kieKeyInput').value='';
+      kie.accountsRevision++;kie.accounts.push(d.account);drawAccounts();toast('Akun kie.ai berhasil ditambahkan.');}
     catch(e){toast(e.message,true);}finally{b.disabled=false;b.textContent='Add to pool';}
   }
   async function removeAccount(id){
     const a=kie.accounts.find(x=>x.id===id);
     if(!a||!confirm('Hapus '+a.name+' dari Account Pool kie.ai? Task lama tetap dipantau.'))return;
-    try{await api('/api/kie/accounts/'+encodeURIComponent(id),{method:'DELETE'});await loadAccounts();toast('Akun kie.ai dikeluarkan dari pool.');}
+    try{await api('/api/kie/accounts/'+encodeURIComponent(id),{method:'DELETE'});
+      kie.accountsRevision++;kie.accounts=kie.accounts.filter(a=>a.id!==id);drawAccounts();toast('Akun kie.ai dikeluarkan dari pool.');}
     catch(e){toast(e.message,true);}
   }
   function renderLatest(){

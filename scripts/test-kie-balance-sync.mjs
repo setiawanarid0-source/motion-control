@@ -74,11 +74,11 @@ release();await Promise.all([start,concurrent]);
 assert.equal(stored.some(x=>x.id==='b'),false,'Deleted account must remain deleted after delayed API response');
 gate=null;
 
-// The next account name must be unique even after removals.
+// Names follow the current compacted pool, including after removals.
 const nameLine=server.match(/const nextIndex=([^;]+);/);
 assert.ok(nameLine,'Unique future account-number assignment missing');
 const nextName=new Function('accounts','return '+nameLine[1]+';');
-assert.equal(nextName([{name:'Account 01'},{name:'Account 04'}]),5);
+assert.equal(nextName([{name:'Account 01'},{name:'Account 02'}]),3);
 assert.equal(nextName([]),1);
 
 assert.ok(ui.includes("if(becameTerminal||Date.now()-kie.lastAccountsSync>25000)void loadAccounts();"),

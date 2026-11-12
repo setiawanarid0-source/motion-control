@@ -198,7 +198,12 @@ function renderPoolRefresh(){
   if(notice){notice.textContent=data.reconnectRequired?data.reconnectRequired+' akun perlu dihubungkan ulang':'';
     notice.hidden=!data.reconnectRequired;}
 }
-function updatePoolSummary(){ const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate(); }
+function updatePoolSummary(){
+  if(['image-create','image-history','kie-accounts'].includes(state.view)){
+    window.vantaKiePoolSummary?.();updateGenerate();return;
+  }
+  const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate();
+}
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada akun di pool.<br>Hubungkan access token RunningHub dari panel di sebelah kiri.</div>';return;}
   const amount=value=>value!=null&&value!==''&&typeof value!=='boolean'&&Number.isFinite(Number(value))?Number(value).toLocaleString('id-ID',{maximumFractionDigits:12}):'—';

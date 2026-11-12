@@ -64,7 +64,13 @@ export function createKieStudio({encrypt,decrypt,dir}){
     try{fs.writeFileSync(tmp,encrypt({[key]:items,updatedAt:Date.now()}),{mode:0o600});fs.renameSync(tmp,file);}
     finally{try{fs.rmSync(tmp,{force:true});}catch{}}
   }
-  const getAccounts=()=>load(accountsFile,'accounts');
+  const numberedAccounts=accounts=>accounts.map((a,index)=>({...a,name:'Account '+String(index+1).padStart(2,'0')}));
+  const getAccounts=()=>{
+    const stored=load(accountsFile,'accounts'),accounts=numberedAccounts(stored);
+    if(stored.some((a,index)=>a.name!==accounts[index].name))save(accountsFile,'accounts',accounts);
+    return accounts;
+  };
+  console.info('kie.ai pool initialized',{totalAccounts:getAccounts().length,numbering:'sequential'});
   const getTasks=()=>load(tasksFile,'tasks');
   const publicAccount=a=>({id:a.id,name:a.name,
     credits:a.state==='unavailable'?null:(a.credits??null),
@@ -186,7 +192,7 @@ export function createKieStudio({encrypt,decrypt,dir}){
       const balance=await credits(key),accounts=getAccounts();
       const fingerprint=crypto.createHash('sha256').update(key).digest('hex');
       if(accounts.some(a=>a.fingerprint===fingerprint))return res.status(409).json({error:'API key sudah ada.'});
-      const nextIndex=Math.max(0,...accounts.map(a=>Number((String(a.name||'').match(/^Account (\d+)$/)||[])[1])||0))+1;
+      const nextIndex=accounts.length+1;
       const account={id:crypto.randomUUID(),name:'Account '+String(nextIndex).padStart(2,'0'),
         key,fingerprint,credits:balance,state:'ready',lastCheckedAt:new Date().toISOString(),
         lastAttemptAt:new Date().toISOString()};
@@ -201,7 +207,8 @@ export function createKieStudio({encrypt,decrypt,dir}){
     const accounts=getAccounts(),next=accounts.filter(a=>a.id!==req.params.id);
     if(next.length===accounts.length)return res.status(404).json({error:'Akun tidak ditemukan.'});
     // Accepted jobs retain their own encrypted key in tasks.enc for status recovery.
-    save(accountsFile,'accounts',next);res.json({ok:true});
+    const remaining=numberedAccounts(next);
+    save(accountsFile,'accounts',remaining);res.json({ok:true,accounts:remaining.map(publicAccount)});
   });
   router.get('/tasks',async(req,res)=>{
     try{prune();await refreshPending();res.setHeader('Cache-Control','no-store');
