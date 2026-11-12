@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {validateRifeVideoProbe,rifeGraphForSourceFps,verifyRifeInput,RIFE_TARGET_FPS} from '../rife-video.js';
+import {validateRifeVideoProbe,rifeGraphForSourceFps,rifeBatchSize,verifyRifeInput,RIFE_TARGET_FPS} from '../rife-video.js';
 import {createGenerationQueue} from '../generation-queue.js';
 import {prepareAdaptiveRifeVideo} from '../rife-cadence.mjs';
 
@@ -29,6 +29,17 @@ for(const node of Object.values(graph))
     if(Array.isArray(value)&&typeof value[0]==='string'&&Number.isInteger(value[1]))
       assert.ok(graph[value[0]],'Broken graph link '+value[0]);
 assert.equal(RIFE_TARGET_FPS,60);
+assert.equal(rifeBatchSize({width:1920,height:1080},'standard'),2);
+assert.equal(rifeBatchSize({width:1920,height:1080},'plus'),8);
+assert.equal(rifeBatchSize({width:2560,height:1440},'plus'),4);
+assert.equal(rifeBatchSize({width:3840,height:2160},'plus'),2);
+assert.equal(rifeBatchSize({width:7680,height:4320},'plus'),1);
+assert.equal(rifeBatchSize({},'plus'),2,'Missing dimensions preserve the conservative batch');
+const accelerated=rifeGraphForSourceFps(graph,24,{mode:'plus',width:1664,height:1240});
+const established=rifeGraphForSourceFps(graph,24);
+assert.equal(accelerated['2'].inputs.batch_size,8);
+assert.deepEqual({...accelerated,'2':{...accelerated['2'],inputs:{...accelerated['2'].inputs,batch_size:2}}},established,
+  'Plus acceleration changes only parallel batching: same frame cadence, model, resolution, scale and audio');
 
 const rates=['1/1','12/1','24000/1001','24/1','25/1','30000/1001',
   '30/1','40/1','48/1','50/1','60000/1001','59/1','59999/1000','60/1'];

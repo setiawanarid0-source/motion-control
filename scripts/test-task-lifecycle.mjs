@@ -38,6 +38,9 @@ try{
   assert.equal(registry.getRetiredAccount(account.id).key,account.key);
   assert.equal(registry.get(job).key,account.key);
   assert.ok(!JSON.stringify(registry.publicList()).includes(account.key));
+  registry.update(job,{status:'queued',providerProgress:{stage:'interpolating',label:'Interpolasi ke 60 FPS',
+    value:10,max:120,lastUpdatedAt:new Date(now).toISOString()}});
+  assert.equal(registry.publicList()[0].providerProgress.value,10,'Native progress survives encrypted persistence and History reads');
   assert.ok(!fs.readFileSync(registry.file,'utf8').includes(account.key));
   assert.equal(fs.statSync(registry.file).mode & 0o777,0o600);
   // Transient network errors do not make an accepted RunningHub job 'failed'.

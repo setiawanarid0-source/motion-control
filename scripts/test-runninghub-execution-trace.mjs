@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {rifeProgressMessage} from '../rife-task-progress.js';
 import {createExecutionTrace,createH3ExecutionMonitor,allowedProgressUrl,h3NodeClass,observeRegisteredH3Progress} from '../runninghub-execution-trace.js';
 const plan={revision:'motion-transfer-native-1080-v2',samplerCount:1};
 assert.equal(h3NodeClass('1010',plan),'SamplerCustomAdvanced');
@@ -86,7 +87,8 @@ const registry={get(id){lookups++;assert.equal(id,task.taskId);return stored;}};
 const observer={observe(item,progress){received.push({item,progress});return true;}};
 const observe=(taskId,url)=>observeRegisteredH3Progress({taskId,url,registry,monitor:observer});
 const state=vm.runInNewContext(statusSource+';runningHubTaskState',{
-  rhJson:async()=>({code:804,data:{netWssUrl:url}}),observeH3Progress:observe
+  rhJson:async()=>({code:804,data:{netWssUrl:url}}),observeH3Progress:observe,rifeProgressMessage,
+  taskRegistry:{get(){return stored;}}
 });
 assert.equal((await state(task.taskId,{key:'private-task-key'},'private-account-id')).state,'running');
 assert.equal(received.length,1);

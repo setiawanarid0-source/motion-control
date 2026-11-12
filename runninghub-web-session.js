@@ -441,7 +441,8 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       const failed=await post(key,'/task/failedReason',{taskId:String(id)});
       return {code:805,msg:'Task web gagal.',data:{failedReason:failed?.data||task.errorMessage||task.errorType}};
     }
-    if(task.taskStatus!=='SUCCESS')return {code:804,msg:'RUNNING'};
+    if(task.taskStatus!=='SUCCESS')return {code:804,msg:'RUNNING',
+      ...(typeof task.netWssUrl==='string'&&task.netWssUrl.length<=4096?{data:{netWssUrl:task.netWssUrl}}:{})};
     let fromId='';
     for(let page=0;page<10;page++){
       const data=requireSuccess(await post(key,'/api/output/v2/history',{size:20,current:1,

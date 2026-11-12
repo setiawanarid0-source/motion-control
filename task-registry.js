@@ -17,6 +17,7 @@ const publicEntry=t=>({
   failureAuditCheckedAt:t.failureAuditCheckedAt||null,failureCategory:t.failureCategory||null,
   failureV2CheckedAt:t.failureV2CheckedAt||null,
   inputDiagnostics:t.inputDiagnostics||null,
+  providerProgress:t.providerProgress||null,
   resultUrl:t.resultUrl||null,referenceMaskUrl:t.referenceMaskUrl||null,
   resultSource:t.resultSource||null,resultOriginalSHA256:t.resultOriginalSHA256||null,
   resultOriginalBytes:t.resultOriginalBytes??null,
@@ -103,7 +104,7 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     const tasks=all();const t=tasks.find(x=>x.taskId===String(taskId));if(!t)return null;
     if(DONE.has(t.status)&&!DONE.has(patch.status))return publicEntry(t);
     const permitted=['status','lastCheckedAt','resultUrl','referenceMaskUrl','error','cameraQA','finishedAt',
-      'statusDetail','providerCode','deliveryNote','providerRuntimeSeconds','providerTimingCheckedAt',
+      'statusDetail','providerCode','deliveryNote','providerRuntimeSeconds','providerTimingCheckedAt','providerProgress',
       'failureAuditCheckedAt','failureCategory','failureV2CheckedAt','rifeAuditCheckedAt','rifeAuditVersion',
       'resultArchiveExpected','resultArchiveUrl','resultSource','resultOriginalSHA256','resultOriginalBytes'];
     for(const key of permitted)if(Object.hasOwn(patch,key))t[key]=patch[key];

@@ -19,7 +19,7 @@
   })[s]||'Memproses';
   const PAGE_SIZE=12;
   const pages={image:1,motion:1};
-  const state={image:[],motion:[],modalProvider:null,modalId:null,focus:null};
+  const state={image:[],motion:[],modalProvider:null,modalId:null,mediaSignature:null,focus:null};
   const pageCount=p=>Math.max(1,Math.ceil(state[p].length/PAGE_SIZE));
   const visibleItems=p=>state[p].slice((pages[p]-1)*PAGE_SIZE,pages[p]*PAGE_SIZE);
   function pageNumbers(current,total){
@@ -110,7 +110,7 @@
     // Exclude hidden pages from the DOM, including their image/video requests.
     // Polling can refresh statuses without reloading already visible thumbnails.
     const signature=JSON.stringify([pages[p],sorted.length,...visible.map(t=>
-      [idOf(p,t),t.status,labelOf(p,t),t.resultUrls?.[0]||t.resultUrl||'',
+      [idOf(p,t),t.status,labelOf(p,t),t.statusDetail||'',t.providerProgress?.lastUpdatedAt||'',t.resultUrls?.[0]||t.resultUrl||'',
        t.references?.[0]||'',t.error||'',t.finishedAt||''])]);
     if(signatures[p]!==signature){
       signatures[p]=signature;
@@ -120,7 +120,10 @@
         '<p>Hasil generasi akan muncul di galeri ini.</p></div>';
       root.querySelectorAll('img').forEach(img=>{img.addEventListener('error',()=>{img.hidden=true;});});
     }
-    if(state.modalProvider===p&&state.modalId&&!visible.some(t=>idOf(p,t)===state.modalId))close();
+    if(state.modalProvider===p&&state.modalId){
+      if(!visible.some(t=>idOf(p,t)===state.modalId))close();
+      else drawModal();
+    }
   }
   function current(){return state[state.modalProvider]?.find(t=>idOf(state.modalProvider,t)===state.modalId);}
   function getIndex(){return state.modalProvider?
@@ -153,6 +156,12 @@
     ];
     if(p==='image'&&t.creditsConsumed!=null)details.push(detailLine('Terpakai',String(t.creditsConsumed)+' kredit'));
     if(p==='motion'){details.push(detailLine('Durasi',timeText(t)||'—'));details.push(detailLine('Video',t.video||'—'));}
+    if(p==='motion'&&/^RIFE ·/.test(String(t.workflow))){
+      const source=t.inputDiagnostics;
+      if(source?.width&&source?.height)details.push(detailLine('Resolusi',source.width+' × '+source.height));
+      if(!completed(t)&&t.providerProgress?.lastUpdatedAt)
+        details.push(detailLine('Progres terakhir',dateString(t.providerProgress.lastUpdatedAt)));
+    }
     return '<dl>'+details.join('')+'</dl>';
   }
   function setImageExpanded(enabled){
@@ -178,7 +187,6 @@
   }
   function drawModal(){
     const p=state.modalProvider,t=current();if(!p||!t)return;
-    setImageExpanded(false);
     const idx=getIndex(),count=visibleItems(p).length,media=mediaOf(p,t),poster=posterOf(p,t);
     element('noraViewerContext').textContent=p==='image'?'KIE.AI · IMAGE GALLERY':'RUNNINGHUB · MOTION GALLERY';
     element('noraViewerTitle').textContent=labelOf(p,t);
@@ -187,21 +195,27 @@
     element('noraViewerNext').disabled=count<=1;
     const host=element('noraViewerMedia');
     const file=media||poster;
-    if(file&&p==='image'){
-      const picture='<img class="nora-viewer-image" alt="Hasil gambar" src="'+safeText(file)+'">';
-      host.innerHTML=t.status==='success'&&media
-        ?'<div class="nora-viewer-photo">'+picture+
-          '<button type="button" class="nora-image-fullscreen-trigger" data-nora-fullscreen aria-label="Lihat gambar layar penuh" aria-pressed="false" title="Layar penuh">'+
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
-          '<path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"/></svg></button></div>'
-        :picture;
+    const mediaSignature=JSON.stringify([p,idOf(p,t),file,Boolean(media),t.status==='success',t.status==='failed']);
+    if(state.mediaSignature!==mediaSignature){
+      setImageExpanded(false);
+      state.mediaSignature=mediaSignature;
+      if(file&&p==='image'){
+        const picture='<img class="nora-viewer-image" alt="Hasil gambar" src="'+safeText(file)+'">';
+        host.innerHTML=t.status==='success'&&media
+          ?'<div class="nora-viewer-photo">'+picture+
+            '<button type="button" class="nora-image-fullscreen-trigger" data-nora-fullscreen aria-label="Lihat gambar layar penuh" aria-pressed="false" title="Layar penuh">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
+            '<path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"/></svg></button></div>'
+          :picture;
+      }
+      else if(file&&p==='motion'&&media)host.innerHTML='<video class="nora-viewer-video" src="'+safeText(file)+'" controls playsinline preload="metadata"></video>';
+      else if(file)host.innerHTML='<img class="nora-viewer-image" alt="Gambar referensi" src="'+safeText(file)+'">';
+      else host.innerHTML='<div class="nora-viewer-media-empty"><span>◇</span><p>'+safeText(t.status==='failed'?'Generasi gagal':'Hasil belum tersedia')+'</p></div>';
     }
-    else if(file&&p==='motion'&&media)host.innerHTML='<video class="nora-viewer-video" src="'+safeText(file)+'" controls playsinline preload="metadata"></video>';
-    else if(file)host.innerHTML='<img class="nora-viewer-image" alt="Gambar referensi" src="'+safeText(file)+'">';
-    else host.innerHTML='<div class="nora-viewer-media-empty"><span>◇</span><p>'+safeText(t.status==='failed'?'Generasi gagal':'Hasil belum tersedia')+'</p></div>';
     element('noraViewerStatus').innerHTML='<span class="nora-gallery-chip static '+safeText(t.status)+'">'+safeText(statusName(t.status))+'</span>';
     element('noraViewerMeta').innerHTML=detailMeta(p,t);
-    element('noraViewerActions').innerHTML=actions(p,t);
+    const actionMarkup=actions(p,t);
+    if(element('noraViewerActions').innerHTML!==actionMarkup)element('noraViewerActions').innerHTML=actionMarkup;
     const hasPrompt=p==='image'&&!!t.prompt;
     element('noraViewerPromptBlock').hidden=!hasPrompt;
     element('noraViewerPrompt').textContent=hasPrompt?t.prompt:'';
@@ -220,7 +234,7 @@
     setImageExpanded(false);
     modal.classList.add('hidden');
     const video=element('noraViewerMedia')?.querySelector('video');if(video){video.pause();video.removeAttribute('src');video.load();}
-    state.modalProvider=null;state.modalId=null;
+    state.modalProvider=null;state.modalId=null;state.mediaSignature=null;
     document.body.classList.remove('modal-open');
     if(state.focus?.isConnected)state.focus.focus({preventScroll:true});
   }

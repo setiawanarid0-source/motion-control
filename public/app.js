@@ -102,6 +102,9 @@ async function syncServerHistory(){
           resultUrl:task.resultUrl||local.resultUrl,
           referenceMaskUrl:task.referenceMaskUrl||local.referenceMaskUrl,
           cameraQA:task.cameraQA||local.cameraQA,
+          inputDiagnostics:task.inputDiagnostics||local.inputDiagnostics,
+          providerProgress:task.providerProgress||local.providerProgress,
+          providerRuntimeSeconds:task.providerRuntimeSeconds??local.providerRuntimeSeconds??null,
           error:task.error||null,statusDetail:task.statusDetail||null,
           providerCode:task.providerCode??null,deliveryNote:task.deliveryNote||null})});
     }
@@ -1028,6 +1031,7 @@ window.vantaMotionGallery={
       encodeURIComponent(accountId)+'&deviceId='+encodeURIComponent(getDeviceId());
   },
   referenceUrl(item){
+    if(/^RIFE ·/.test(String(item.workflow)))return null;
     const accountId=resolveHistoryAccountId(item);
     if(!accountId||!item.taskId)return null;
     return referenceLink(item.taskId,'image',accountId);

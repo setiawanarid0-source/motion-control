@@ -73,19 +73,19 @@ export function observeRegisteredH3Progress({taskId,url,registry,monitor}){
       inputDiagnostics:task.inputDiagnostics},url);
   }catch{return false;}
 }
-export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit,diagnosticText}){
+export function createExecutionTrace({taskId,plan,nodeClass=h3NodeClass,now=()=>Date.now(),emit,diagnosticText}){
   let current=null,startedAt=0,partial=true,lastValue=null,finished=false;
   const send=(event,fields={})=>emit({taskId:String(taskId),event,...fields});
   const nodeId=v=>(typeof v==='string'||typeof v==='number')&&/^\d{1,7}$/.test(String(v))?String(v):null;
   function finishNode(){
-    if(current!==null)send('node_end',{node:current,nodeClass:h3NodeClass(current,plan),
+    if(current!==null)send('node_end',{node:current,nodeClass:nodeClass(current,plan),
       observedSeconds:Math.max(0,Math.round((now()-startedAt)/10)/100),partial});
     current=null;lastValue=null;
   }
   function select(node,isPartial){
     if(current===node)return;
     finishNode();current=node;startedAt=now();partial=isPartial;lastValue=null;
-    send('node_start',{node,nodeClass:h3NodeClass(node,plan),partial});
+    send('node_start',{node,nodeClass:nodeClass(node,plan),partial});
   }
   return {message(raw){
     if(finished||typeof raw!=='string'||raw.length>65536)return;
@@ -101,19 +101,19 @@ export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit,diagno
       if(data.node===null){finishNode();return;}
       const node=nodeId(data.node);if(node)select(node,false);
     }else if(message.type==='progress'){
-      const node=nodeId(data.node);
+      const node=data.node===undefined?current:nodeId(data.node);
       if(!node||!Number.isFinite(data.value)||!Number.isFinite(data.max)||
         data.value<0||data.max<1||data.value>data.max||data.max>100000)return;
       select(node,true);
       if(lastValue===data.value)return;
       lastValue=data.value;
-      send('progress',{node,nodeClass:h3NodeClass(node,plan),value:data.value,max:data.max,
+      send('progress',{node,nodeClass:nodeClass(node,plan),value:data.value,max:data.max,
         observedSeconds:Math.max(0,Math.round((now()-startedAt)/10)/100),partial});
     }else if(message.type==='bfs-tara-monitor'){
       const node=nodeId(data.node);
       if(!node||!['evaluating','evaluation_complete'].includes(data.phase)||
         !Number.isSafeInteger(data.evaluation)||data.evaluation<1||data.evaluation>100000)return;
-      const fields={node,nodeClass:h3NodeClass(node,plan),phase:data.phase,evaluation:data.evaluation};
+      const fields={node,nodeClass:nodeClass(node,plan),phase:data.phase,evaluation:data.evaluation};
       if(['flash partitions (no compile)','flex (original)','comfy kitchen (experimental)'].includes(data.backend))
         fields.backend=data.backend;
       for(const name of ['motion_rows','packed_rows','duration_seconds','elapsed_seconds'])
@@ -124,7 +124,7 @@ export function createExecutionTrace({taskId,plan,now=()=>Date.now(),emit,diagno
     }
   },close(){if(!finished&&current!==null)partial=true;finishNode();finished=true;},get finished(){return finished;}};
 }
-export function createH3ExecutionMonitor({WebSocketImpl=globalThis.WebSocket,log=()=>{},now=()=>Date.now(),diagnosticText }={}){
+function createWorkflowExecutionMonitor({supports,nodeClass,WebSocketImpl=globalThis.WebSocket,log=()=>{},now=()=>Date.now(),diagnosticText }={}){
   const connections=new Map(),attempts=new Map();
   function close(id){
     const c=connections.get(id);if(!c)return;
@@ -133,13 +133,13 @@ export function createH3ExecutionMonitor({WebSocketImpl=globalThis.WebSocket,log
   }
   return {observe(task,url){
     const id=String(task?.taskId||'');
-    if(!/^\d{10,25}$/.test(id)||!/^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native)(?: ·|$)/.test(String(task?.workflow))||
+    if(!/^\d{10,25}$/.test(id)||!supports(task)||
       !allowedProgressUrl(url)||typeof WebSocketImpl!=='function'||connections.has(id))return false;
     const previous=attempts.get(id)||{count:0,at:0};
     if(previous.count>=3||now()-previous.at<30000&&previous.count)return false;
     attempts.set(id,{count:previous.count+1,at:now()});
     let socket;try{socket=new WebSocketImpl(url);}catch{log({taskId:id,event:'stream_unavailable'});return false;}
-    const trace=createExecutionTrace({taskId:id,plan:task.inputDiagnostics,now,emit:log,diagnosticText});
+    const trace=createExecutionTrace({taskId:id,plan:task.inputDiagnostics,nodeClass,now,emit:log,diagnosticText});
     const timeout=setTimeout(()=>close(id),2*60*60*1000);timeout.unref?.();
     const connection={socket,trace,timeout};connections.set(id,connection);
     socket.addEventListener('open',()=>log({taskId:id,event:'stream_open'}));
@@ -158,5 +158,15 @@ export function createH3ExecutionMonitor({WebSocketImpl=globalThis.WebSocket,log
     for(const id of connections.keys())if(!keep.has(id))close(id);
     for(const id of attempts.keys())if(!keep.has(id))attempts.delete(id);
   },closeAll(){for(const id of connections.keys())close(id);attempts.clear();}};
+}
+export function createH3ExecutionMonitor(options={}){
+  return createWorkflowExecutionMonitor({...options,nodeClass:h3NodeClass,
+    supports:task=>/^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native)(?: ·|$)/.test(String(task?.workflow))});
+}
+export function rifeNodeClass(node){return ({1:'VHS_LoadVideo',2:'RIFEInterpolation',3:'VHS_VideoCombine',
+  900001:'VHS_VideoCombine',900002:'VHS_SelectFilename',900003:'CompressImages'})[node]||null;}
+export function createRifeExecutionMonitor(options={}){
+  return createWorkflowExecutionMonitor({...options,nodeClass:rifeNodeClass,
+    supports:task=>/^RIFE ·/.test(String(task?.workflow))});
 }
 

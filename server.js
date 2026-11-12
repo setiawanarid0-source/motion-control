@@ -22,15 +22,16 @@ import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,may
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
-import {verifyRifeInput,rifeGraphForSourceFps,RIFE_TARGET_FPS} from './rife-video.js';
+import {verifyRifeInput,rifeGraphForSourceFps,rifeBatchSize,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {auditRifeTasks} from './rife-task-audit.js';
+import {createRifeProgressRecorder,rifeProgressMessage} from './rife-task-progress.js';
 import {H3_DEFAULT_PROFILE,prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
 import {selectFinalVideoOutput,selectOriginalVideoArchive,withOriginalVideoArchive} from './runninghub-output.js';
 import {createOriginalVideoDelivery,ORIGINAL_VIDEO_SOURCE} from './original-video-delivery.js';
 import {compileMotionFlyHD,MOTIONFLY_HD_NAME} from './motionfly-hd-workflow.js';
-import {createH3ExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
+import {createH3ExecutionMonitor,createRifeExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
 import {safeH3Profile,safeH3FaceFocus,safeH3Conditioning,safeH3Result} from './h3-safe-benchmark.js';
 import {longH3Profile,longH3Result,longH3ModelChoices,runLongH3Deployment} from './h3-long-benchmark.js';
 import {consistencyH3Profile,consistencyModelChoices,installConsistencyTrial} from './h3-consistency-trial.js';
@@ -268,8 +269,12 @@ const h3ExecutionMonitor=createH3ExecutionMonitor({
       taskRegistry.get(report.taskId)?.inputDiagnostics?.inferenceProfile==='native-photo-inventory-check')
       writeTaskState(report.taskId,{state:'success',outputs:[]});
   }});
+const recordRifeProgress=createRifeProgressRecorder({registry:taskRegistry,
+  log:report=>console.info('RIFE execution trace',JSON.stringify(report))});
+const rifeExecutionMonitor=createRifeExecutionMonitor({log:recordRifeProgress});
 const observeH3Progress=(taskId,url)=>observeRegisteredH3Progress({
-  taskId,url,registry:taskRegistry,monitor:h3ExecutionMonitor});
+  taskId,url,registry:taskRegistry,monitor:h3ExecutionMonitor})||observeRegisteredH3Progress({
+  taskId,url,registry:taskRegistry,monitor:rifeExecutionMonitor});
 async function runningHubTaskState(taskId,account,accountId){
   const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
   // The provider can return a progress URL while an existing task is running.
@@ -292,7 +297,7 @@ async function runningHubTaskState(taskId,account,accountId){
   if(code===813)return {state:'queued',rawCode:code,providerStatus:'QUEUED',
     message:'Dalam antrean RunningHub'};
   if(code===804)return {state:'running',rawCode:code,providerStatus:'RUNNING',
-    message:'Sedang diproses di RunningHub'};
+    message:rifeProgressMessage(taskRegistry.get(taskId))||'Sedang diproses di RunningHub'};
   if(code===0)return {state:'waiting_output',rawCode:code,
     message:'Menunggu hasil dari RunningHub'};
   const failure=extractTaskFailure(data);
@@ -309,6 +314,7 @@ async function monitorRegisteredTasks(){
   try{
     const active=taskRegistry.active().filter(task=>isRunningHubWebKey(task.key));
     h3ExecutionMonitor.retain(active.map(t=>t.taskId));
+    rifeExecutionMonitor.retain(active.map(t=>t.taskId));
     const pending=active.sort((a,b)=>Date.parse(a.lastCheckedAt||0)-Date.parse(b.lastCheckedAt||0)).slice(0,8);
     await Promise.all(pending.map(async item=>{
       try{
@@ -484,10 +490,11 @@ async function uploadToRunningHub(apiKey, file) {
   return runningHubWeb.upload(apiKey,file);
 }
 
-async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, h3Source, onBeforeSubmit, onModelPreparation }) {
+async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, rifeSource, h3Source, onBeforeSubmit, onModelPreparation }) {
   const h3=['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(workflowKey);
   const isAkatz=workflowKey==='minimaxH3Akatz'||workflowKey==='minimaxH3AkatzV3';
-  let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps):workflowGraphs[workflowKey];
+  let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps,
+    {mode,width:rifeSource?.width,height:rifeSource?.height}):workflowGraphs[workflowKey];
   if(h3&&!h3Source?.file)
     throw Error('Metadata video sumber H3 belum tervalidasi.');
   if(h3&&mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus.');
@@ -913,6 +920,7 @@ async function handleGeneration(req,res){
           imageFile,
           videoFile:rifeSource?.file||videoFile,
           sourceFps:rifeSource?.sourceFps,
+          rifeSource,
           h3Source,
           onBeforeSubmit:()=>{req.submissionAttempted=true;req.progress?.('submitting',null,
             {account:{id:account.id,name:account.name,mode}});},
@@ -928,7 +936,11 @@ async function handleGeneration(req,res){
             resultArchiveExpected:task.resultArchiveExpected,
             video:videoFile.originalname,submittedAt:task.submittedAt,
             status:task.taskStatus==='RUNNING'?'running':'queued',
-            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):null});
+            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):
+              videoOnly?{revision:'rife-target-fps-v1',width:rifeSource.width,height:rifeSource.height,
+                sourceFps:rifeSource.sourceFps,targetFps:RIFE_TARGET_FPS,
+                durationSeconds:rifeSource.durationSeconds,adaptive:rifeSource.adaptive,
+                batchSize:rifeBatchSize(rifeSource,mode)}:null});
           trackingRegistered=true;
         }catch(registerError){
           console.error('Paid task accepted but registry write failed',String(task.taskId),registerError.message);

@@ -40,11 +40,21 @@ export function validateRifeVideoProbe(probe){
   if(!validSourceFps(fps))
     throw new Error('Video terdeteksi '+Number(fps.toFixed(4))+' FPS. Mode RIFE ini menerima FPS sumber hingga 60. Video asli tidak diubah.');
   return {width:stream.width,height:stream.height,sourceFps:fps,
+    durationSeconds:positive(duration)?duration:null,
     detectedFps:fps,targetFps:RIFE_TARGET_FPS,detectionMethod,
     variableFrameRate:positive(nominal)&&Math.abs(nominal-fps)>Math.max(1,fps*.12)};
 }
 
-export function rifeGraphForSourceFps(base,sourceFps){
+// Keep the established Standard batch. Plus can process up to four times more
+// pixels concurrently, bounded to the node's documented default of 8 frames.
+// Larger source frames reduce the batch, never resolution or frame cadence.
+export function rifeBatchSize(source,mode){
+  if(mode!=='plus'||!Number.isSafeInteger(source?.width)||!Number.isSafeInteger(source?.height)||
+    source.width<16||source.height<16)return 2;
+  const available=Math.floor((8*1920*1080)/(source.width*source.height));
+  return available>=8?8:available>=4?4:available>=2?2:1;
+}
+export function rifeGraphForSourceFps(base,sourceFps,options={}){
   if(!validSourceFps(sourceFps))
     throw new Error('FPS asli untuk RIFE harus lebih besar dari 0 dan tidak melebihi 60.');
   if(base?.['1']?.class_type!=='VHS_LoadVideo'||
@@ -53,7 +63,8 @@ export function rifeGraphForSourceFps(base,sourceFps){
      base?.['3']?.class_type!=='VHS_VideoCombine')
     throw new Error('Workflow RIFE target-FPS tidak valid.');
   return {...base,'2':{...base['2'],
-    inputs:{...base['2'].inputs,source_fps:sourceFps,target_fps:RIFE_TARGET_FPS}}};
+    inputs:{...base['2'].inputs,source_fps:sourceFps,target_fps:RIFE_TARGET_FPS,
+      batch_size:rifeBatchSize(options,options.mode)}}};
 }
 async function probeFile(filePath,countPackets=false){
   const {stdout}=await execFileAsync('ffprobe',[
