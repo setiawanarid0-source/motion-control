@@ -104,7 +104,7 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     if(DONE.has(t.status)&&!DONE.has(patch.status))return publicEntry(t);
     const permitted=['status','lastCheckedAt','resultUrl','referenceMaskUrl','error','cameraQA','finishedAt',
       'statusDetail','providerCode','deliveryNote','providerRuntimeSeconds','providerTimingCheckedAt',
-      'failureAuditCheckedAt','failureCategory','failureV2CheckedAt','rifeAuditCheckedAt',
+      'failureAuditCheckedAt','failureCategory','failureV2CheckedAt','rifeAuditCheckedAt','rifeAuditVersion',
       'resultArchiveExpected','resultArchiveUrl','resultSource','resultOriginalSHA256','resultOriginalBytes'];
     for(const key of permitted)if(Object.hasOwn(patch,key))t[key]=patch[key];
     if(DONE.has(t.status)&&!t.finishedAt)t.finishedAt=new Date(now()).toISOString();

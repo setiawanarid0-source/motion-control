@@ -7,7 +7,7 @@ import FormData from 'form-data';
 import axios from 'axios';
 import {runningHubWebBalance,webBalanceNumber} from './runninghub-web-balance.js';
 import {extractTaskFailure} from './task-failure.js';
-import {safeTaskMetrics} from './rife-task-audit.js';
+import {safeTaskMetrics,nativeTaskExecutionSeconds} from './rife-task-audit.js';
 
 export const RH_WEB_ORIGIN='https://www.runninghub.ai';
 export const isRunningHubWebKey=key=>/^rhweb:[a-f0-9]{64}$/.test(String(key||''));
@@ -448,7 +448,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
         taskType:['WORKFLOW','WEBAPP','API','CORPAPI','ExclAPI'],fromId}),get(key));
       const rows=recordList(data),matches=rows.filter(x=>String(x.taskId)===String(id)&&x.fileUrl);
       if(matches.length)return {code:0,msg:'SUCCESS',data:matches.map(x=>({fileUrl:x.fileUrl,fileType:x.outputType,
-        nodeId:x.nodeId==null?'':String(x.nodeId),taskCostTime:task.taskCostTime}))};
+        nodeId:x.nodeId==null?'':String(x.nodeId),taskCostTime:nativeTaskExecutionSeconds(task)}))};
       const next=rows.at(-1)?.taskId;
       if(!rows.length||!next||String(next)===fromId)break;
       fromId=String(next);

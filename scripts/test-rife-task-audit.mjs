@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
-import {safeTaskMetrics,auditRifeTasks} from '../rife-task-audit.js';
+import {safeTaskMetrics,auditRifeTasks,nativeTaskExecutionSeconds,RIFE_AUDIT_VERSION} from '../rife-task-audit.js';
+
+assert.equal(nativeTaskExecutionSeconds({taskExecutedTime:'78',taskCostTime:900}),78);
+assert.equal(nativeTaskExecutionSeconds({taskCostTime:'24.5'}),24.5);
+for(const value of [null,undefined,'',-1,Infinity,'private',604801])assert.equal(nativeTaskExecutionSeconds({taskExecutedTime:value}),null);
+assert.deepEqual(safeTaskMetrics({taskExecutedTime:'78',lastUpdateTime:'2026-11-12 09:44:18',
+  instanceType:'plus',realInstanceType:'plus',taskName:'private'}),
+{taskExecutedTime:'78',lastUpdateTime:'2026-11-12 09:44:18',instanceType:'plus',realInstanceType:'plus'});
 
 assert.deepEqual(safeTaskMetrics({taskCostTime:45,createTime:'2026-11-12T09:43:00Z',
   startTime:'2026-11-12 09:44:00',endTime:1800000000000,duration:'00:01:32',
@@ -11,7 +18,7 @@ const now=Date.parse('2026-11-12T10:00:00Z'),calls=[],updates=[],logs=[];
 const task=(id,extra={})=>({taskId:id,workflow:'RIFE · ≤60 → 60 FPS',status:'running',
   mode:'plus',submittedAt:'2026-11-12T09:43:00Z',...extra});
 const tasks=[task('1',{workflow:'MotionFly'}),task('2',{submittedAt:'2026-11-12T09:59:00Z'}),
-  task('3',{rifeAuditCheckedAt:'2026-11-12T09:59:30Z'}),task('4',{status:'success',rifeAuditCheckedAt:'2026-11-12T09:55:00Z'}),
+  task('3',{rifeAuditCheckedAt:'2026-11-12T09:59:30Z'}),task('4',{status:'success',rifeAuditVersion:RIFE_AUDIT_VERSION,rifeAuditCheckedAt:'2026-11-12T09:55:00Z'}),
   task('5'),task('6',{status:'success'}),task('7')];
 await auditRifeTasks({tasks,now:()=>now,query:async t=>{
   calls.push(t.taskId);return {found:true,taskStatus:'SUCCESS',taskMetrics:{taskCostTime:12,accessToken:'private'},
