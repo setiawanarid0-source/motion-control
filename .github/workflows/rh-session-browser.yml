@@ -1,4 +1,4 @@
-name: RunningHub session export channels
+name: RunningHub session popup browsers
 on:
   pull_request:
     branches: [main]
@@ -40,27 +40,5 @@ jobs:
         with:
           name: runninghub-session-${{ matrix.browser }}
           path: /tmp/vanta-rh-export-*.png
-          if-no-files-found: ignore
-          retention-days: 3
-  isolated-extension:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Install test browser
-        run: |
-          npm install --no-save --no-audit --no-fund playwright-core@1.56.1
-          npx playwright-core install --with-deps chromium
-      - name: Verify isolated extension with strict page CSP
-        run: node scripts/test-rh-session-extension.mjs
-      - name: Save synthetic-session screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: runninghub-session-isolated-extension
-          path: /tmp/vanta-rh-extension-*.png
           if-no-files-found: ignore
           retention-days: 3

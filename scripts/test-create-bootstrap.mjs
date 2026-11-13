@@ -49,7 +49,7 @@ const nodeKeys=['#menuBtn','#sidebar','#rifeNotice','#h3Notice','#akatzNotice','
   '#imageDrop','#referenceImage','#videoDrop',
   '#videoReference','#generateBtn','#refreshAccounts','#motionGalleryRefresh',
   '#rhWebSessionPanel',
-  '#copyRhSessionCode','#selectRhSessionCode','#rhSessionCodeManual','#connectRhWebSession','#rhWebSessionInput'];
+  '#copyRhSessionCode','#selectRhSessionCode','#copyRhBookmarkTestCode','#rhSessionCodeManual','#connectRhWebSession','#rhWebSessionInput'];
 const nodes=new Map(nodeKeys.map(key=>[key,makeElement()]));
 nodes.set('#historyFilters',null);
 const requested=[],uploads=[],errors=[],state={workflow:'motionflyHD',mode:'standard'};
