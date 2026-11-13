@@ -1,3 +1,4 @@
+import {withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS} from '../integrated-rife.js';
 import {withOriginalVideoArchive} from '../runninghub-output.js';
 import {isRunningHubWebKey} from '../runninghub-web-session.js';
 import assert from 'node:assert/strict';
@@ -175,7 +176,7 @@ for(const [frames,wanted] of [[125,[124,1]],[333,[124,119,90]],[334,[124,119,68,
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
 const calls=[];let payload,submitted=0,uploaded=0;
-const context={withOriginalVideoArchive,isRunningHubWebKey,AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,akatzGraphForInputs,akatzSeedNodeInfo,runningHubInstanceType,
+const context={withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS,withOriginalVideoArchive,isRunningHubWebKey,AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,akatzGraphForInputs,akatzSeedNodeInfo,runningHubInstanceType,
   turbo8GraphForInputs,turbo8SeedNodeInfo,
   h3AkatzTurbo8Model:{ensure:async()=>{calls.push('turbo');return turbo;}},
   DATA_DIR:'/fixture-only',assertH3MotionContextSchema:async()=>{calls.push('schema');},
