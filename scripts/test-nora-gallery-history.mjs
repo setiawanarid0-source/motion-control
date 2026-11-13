@@ -45,8 +45,8 @@ assert.ok(css.includes('.nora-viewer-photo{position:static;')&&
   'Fullscreen button must be small and anchored to the stage right-bottom, not the portrait image');
 assert.ok(css.includes('.nora-image-fullscreen-trigger svg{width:16px;height:16px}'),
   'Fullscreen icon must be compact');
-assert.ok(html.includes('/history-gallery.js?v=20261112-rife-live-progress')&&
-  html.includes('/history-gallery.css?v=20261024-image-fullscreen-stage-v2'),
+assert.ok(html.includes('/history-gallery.js?v=20261113-akatz-turbo8')&&
+  html.includes('/history-gallery.css?v=20261113-akatz-turbo8'),
   'Mobile browsers must receive fresh viewer JS and CSS');
 assert.ok(gallery.includes("e.key==='ArrowRight'")&&gallery.includes("e.key==='ArrowLeft'"));
 assert.ok(gallery.includes("addEventListener('touchend'"));

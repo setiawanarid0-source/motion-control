@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20261018-image-dashboard-v1" />
+  <link rel="stylesheet" href="/styles.css?v=20261018-image-dashboard-v1-akatz-turbo8-20261113" />
   <link rel="stylesheet" href="/vanta-polish.css?v=20261111-pool-refresh-status" />
-  <link rel="stylesheet" href="/history-gallery.css?v=20261024-image-fullscreen-stage-v2" />
+  <link rel="stylesheet" href="/history-gallery.css?v=20261113-akatz-turbo8" />
 </head>
 <body>
   <div class="app-shell">
@@ -125,14 +125,14 @@
               </button>
               <button class="workflow-card" data-workflow="minimaxH3Akatz" type="button">
                 <div class="workflow-row"><strong>MiniMax H3 · Akatz V1.5 Native</strong><span class="badge">UJI</span></div>
-                <p>1080p · 24 FPS · Plus · hingga 15 detik</p>
-                <small>Karakter dari foto, gerakan dari video. Durasi utuh tanpa refinement.</small>
+                <p>Turbo8 · 1080p · 24 FPS · Plus · hingga 15 detik</p>
+                <small>Durasi adaptif, audio sumber, video dan ZIP tiga frame PNG.</small>
               </button>
             </div>
 
             <div id="rifeNotice" class="diagnostic-notice hidden" role="note"><strong>Frame Interpolation tanpa Upscale</strong><p>Unggah video hingga 60 FPS. Video yang terbaca 60 FPS tetapi memiliki frame duplikat akan dianalisis: frame gerakan unik dijadikan input RIFE agar AI membuat frame perantara baru hingga 60 FPS. Nilai FPS gerakan ditentukan dari hasil analisis, bukan dipaksa ke 30 FPS. Resolusi dan durasi dipertahankan. Jika tidak ada pola yang dapat diperbaiki secara aman, task tidak dikirim ke RunningHub. Analisis menggunakan CPU VANTA dan dapat memerlukan waktu.</p><p>Mode Automatic dapat mencoba akun lain jika RunningHub menolak pengiriman sebelum membuat task. Setelah task diterima atau status penerimaannya belum pasti, pengiriman tidak diulang.</p></div>
             <div id="h3Notice" class="diagnostic-notice hidden" role="note"><strong>MiniMax H3 · Motion Control</strong><p>Foto menjadi acuan wajah, bentuk tubuh, pakaian, tekstur dan tampilan scene. Video 0,25–60 detik memandu gerakan, ekspresi dan kamera. Hasil 1080p mengikuti rasio foto, 24 FPS, dengan audio sumber; tanpa upscale, downscale atau refinement hasil.</p><p>Gunakan Plus. Ketepatan visual dan kecukupan memori belum dibuktikan melalui render; mulai dengan klip pendek. Foto tidak dipotong: rasio hingga 2:1 atau 1:2, sisi pendek 64–2048 px.</p></div>
-            <div id="akatzNotice" class="diagnostic-notice hidden" role="note"><strong>Akatz V1.5 Native · Versi uji v8</strong><p>Unggah satu foto dan satu video 0,25–15 detik. Gunakan Plus. Hasil dibuat langsung pada canvas 1080p, 24 FPS, dengan audio sumber; tanpa upscale, downscale atau refinement hasil.</p><p>Untuk klip sekitar 14–15 detik, bagian akhir dibagi menjadi dua segmen pendek. Versi ini menambah satu proses sampling dengan history tetap 5 frame. Kualitas, waktu dan biaya masih perlu diuji; masalah tekstur belum dinyatakan selesai.</p><p><a class="akatz-editor-download" href="/api/workflows/minimaxH3Akatz/runninghub" download="VANTA_MINIMAX_H3_AKATZ_V8_RUNNINGHUB.json">Unduh workflow RunningHub + ZIP</a></p><p>Preset editor: 15 detik · 1080 × 1920. Unggah kembali referensi di RunningHub. Unduhan workflow tidak menjalankan generate.</p></div>
+            <div id="akatzNotice" class="diagnostic-notice hidden" role="note"><strong>Akatz V1.5 Native · Turbo8</strong><p>Unggah satu foto dan satu video 0,25–15 detik. Gunakan Plus. Hasil native 1080p mengikuti rasio foto, 24 FPS, dengan audio sumber; tanpa upscale, downscale atau refinement hasil.</p><p>Durasi dibagi adaptif hingga tiga segmen. Hasil menyediakan video dan ZIP tiga frame PNG dari awal, tengah, dan akhir untuk memeriksa detail. Kualitas tekstur dan waktu proses masih menunggu hasil tes.</p><p><a class="akatz-editor-download" href="/api/workflows/minimaxH3Akatz/runninghub" download="VANTA_AKATZ_TURBO8_TIGA_FRAME_ZIP_R2_RUNNINGHUB.json">Unduh workflow RunningHub + ZIP</a></p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
             <div class="mode-grid">
               <button class="mode-card selected" data-mode="standard" type="button">
@@ -166,7 +166,7 @@
         <section id="resultSection" class="panel result-panel hidden">
           <div class="result-head"><div><div class="eyebrow">RESULT</div><h3 id="resultHeading">Generation completed</h3></div><div class="result-stats"><span id="resultWorkflow">—</span></div></div>
           <p id="resultMediaLabel" class="result-media-label">Video hasil generasi</p><div class="video-frame"><video id="resultVideo" controls playsinline></video></div><div id="referenceMaskWrap" class="hidden diagnostic-mask"><p>Mask referensi SAM3</p><img id="referenceMaskPreview" alt="Hasil mask referensi SAM3" loading="lazy"><a id="referenceMaskDownload" class="download-btn" target="_blank" rel="noopener noreferrer" href="#">Buka gambar mask</a></div>
-          <div class="result-actions"><div class="cache-state"><span class="status-dot online"></span><span id="resultCacheState">Hasil siap diputar</span></div><a id="downloadBtn" class="download-btn" href="#" download>Download</a></div>
+          <div class="result-actions"><div class="cache-state"><span class="status-dot online"></span><span id="resultCacheState">Hasil siap diputar</span></div><a id="framesDownloadBtn" class="download-btn hidden" download>Unduh 3 frame PNG</a><a id="downloadBtn" class="download-btn" href="#" download>Download</a></div>
         </section>
       </section>
 
@@ -364,9 +364,9 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/auth.js?v=20261026-global-login" defer></script>
   <script src="/rh-session.js?v=20261113-bookmark-flow" defer></script>
-  <script src="/app.js?v=20261113-bookmark-flow" defer></script>
+  <script src="/app.js?v=20261113-akatz-turbo8" defer></script>
   <script src="/kie-ui.js?v=20261113-seedream55-gpt26" defer></script>
-  <script src="/history-gallery.js?v=20261112-rife-live-progress" defer></script>
+  <script src="/history-gallery.js?v=20261113-akatz-turbo8" defer></script>
 </body>
 </html>
 

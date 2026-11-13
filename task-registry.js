@@ -19,6 +19,7 @@ const publicEntry=t=>({
   inputDiagnostics:t.inputDiagnostics||null,
   providerProgress:t.providerProgress||null,
   resultUrl:t.resultUrl||null,referenceMaskUrl:t.referenceMaskUrl||null,
+  hasFrameDiagnostics:Boolean(t.hasFrameDiagnostics),
   resultSource:t.resultSource||null,resultOriginalSHA256:t.resultOriginalSHA256||null,
   resultOriginalBytes:t.resultOriginalBytes??null,
   error:t.error||null,cameraQA:t.cameraQA||null
@@ -106,7 +107,8 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     const permitted=['status','lastCheckedAt','resultUrl','referenceMaskUrl','error','cameraQA','finishedAt',
       'statusDetail','providerCode','deliveryNote','providerRuntimeSeconds','providerTimingCheckedAt','providerProgress',
       'failureAuditCheckedAt','failureCategory','failureV2CheckedAt','rifeAuditCheckedAt','rifeAuditVersion',
-      'resultArchiveExpected','resultArchiveUrl','resultSource','resultOriginalSHA256','resultOriginalBytes'];
+      'resultArchiveExpected','resultArchiveUrl','resultSource','resultOriginalSHA256','resultOriginalBytes',
+      'hasFrameDiagnostics','frameArchiveUrl'];
     for(const key of permitted)if(Object.hasOwn(patch,key))t[key]=patch[key];
     if(DONE.has(t.status)&&!t.finishedAt)t.finishedAt=new Date(now()).toISOString();
     if(t.status==='success')t.error=null;

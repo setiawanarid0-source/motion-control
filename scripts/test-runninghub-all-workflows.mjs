@@ -9,6 +9,7 @@ import {createH3AppearanceModel,FFP_ASSET,CHARACTER_ASSET} from '../h3-appearanc
 import {h3PhotoPlan,h3GraphForInputs,H3_DEFAULT_PROFILE} from '../minimax-h3-motion.js';
 import {AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,akatzGraphForInputs,akatzSeedNodeInfo} from '../h3-akatz-motion.js';
 import * as akatzV3 from '../h3-akatz-v3-motion.js';
+import {TURBO8_ASSET,turbo8GraphForInputs,turbo8SeedNodeInfo} from '../h3-akatz-turbo8.js';
 import {rifeGraphForSourceFps,RIFE_TARGET_FPS} from '../rife-video.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
 import {compileMotionFlyHD} from '../motionfly-hd-workflow.js';
@@ -48,6 +49,7 @@ try{
   };
   const h3AppearanceModel=model(FFP_ASSET,1),h3CharacterModel=model(CHARACTER_ASSET,2);
   const h3AkatzModels={character:model(AKATZ_ASSET,3),turbo:model(AKATZ_TURBO_ASSET,4)};
+  const h3AkatzTurbo8Model=model(TURBO8_ASSET,5);
   const files={current:'current-api.json',rife60:'rife60-api.json',minimaxH3:'minimax-h3-motion-control.json'};
   const workflowGraphs=Object.fromEntries(Object.entries(files).map(([name,file])=>[name,JSON.parse(fs.readFileSync(new URL('../workflows/'+file,import.meta.url),'utf8'))]));
   workflowGraphs.motionflyHD=compileMotionFlyHD(JSON.parse(fs.readFileSync(new URL('../workflows/motionfly-hd-runninghub.json',import.meta.url),'utf8')));
@@ -55,6 +57,7 @@ try{
   const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
   const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
   const context={isRunningHubWebKey,runningHubWeb,workflowGraphs,h3GraphForInputs,akatzGraphForInputs,akatzV3,akatzSeedNodeInfo,withOriginalVideoArchive,
+    turbo8GraphForInputs,turbo8SeedNodeInfo,h3AkatzTurbo8Model,
     AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,RIFE_TARGET_FPS,rifeGraphForSourceFps,runningHubInstanceType,h3AppearanceModel,h3CharacterModel,h3AkatzModels,
     DATA_DIR:dir,assertH3MotionContextSchema:async()=>{},
     uploadToRunningHub:(credential,file)=>runningHubWeb.upload(credential,file),
@@ -89,7 +92,10 @@ try{
   const native=submitted.minimaxH3Akatz,v3=submitted.minimaxH3AkatzV3,hd=submitted.motionflyHD;
   assert.equal(native['7'].inputs.file_name,'api-lora-usa/'+'3'.repeat(32)+'.safetensors');
   assert.equal(v3['7'].inputs.file_name,native['7'].inputs.file_name);
-  assert.equal(v3['6'].inputs.file_name,native['6'].inputs.file_name);
+  assert.equal(v3['6'].inputs.file_name,'api-lora-usa/'+'4'.repeat(32)+'.safetensors','v3 keeps its original Turbo4 receipt');
+  assert.equal(native['6'].inputs.file_name,'api-lora-usa/'+'5'.repeat(32)+'.safetensors','the main Akatz option uses the distinct Turbo8 receipt');
+  assert.equal(native['41'].inputs.steps,8);assert.equal(native['40'].inputs.sampler_name,'er_sde');
+  assert.ok(native['5108'],'Token submission includes the three-frame diagnostic archive');
   assert.equal(v3['490'].inputs.crf,16,'Akatz v3 must retain its historical encoding recipe');
   assert.equal(v3['490'].inputs.frame_rate,24);
   assert.ok(v3['10'],'Akatz v3 must retain the original attention node');

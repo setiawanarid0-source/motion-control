@@ -1,12 +1,18 @@
 const isVideo=output=>/video|mp4/i.test(String(output?.fileType||''))||
   /\.mp4(?:\?|$)/i.test(String(output?.fileUrl||''));
+const isZip=output=>/^(?:application\/)?(?:x-)?zip(?:-compressed)?$/i.test(String(output?.fileType||''))||
+  /\.zip(?:\?|$)/i.test(String(output?.fileUrl||''));
+const frameZip=output=>String(output?.nodeId)==='5108'||
+  /VANTA_AKATZ_3_FRAME_PNG/i.test(String(output?.fileUrl||'')+' '+String(output?.filename||output?.fileName||''));
+export function selectFrameDiagnosticArchive(outputs){
+  return Array.isArray(outputs)?outputs.find(x=>isZip(x)&&frameZip(x)):undefined;
+}
 
 // Web history may omit nodeId entirely. ZIP export is the original file;
 // the separately listed MP4 is only a provider preview/backup.
 export function selectOriginalVideoArchive(outputs){
   if(!Array.isArray(outputs))return undefined;
-  const archives=outputs.filter(x=>/^(?:application\/)?(?:x-)?zip(?:-compressed)?$/i.test(String(x?.fileType||''))||
-    /\.zip(?:\?|$)/i.test(String(x?.fileUrl||'')));
+  const archives=outputs.filter(x=>isZip(x)&&!frameZip(x));
   const preferred=archives.find(x=>String(x.nodeId)==='496');
   if(preferred)return preferred;
   if(archives.length===1)return archives[0];

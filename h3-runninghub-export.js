@@ -103,16 +103,16 @@ export function akatzEditorWorkflow({characterLoraFile,turboLoraFile}){
         filename_transport:'typed_STRING_links',generation_executed:false,visual_acceptance:'pending_owner_test'}},version:0.4};
 }
 
-export function installAkatzEditorDownload({app,getModelFiles}){
+export function installAkatzEditorDownload({app,getModelFiles,buildWorkflow=akatzEditorWorkflow,filename=AKATZ_EDITOR_FILENAME}){
   app.get('/api/workflows/minimaxH3Akatz/runninghub',(_req,res)=>{
     res.set('Cache-Control','no-store');
     try{
       const models=getModelFiles();
       if(!models.characterLoraFile||!models.turboLoraFile)
         return res.status(503).json({error:'Receipt kedua model Akatz belum tersedia untuk ekspor. Tidak ada model upload atau generate yang dijalankan.'});
-      const workflow=akatzEditorWorkflow(models);
+      const workflow=buildWorkflow(models);
       res.set('Content-Type','application/json; charset=utf-8');
-      res.set('Content-Disposition','attachment; filename="'+AKATZ_EDITOR_FILENAME+'"');
+      res.set('Content-Disposition','attachment; filename="'+filename+'"');
       res.send(JSON.stringify(workflow,null,2)+'\n');
     }catch{res.status(503).json({error:'Workflow Akatz belum dapat diekspor. Tidak ada generate yang dijalankan.'});}
   });

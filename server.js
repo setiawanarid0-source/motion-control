@@ -15,7 +15,7 @@ import { referenceAvailability, referenceFile, stageReferences, commitReferences
 import {createPrivateMediaBucket} from './private-media-bucket.js';
 import {createTaskRegistry} from './task-registry.js';
 import {createMotionResultArchive} from './motion-result-archive.js';
-import {createMotionResultBucket, MOTION_VIDEO_RETENTION_MS} from './motion-result-bucket.js';
+import {createMotionResultBucket, MOTION_VIDEO_RETENTION_MS,validProviderUrl} from './motion-result-bucket.js';
 import {createGenerationQueue} from './generation-queue.js';
 import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance.js';
 import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,mayTryNextAccountAfterCreate} from './runninghub-capacity.js';
@@ -28,7 +28,7 @@ import {auditRifeTasks} from './rife-task-audit.js';
 import {createRifeProgressRecorder,rifeProgressMessage} from './rife-task-progress.js';
 import {H3_DEFAULT_PROFILE,prepareH3Input,h3GraphForInputs,h3ExecutionPlan} from './minimax-h3-motion.js';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from './runninghub-task-timing.js';
-import {selectFinalVideoOutput,selectOriginalVideoArchive,withOriginalVideoArchive} from './runninghub-output.js';
+import {selectFinalVideoOutput,selectOriginalVideoArchive,selectFrameDiagnosticArchive,withOriginalVideoArchive} from './runninghub-output.js';
 import {createOriginalVideoDelivery,ORIGINAL_VIDEO_SOURCE} from './original-video-delivery.js';
 import {compileMotionFlyHD,MOTIONFLY_HD_NAME} from './motionfly-hd-workflow.js';
 import {createH3ExecutionMonitor,createRifeExecutionMonitor,observeRegisteredH3Progress} from './runninghub-execution-trace.js';
@@ -42,6 +42,9 @@ import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionCon
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import * as akatzV3 from './h3-akatz-v3-motion.js';
 import {installAkatzEditorDownload} from './h3-runninghub-export.js';
+import {TURBO8_REVISION,TURBO8_ASSET,TURBO8_EDITOR_FILENAME,turbo8GraphForInputs,turbo8ExecutionPlan,turbo8SeedNodeInfo,turbo8EditorWorkflow} from './h3-akatz-turbo8.js';
+import {installFrameDiagnostics} from './h3-frame-diagnostics.js';
+import {createOutputArchiveClassifier} from './output-archive-roles.js';
 import {createRunningHubWebSession,isRunningHubWebKey,RH_AUTO_RENEW_INTERVAL_MS} from './runninghub-web-session.js';
 import {migrateRunningHubAccessTokens} from './runninghub-token-migration.js';
 import crypto from 'node:crypto';
@@ -67,7 +70,7 @@ const workflowGraphs = {
   current: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/current-api.json'), 'utf8')),
   rife60: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/rife60-api.json'), 'utf8')),
   minimaxH3: JSON.parse(fs.readFileSync(path.join(__dirname, 'workflows/minimax-h3-motion-control.json'), 'utf8')),
-  minimaxH3Akatz: {revision:AKATZ_REVISION},
+  minimaxH3Akatz: {revision:TURBO8_REVISION},
   minimaxH3AkatzV3: {revision:akatzV3.AKATZ_REVISION},
 };
 
@@ -86,8 +89,9 @@ const workflowMeta = {
   },
   minimaxH3Akatz: {
     id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz V1.5 Native · 1080p',
-    subtitle:'1080p · foto + video · 24 FPS · Plus · hingga 15 detik',
-    detail:'Foto menjadi acuan karakter, rambut, proporsi tubuh, pakaian dan tekstur; video memandu gerak dan kamera. Sampling langsung pada canvas 1080p, satu urutan utuh hingga 15 detik, dengan audio sumber. Tanpa resize atau refinement hasil. Versi uji untuk dinilai dari hasil generate Anda.',
+    subtitle:'Turbo8 · 1080p · 24 FPS · Plus · hingga 15 detik',
+    detail:'Foto menjadi acuan tampilan; video memandu gerak dan kamera. Kandidat Turbo8 memakai durasi adaptif, audio sumber, MP4 dan ZIP tiga frame PNG untuk pemeriksaan detail. Hasil native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
+    revision:TURBO8_REVISION,frameDiagnostics:true,
     outputKind:'video',experimental:true,requiredMode:'plus'
   },
   minimaxH3: {
@@ -145,11 +149,12 @@ const taskRegistry=createTaskRegistry({dir:DATA_DIR,encrypt,decrypt});
 const runningHubWeb=createRunningHubWebSession({dir:DATA_DIR,encrypt,decrypt});
 const motionResults=createMotionResultArchive({dir:path.join(DATA_DIR,'motion-results')});
 const bucketResults=createMotionResultBucket();
+const classifyOutputArchives=createOutputArchiveClassifier({validUrl:validProviderUrl});
 const originalDelivery=createOriginalVideoDelivery({registry:taskRegistry,bucket:bucketResults,archive:motionResults,
   outputs:async task=>{
     const data=await rhJson('/task/openapi/outputs',task.key,{apiKey:task.key,taskId:task.taskId},30000);
     if(Number(data?.code)!==0||!Array.isArray(data.data))throw Error('Keluaran RunningHub belum tersedia.');
-    return data.data;
+    return classifyOutputArchives(data.data);
   }});
 const privateMedia=createPrivateMediaBucket();
 configureReferenceMedia(privateMedia);
@@ -203,6 +208,8 @@ const h3AkatzModels={
   turbo:createH3AppearanceModel({dir:path.join(os.tmpdir(),'vanta-h3-akatz-turbo-cache'),
     registryFile:path.join(DATA_DIR,'h3-akatz-turbo-loras.json'),request:rhJson,asset:AKATZ_TURBO_ASSET})
 };
+const h3AkatzTurbo8Model=createH3AppearanceModel({dir:path.join(os.tmpdir(),'vanta-h3-akatz-turbo8-cache'),
+  registryFile:path.join(DATA_DIR,'h3-akatz-turbo8-loras.json'),request:rhJson,asset:TURBO8_ASSET});
 function registeredAccount(taskId,accountId=''){
   const item=taskRegistry.get(String(taskId));
   if(!item)return null;
@@ -228,10 +235,12 @@ function writeTaskState(taskId,result){
     const outputs=Array.isArray(result.outputs)?result.outputs:[];
     const video=selectFinalVideoOutput(outputs);
     const zip=selectOriginalVideoArchive(outputs);
+    const frames=selectFrameDiagnosticArchive(outputs);
     const mask=outputs.find(x=>String(x.nodeId)==='394');
     patch.resultUrl=video?.fileUrl||previous?.resultUrl||(zip&&previous?.accountId?
       '/api/tasks/'+encodeURIComponent(taskId)+'/preview?accountId='+encodeURIComponent(previous.accountId):null);
     if(zip){patch.resultArchiveUrl=zip.fileUrl;patch.resultArchiveExpected=true;}
+    if(frames){patch.frameArchiveUrl=frames.fileUrl;patch.hasFrameDiagnostics=true;}
     patch.referenceMaskUrl=mask?.fileUrl||null;
     patch.cameraQA=result.cameraQA||null;
     patch.finishedAt=previous?.finishedAt||now;
@@ -283,7 +292,8 @@ async function runningHubTaskState(taskId,account,accountId){
     observeH3Progress(taskId,data.data.netWssUrl);
   const code=Number(data?.code);
   if(code===0&&Array.isArray(data?.data)&&data.data.length){
-    const outputs=data.data.map(x=>({fileUrl:x.fileUrl,fileType:x.fileType,nodeId:x.nodeId??null})).filter(x=>x.fileUrl);
+    const outputs=await classifyOutputArchives(data.data.map(x=>({fileUrl:x.fileUrl,fileType:x.fileType,nodeId:x.nodeId??null,
+      ...(x.filename||x.fileName?{filename:String(x.filename||x.fileName)}:{})})).filter(x=>x.fileUrl));
     // RunningHub generates native 40 FPS frames within Current / R4 Full workflows.
     // The website never runs an additional post-generation FPS conversion.
     const video=selectFinalVideoOutput(outputs);
@@ -516,10 +526,11 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     let characterLoraFile,turboLoraFile;
     try{[characterLoraFile,turboLoraFile]=await Promise.all([
       h3AkatzModels.character.ensure(apiKey,{onProgress:progress('character')}),
-      h3AkatzModels.turbo.ensure(apiKey,{onProgress:progress('accelerator')})]);}
+      workflowKey==='minimaxH3Akatz'?h3AkatzTurbo8Model.ensure(apiKey,{onProgress:progress('accelerator')}):
+        h3AkatzModels.turbo.ensure(apiKey,{onProgress:progress('accelerator')})]);}
     catch(error){const failure=new Error(error?.message||'Persiapan model Akatz belum selesai.');
       failure.code='H3_MODEL_PREPARATION_FAILED';throw failure;}
-    const build=workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzGraphForInputs:akatzGraphForInputs;
+    const build=workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzGraphForInputs:turbo8GraphForInputs;
     selectedGraph=build({imageName,videoName,source:h3Source,characterLoraFile,turboLoraFile});
   }else if(workflowKey==='minimaxH3'){
     if(['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(h3Source.inferenceProfile))
@@ -535,7 +546,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     // Akatz preserves each planned seed through a STRING expression override
     // and an INT graph link; direct noise_seed overrides became strings.
     // The other existing H3 profiles retain their current submission contract.
-    nodeInfoList: workflowKey==='minimaxH3Akatz' ? akatzSeedNodeInfo(h3Source) : h3 ? [] : [
+    nodeInfoList: workflowKey==='minimaxH3Akatz' ? turbo8SeedNodeInfo(h3Source) : h3 ? [] : [
       ...(workflowKey==='rife60'
         ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName },
            { nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps },
@@ -700,8 +711,14 @@ app.get('/api/workflows', (req, res) => {
 
 installAkatzEditorDownload({app,getModelFiles:()=>({
   characterLoraFile:h3AkatzModels.character.cachedFile(),
-  turboLoraFile:h3AkatzModels.turbo.cachedFile()
-})});
+  turboLoraFile:h3AkatzTurbo8Model.cachedFile()
+}),buildWorkflow:turbo8EditorWorkflow,filename:TURBO8_EDITOR_FILENAME});
+installFrameDiagnostics({app,registry:taskRegistry,getAccount:taskAccount,request:axios.get,validUrl:validProviderUrl,
+  getOutputs:async(taskId,account)=>{
+    const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
+    if(Number(data?.code)!==0||!Array.isArray(data.data))throw Error('Keluaran RunningHub belum tersedia.');
+    return classifyOutputArchives(data.data);
+  }});
 
 app.get('/api/session', async (req, res) => {
   const { deviceId, accounts } = getPersistentAccounts(req);
@@ -864,7 +881,7 @@ async function handleGeneration(req,res){
           inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
-      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
+      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
       req.progress?.('analyzing');
@@ -936,7 +953,7 @@ async function handleGeneration(req,res){
             resultArchiveExpected:task.resultArchiveExpected,
             video:videoFile.originalname,submittedAt:task.submittedAt,
             status:task.taskStatus==='RUNNING'?'running':'queued',
-            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?akatzExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):
+            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):
               videoOnly?{revision:'rife-target-fps-v1',width:rifeSource.width,height:rifeSource.height,
                 sourceFps:rifeSource.sourceFps,targetFps:RIFE_TARGET_FPS,
                 durationSeconds:rifeSource.durationSeconds,adaptive:rifeSource.adaptive,
@@ -1449,14 +1466,14 @@ void (async()=>{
     catch(error){console.warn('RunningHub workspace preparation deferred',account.name,String(error.code||'unavailable'));}
   }
 })();
-console.info('RunningHub model receipts',JSON.stringify({ffp:Boolean(h3AppearanceModel.cachedFile()),character:Boolean(h3CharacterModel.cachedFile()),akatz:Boolean(h3AkatzModels.character.cachedFile()),turbo:Boolean(h3AkatzModels.turbo.cachedFile())}));
+console.info('RunningHub model receipts',JSON.stringify({ffp:Boolean(h3AppearanceModel.cachedFile()),character:Boolean(h3CharacterModel.cachedFile()),akatz:Boolean(h3AkatzModels.character.cachedFile()),turbo:Boolean(h3AkatzModels.turbo.cachedFile()),turbo8:Boolean(h3AkatzTurbo8Model.cachedFile())}));
 // Cache-only reuse authorizes existing MD5 paths for the other pool accounts.
 // This cannot download weights, PUT bytes, create inference, retry or cancel.
 void (async()=>{
   const accounts=loadGlobalAccounts();let readyAccounts=0;
   for(let i=0;i<accounts.length;i+=3){
     const results=await Promise.allSettled(accounts.slice(i,i+3).map(async account=>{
-      const files=await Promise.all([h3AkatzModels.character.primeCached(account.key),h3AkatzModels.turbo.primeCached(account.key)]);
+      const files=await Promise.all([h3AkatzModels.character.primeCached(account.key),h3AkatzModels.turbo.primeCached(account.key),h3AkatzTurbo8Model.primeCached(account.key)]);
       return files.every(Boolean);
     }));
     readyAccounts+=results.filter(x=>x.status==='fulfilled'&&x.value).length;

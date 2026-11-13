@@ -60,7 +60,8 @@ export function createH3AppearanceModel({dir,request,http=axios,asset=FFP_ASSET,
       finally{await fs.promises.rm(temp,{force:true});}
     });return writing;
   }
-  const knownReceipts=()=>Object.values(registry).filter(x=>x?.sha256===asset.sha256&&validUploadedH3Lora(x.name));
+  const knownReceipts=()=>[...Object.values(registry),asset.publishedUpload]
+    .filter(x=>x?.sha256===asset.sha256&&validUploadedH3Lora(x.name));
   const md5FromName=name=>name.split('/')[1].slice(0,32);
   async function saveReceipt(id,name){
     if(registry[id]?.sha256===asset.sha256&&registry[id]?.name===name)return;

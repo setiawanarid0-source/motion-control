@@ -1,6 +1,7 @@
 // Optional, read-only provider progress. Polling remains authoritative.
 // Binary preview frames, URLs, prompts, error text and credentials are ignored.
 import {akatzNodeClass} from './h3-akatz-motion.js';
+import {TURBO8_REVISION,turbo8NodeClass} from './h3-akatz-turbo8.js';
 const BASE_NODES={1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',5:'LoraLoaderModelOnly',
   6:'LoraLoaderModelOnly',7:'LoraLoaderModelOnly',8:'MiniMaxH3SigmaShift',30:'LoadImage',
   31:'ImagePadForOutpaint',40:'KSamplerSelect',41:'BasicScheduler',49:'ImageBatchMulti',
@@ -9,6 +10,7 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'MiniMaxH3ReferenceToVideo','MiniMaxH3AddGuide','ImageFromBatch','MiniMaxH3AddGuide',
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
+  if(plan?.revision===TURBO8_REVISION)return turbo8NodeClass(node,plan);
   if(/^akatz-native-1080-v[12345678]$/.test(String(plan?.revision)))return akatzNodeClass(node,plan);
   if(!/^motion-transfer-native-1080-v[123456]$/.test(String(plan?.revision)))return null;
   if(plan.inferenceProfile==='native-photo-inventory-check')return ({30:'LoadImage',85:'CLIPLoader',86:'TextGenerate',495:'SaveText'})[node]||null;
@@ -161,7 +163,7 @@ function createWorkflowExecutionMonitor({supports,nodeClass,WebSocketImpl=global
 }
 export function createH3ExecutionMonitor(options={}){
   return createWorkflowExecutionMonitor({...options,nodeClass:h3NodeClass,
-    supports:task=>/^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native)(?: ·|$)/.test(String(task?.workflow))});
+    supports:task=>/^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native|Akatz Turbo8)(?: ·|$)/.test(String(task?.workflow))});
 }
 export function rifeNodeClass(node){return ({1:'VHS_LoadVideo',2:'RIFEInterpolation',3:'VHS_VideoCombine',
   900001:'VHS_VideoCombine',900002:'VHS_SelectFilename',900003:'CompressImages'})[node]||null;}
