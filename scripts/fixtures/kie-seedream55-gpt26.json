@@ -1,0 +1,456 @@
+{
+  "retrievedAt": "2026-11-13",
+  "contracts": [
+    {
+      "source": "https://docs.kie.ai/market/seedream/5-5-image-to-image.md",
+      "path": "5-5-image-to-image.md",
+      "schema": {
+        "model": [
+          "seedream/5-5-image-to-image"
+        ],
+        "required": [
+          "prompt",
+          "image_urls"
+        ],
+        "properties": [
+          "prompt",
+          "image_urls",
+          "aspect_ratio",
+          "size",
+          "output_format",
+          "background",
+          "nsfw_checker"
+        ],
+        "prompt": {
+          "minLength": 5,
+          "maxLength": 5000
+        },
+        "aspectRatios": [
+          "1:1",
+          "4:3",
+          "3:4",
+          "16:9",
+          "9:16",
+          "2:3",
+          "3:2",
+          "21:9",
+          "auto"
+        ],
+        "size": {
+          "enum": [
+            "1K",
+            "1.5K",
+            "2K"
+          ],
+          "default": "2K"
+        }
+      }
+    },
+    {
+      "source": "https://docs.kie.ai/market/seedream/5-5-text-to-image.md",
+      "path": "5-5-text-to-image.md",
+      "schema": {
+        "model": [
+          "seedream/5-5-text-to-image"
+        ],
+        "required": [
+          "prompt",
+          "aspect_ratio"
+        ],
+        "properties": [
+          "prompt",
+          "aspect_ratio",
+          "size",
+          "output_format",
+          "background",
+          "nsfw_checker"
+        ],
+        "prompt": {
+          "minLength": 5,
+          "maxLength": 5000
+        },
+        "aspectRatios": [
+          "1:1",
+          "4:3",
+          "3:4",
+          "16:9",
+          "9:16",
+          "2:3",
+          "3:2",
+          "21:9"
+        ],
+        "size": {
+          "enum": [
+            "1K",
+            "1.5K",
+            "2K"
+          ],
+          "default": "2K"
+        }
+      }
+    },
+    {
+      "source": "https://docs.kie.ai/market/gpt/gpt-image-2-6-economy-image-to-image.md",
+      "path": "gpt-image-2-6-economy-image-to-image.md",
+      "schema": {
+        "model": [
+          "gpt-image-2-6/economy-image-to-image"
+        ],
+        "required": [
+          "prompt"
+        ],
+        "properties": [
+          "prompt",
+          "input_urls",
+          "aspect_ratio",
+          "background",
+          "output_format"
+        ],
+        "prompt": {
+          "minLength": 1,
+          "maxLength": 20000
+        },
+        "aspectRatios": [
+          "auto",
+          "1:1",
+          "16:9",
+          "9:16",
+          "3:2",
+          "2:3",
+          "21:9",
+          "4:3"
+        ]
+      }
+    },
+    {
+      "source": "https://docs.kie.ai/market/gpt/gpt-image-2-6-economy-text-to-image.md",
+      "path": "gpt-image-2-6-economy-text-to-image.md",
+      "schema": {
+        "model": [
+          "gpt-image-2-6/economy-text-to-image"
+        ],
+        "required": [
+          "prompt"
+        ],
+        "properties": [
+          "prompt",
+          "aspect_ratio",
+          "background",
+          "output_format",
+          "frame_count",
+          "frame_duration_ms"
+        ],
+        "prompt": {
+          "minLength": 1,
+          "maxLength": 20000
+        },
+        "aspectRatios": [
+          "auto",
+          "1:1",
+          "16:9",
+          "9:16",
+          "3:2",
+          "2:3",
+          "21:9",
+          "4:3"
+        ]
+      }
+    },
+    {
+      "source": "https://docs.kie.ai/market/gpt/gpt-image-2-6-flare-image-to-image.md",
+      "path": "gpt-image-2-6-flare-image-to-image.md",
+      "schema": {
+        "model": [
+          "gpt-image-2-6/flare-image-to-image"
+        ],
+        "required": [
+          "prompt",
+          "input_urls"
+        ],
+        "properties": [
+          "prompt",
+          "input_urls",
+          "mask_url",
+          "markup",
+          "aspect_ratio",
+          "resolution",
+          "quality",
+          "background",
+          "output_format",
+          "complexity",
+          "moderation",
+          "output_compression",
+          "size",
+          "svg",
+          "frame_count",
+          "frame_duration_ms"
+        ],
+        "prompt": {
+          "minLength": 1,
+          "maxLength": 32000
+        },
+        "aspectRatios": [
+          "auto",
+          "1:1",
+          "3:2",
+          "2:3",
+          "4:3",
+          "3:4",
+          "5:4",
+          "4:5",
+          "16:9",
+          "9:16",
+          "2:1",
+          "1:2",
+          "21:9",
+          "9:21",
+          "3:1",
+          "1:3"
+        ],
+        "resolution": {
+          "enum": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "default": "1K"
+        },
+        "size": {
+          "enum": null,
+          "default": "auto"
+        },
+        "quality": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "auto"
+          ],
+          "default": "medium"
+        }
+      }
+    },
+    {
+      "source": "https://docs.kie.ai/market/gpt/gpt-image-2-6-flare-text-to-image.md",
+      "path": "gpt-image-2-6-flare-text-to-image.md",
+      "schema": {
+        "model": [
+          "gpt-image-2-6/flare-text-to-image"
+        ],
+        "required": [
+          "prompt"
+        ],
+        "properties": [
+          "prompt",
+          "aspect_ratio",
+          "resolution",
+          "quality",
+          "background",
+          "output_format",
+          "complexity",
+          "moderation",
+          "output_compression",
+          "size",
+          "frame_count",
+          "frame_duration_ms",
+          "svg"
+        ],
+        "prompt": {
+          "minLength": 1,
+          "maxLength": 32000
+        },
+        "aspectRatios": [
+          "auto",
+          "1:1",
+          "3:2",
+          "2:3",
+          "4:3",
+          "3:4",
+          "5:4",
+          "4:5",
+          "16:9",
+          "9:16",
+          "2:1",
+          "1:2",
+          "21:9",
+          "9:21",
+          "3:1",
+          "1:3"
+        ],
+        "resolution": {
+          "enum": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "default": "1K"
+        },
+        "size": {
+          "enum": null,
+          "default": "auto"
+        },
+        "quality": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "auto"
+          ],
+          "default": "medium"
+        }
+      }
+    },
+    {
+      "source": "https://docs.kie.ai/market/gpt/gpt-image-2-6-sunburst-image-to-image.md",
+      "path": "gpt-image-2-6-sunburst-image-to-image.md",
+      "schema": {
+        "model": [
+          "gpt-image-2-6/sunburst-image-to-image"
+        ],
+        "required": [
+          "prompt",
+          "input_urls"
+        ],
+        "properties": [
+          "prompt",
+          "input_urls",
+          "mask_url",
+          "markup",
+          "aspect_ratio",
+          "resolution",
+          "quality",
+          "background",
+          "output_format",
+          "complexity",
+          "moderation",
+          "output_compression",
+          "size",
+          "svg",
+          "frame_count",
+          "frame_duration_ms"
+        ],
+        "prompt": {
+          "minLength": 1,
+          "maxLength": 32000
+        },
+        "aspectRatios": [
+          "auto",
+          "1:1",
+          "3:2",
+          "2:3",
+          "4:3",
+          "3:4",
+          "5:4",
+          "4:5",
+          "16:9",
+          "9:16",
+          "2:1",
+          "1:2",
+          "21:9",
+          "9:21",
+          "3:1",
+          "1:3"
+        ],
+        "resolution": {
+          "enum": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "default": "1K"
+        },
+        "size": {
+          "enum": null,
+          "default": "auto"
+        },
+        "quality": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "auto"
+          ],
+          "default": "medium"
+        }
+      }
+    },
+    {
+      "source": "https://docs.kie.ai/market/gpt/gpt-image-2-6-sunburst-text-to-image.md",
+      "path": "gpt-image-2-6-sunburst-text-to-image.md",
+      "schema": {
+        "model": [
+          "gpt-image-2-6/sunburst-text-to-image"
+        ],
+        "required": [
+          "prompt"
+        ],
+        "properties": [
+          "prompt",
+          "aspect_ratio",
+          "resolution",
+          "quality",
+          "background",
+          "output_format",
+          "complexity",
+          "moderation",
+          "output_compression",
+          "size",
+          "frame_count",
+          "frame_duration_ms",
+          "svg"
+        ],
+        "prompt": {
+          "minLength": 1,
+          "maxLength": 32000
+        },
+        "aspectRatios": [
+          "auto",
+          "1:1",
+          "3:2",
+          "2:3",
+          "4:3",
+          "3:4",
+          "5:4",
+          "4:5",
+          "16:9",
+          "9:16",
+          "2:1",
+          "1:2",
+          "21:9",
+          "9:21",
+          "3:1",
+          "1:3"
+        ],
+        "resolution": {
+          "enum": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "default": "1K"
+        },
+        "size": {
+          "enum": null,
+          "default": "auto"
+        },
+        "quality": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "auto"
+          ],
+          "default": "medium"
+        }
+      }
+    }
+  ]
+}

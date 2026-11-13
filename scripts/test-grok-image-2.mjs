@@ -23,19 +23,19 @@ for(const ratio of ['auto','4:3','3:4','21:9']){
  assert.throws(()=>buildKieInput(model,'create',{prompt:'hello',aspect:ratio,resolution:'1K'}),/Aspect ratio/);
 }
 assert.throws(()=>buildKieInput(model,'edit',{prompt:'hello',aspect:'1:1',urls:[]}),/1–2/);
-assert.equal(KIE_MODELS.length,9,'Existing eight models must remain available');
-assert.equal(new Set(KIE_MODELS.map(m=>m.id)).size,9);
+assert.equal(KIE_MODELS.length,13,'Existing models remain available alongside Seedream 5.5 and GPT Image 2.6');
+assert.equal(new Set(KIE_MODELS.map(m=>m.id)).size,13);
 
 const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
 const ui=fs.readFileSync(new URL('../public/kie-ui.js',import.meta.url),'utf8');
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const checks=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
-assert.ok(ui.includes('m.aspectRatios')&&ui.includes('m.aspectRatios.includes(oldRatio)'),
+assert.ok(ui.includes('m.aspectRatios')&&ui.includes('ratios.includes(oldRatio)'),
  'UI should hide ratios Grok 2.0 does not support');
 assert.ok(ui.includes('data-image-mode')&&ui.includes('selectedRefs'),
  'Create/Edit tabs and uploaded references must still work');
-assert.ok(html.includes('/kie-ui.js?v=20261023-grok2-v1'),
+assert.ok(html.includes('/kie-ui.js?v=20261113-seedream55-gpt26'),
  'Bust stale image selector in mobile browsers');
 assert.ok(!html.includes('characterSwap')&&!server.includes('characterSwap')&&!app.includes('characterSwap'));
 assert.ok(!server.includes('RUNNINGHUB_H3_WORKFLOW_ID'));
@@ -45,4 +45,4 @@ for(const p of ['character-swap.js','workflows/minimax-h3-character-swap-v1.1-ap
  assert.ok(!fs.existsSync(new URL('../'+p,import.meta.url)),'H3 workflow must be removed: '+p);
 }
 assert.ok(server.includes("app.use('/api/kie',createKieStudio"),'Kie image backend intact');
-console.log('PASS: Grok Image 2.0 create/edit API contracts, five aspect ratios, nine models, discontinued H3 removed.');
+console.log('PASS: Grok Image 2.0 create/edit API contracts, five aspect ratios, thirteen models, discontinued H3 removed.');

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {KIE_MODELS,buildKieInput} from '../kie-studio.js';
-assert.equal(KIE_MODELS.length,9,'Nine selected image models');
-assert.equal(new Set(KIE_MODELS.map(x=>x.id)).size,9,'No duplicated models');
+assert.equal(KIE_MODELS.length,13,'Existing models plus Seedream 5.5 and three GPT Image 2.6 variants');
+assert.equal(new Set(KIE_MODELS.map(x=>x.id)).size,13,'No duplicated models');
 for(const m of KIE_MODELS){
   assert.ok(m.create&&m.edit,'Model needs valid separate or combined Create/Edit API IDs');
   const aspect=m.aspect?'1:1':'1:1',res=m.resolutions[0]||'1K';
@@ -11,7 +11,7 @@ for(const m of KIE_MODELS){
   const changed=buildKieInput(m,'edit',{prompt:'Edit only the background',aspect,resolution:res,
     urls:['https://example.com/first.png','https://example.com/second.png']});
   assert.equal(changed[m.images].length,2,'Edit must accept both reference images');
-  assert.throws(()=>buildKieInput(m,'edit',{prompt:'Edit',aspect,resolution:res,
+  assert.throws(()=>buildKieInput(m,'edit',{prompt:'Edit the image',aspect,resolution:res,
     urls:['a','b','c']}),/1–2|dua/,'Strictly limit reference images to 2');
   assert.throws(()=>buildKieInput(m,'edit',{prompt:'Edit',aspect,resolution:res,urls:[]}));
   assert.throws(()=>buildKieInput(m,'create',{prompt:'Edit',aspect,resolution:res,urls:['one']}));
@@ -37,4 +37,4 @@ const provider=fs.readFileSync(new URL('../kie-studio.js',import.meta.url),'utf8
 assert.ok(provider.includes("'accounts.enc'")&&provider.includes("'tasks.enc'"),'Isolated encrypted kie pool and tasks');
 assert.ok(provider.includes('GET')===false||provider.includes('/api/v1/jobs/recordInfo'),'Status source is kie.ai');
 assert.ok(provider.includes("if(submitted&&!accepted)"),'No automatic paid-task retry after uncertain acknowledgement');
-console.log('PASS: 9 kie.ai models, 1–2 image references, separate encrypted Account Pool/History, responsive expandable sidebar, existing motion workflow untouched');
+console.log('PASS: 13 kie.ai models, 1–2 image references, separate encrypted Account Pool/History, responsive expandable sidebar, existing motion workflow untouched');
