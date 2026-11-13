@@ -575,7 +575,7 @@ async function pollTask(){
     if(state.task!==tracked)return;
     if(data.state==='queued'||data.state==='running'||data.state==='finalizing'||data.state==='waiting_output'){
       const labels={queued:'Antrean RunningHub',running:'Diproses RunningHub',
-        finalizing:'Menyiapkan video 40 FPS',waiting_output:'Menunggu hasil RunningHub'};
+        finalizing:'Menyiapkan video final',waiting_output:'Menunggu hasil RunningHub'};
       $('#taskStatus').textContent=labels[data.state];
       state.task.currentState=data.state;
       $('#taskEstimate').textContent=data.message||'Status diperbarui dari RunningHub';
@@ -639,7 +639,7 @@ function finishSuccess(result){
   $('#taskStatus').textContent='Selesai';
   $('#resultSection').classList.remove('hidden');
   $('#resultVideo').src=result.videoUrl;
-  // Final 40 FPS files are served through separate inline-preview and attachment endpoints.
+  // Final files are served through separate inline-preview and attachment endpoints.
   const finalDownload=(typeof result.videoUrl==='string'&&
     /^\/api\/tasks\/\d+\/preview\?accountId=/.test(result.videoUrl))
       ?result.videoUrl.replace('/preview?','/download?'):result.videoUrl;
@@ -760,7 +760,7 @@ function historyStatusLabel(status){
   if(s==='queued')return 'Antrean RunningHub';
   if(s==='running'||s==='processing')return 'Diproses RunningHub';
   if(s==='waiting_output')return 'Menunggu hasil RunningHub';
-  if(s==='finalizing')return 'Menyiapkan video 40 FPS';
+  if(s==='finalizing')return 'Menyiapkan video final';
   if(s==='success')return 'Berhasil';
   if(s==='failed')return 'Gagal';
   if(s==='unavailable'||s==='check_error')return 'Status belum tersedia';

@@ -1,3 +1,4 @@
+import {withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS} from '../integrated-rife.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -56,7 +57,7 @@ try{
   workflowGraphs.minimaxH3Akatz={};workflowGraphs.minimaxH3AkatzV3={};
   const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
   const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
-  const context={isRunningHubWebKey,runningHubWeb,workflowGraphs,h3GraphForInputs,akatzGraphForInputs,akatzV3,akatzSeedNodeInfo,withOriginalVideoArchive,
+  const context={withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS,isRunningHubWebKey,runningHubWeb,workflowGraphs,h3GraphForInputs,akatzGraphForInputs,akatzV3,akatzSeedNodeInfo,withOriginalVideoArchive,
     turbo8GraphForInputs,turbo8SeedNodeInfo,h3AkatzTurbo8Model,
     AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,RIFE_TARGET_FPS,rifeGraphForSourceFps,runningHubInstanceType,h3AppearanceModel,h3CharacterModel,h3AkatzModels,
     DATA_DIR:dir,assertH3MotionContextSchema:async()=>{},
@@ -77,6 +78,11 @@ try{
     submitted[workflowKey]=created.at(-1);
   }
   assert.equal(created.length,6,'Every active workflow selection must reach the token task transport');
+  for(const [name,graph] of Object.entries(submitted)){
+    const nodes=Object.values(graph).filter(n=>n.class_type==='RIFEInterpolation');
+    assert.equal(nodes.length,INTEGRATED_RIFE_WORKFLOWS.has(name)||name==='rife60'?1:0,name+' interpolation stage');
+    if(INTEGRATED_RIFE_WORKFLOWS.has(name))assert.equal(graph['490'].inputs.frame_rate,60);
+  }
   assert.equal(submitted.rife60['2'].inputs.batch_size,8,'Actual Plus token payload receives the adaptive batch');
   for(const graph of Object.values(submitted)){
     const zip=Object.values(graph).find(n=>n.class_type==='CompressImages');

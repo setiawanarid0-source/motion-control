@@ -22,6 +22,7 @@ import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,may
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
+import {withIntegratedRife60,withIntegratedRife60Editor,integratedRifePlan,INTEGRATED_RIFE_WORKFLOWS,RIFE60_EDITOR_FILENAME} from './integrated-rife.js';
 import {verifyRifeInput,rifeGraphForSourceFps,rifeBatchSize,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {auditRifeTasks} from './rife-task-audit.js';
@@ -77,8 +78,8 @@ const workflowGraphs = {
 const workflowMeta = {
   motionflyHD: {
     id:'motionflyHD',name:MOTIONFLY_HD_NAME,
-    subtitle:'Rasio foto · HD · audio sumber · ZIP',
-    detail:'Rasio hasil mengikuti gambar referensi, termasuk landscape, portrait, dan persegi. Mask SAM3 diproses otomatis; audio sumber, preview HD dan ZIP tetap tersedia.',
+    subtitle:'Rasio foto · HD · 60 FPS · audio sumber · ZIP',
+    detail:'Rasio hasil mengikuti gambar referensi, termasuk landscape, portrait, dan persegi. Mask SAM3 diproses otomatis; audio sumber, preview HD dan ZIP 60 FPS melalui RIFE dalam job yang sama.',
     outputKind:'video'
   },
   minimaxH3AkatzV3: {
@@ -89,8 +90,8 @@ const workflowMeta = {
   },
   minimaxH3Akatz: {
     id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz V1.5 Native · 1080p',
-    subtitle:'Turbo8 · 1080p · 24 FPS · Plus · hingga 15 detik',
-    detail:'Foto menjadi acuan tampilan; video memandu gerak dan kamera. Kandidat Turbo8 memakai durasi adaptif, audio sumber, MP4 dan ZIP tiga frame PNG untuk pemeriksaan detail. Hasil native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
+    subtitle:'Turbo8 · 1080p · 60 FPS · Plus · hingga 15 detik',
+    detail:'Foto menjadi acuan tampilan; video memandu gerak dan kamera. Turbo8 memakai durasi adaptif, audio sumber, RIFE 60 FPS dalam satu job, MP4 dan ZIP tiga frame PNG dari hasil final. Hasil native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
     revision:TURBO8_REVISION,frameDiagnostics:true,
     outputKind:'video',experimental:true,requiredMode:'plus'
   },
@@ -109,8 +110,8 @@ const workflowMeta = {
   current: {
     id: 'current',
     name: 'Current Workflow',
-    subtitle: 'KOH (1) · 40 FPS langsung dari workflow · 6 steps · CFG 1',
-    detail: 'Current Workflow dari file KOH (1) yang baru.'
+    subtitle: 'KOH (1) · 60 FPS · 6 steps · CFG 1',
+    detail: 'KOH (1) dengan RIFE 60 FPS pada frame final dalam satu job, termasuk audio dan ZIP.'
   },
 };
 
@@ -294,7 +295,7 @@ async function runningHubTaskState(taskId,account,accountId){
   if(code===0&&Array.isArray(data?.data)&&data.data.length){
     const outputs=await classifyOutputArchives(data.data.map(x=>({fileUrl:x.fileUrl,fileType:x.fileType,nodeId:x.nodeId??null,
       ...(x.filename||x.fileName?{filename:String(x.filename||x.fileName)}:{})})).filter(x=>x.fileUrl));
-    // RunningHub generates native 40 FPS frames within Current / R4 Full workflows.
+    // RunningHub generates and interpolates final frames within the submitted workflow.
     // The website never runs an additional post-generation FPS conversion.
     const video=selectFinalVideoOutput(outputs);
     if(video&&!selectOriginalVideoArchive(outputs)){
@@ -539,6 +540,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
       h3Source.appearanceLoraFile=await h3CharacterModel.ensure(apiKey);
     selectedGraph=h3GraphForInputs(selectedGraph,{imageName,videoName,source:h3Source});
   }
+  if(INTEGRATED_RIFE_WORKFLOWS.has(workflowKey))selectedGraph=withIntegratedRife60(selectedGraph);
   selectedGraph=withOriginalVideoArchive(selectedGraph);
   const payload = {
     apiKey,
@@ -712,7 +714,7 @@ app.get('/api/workflows', (req, res) => {
 installAkatzEditorDownload({app,getModelFiles:()=>({
   characterLoraFile:h3AkatzModels.character.cachedFile(),
   turboLoraFile:h3AkatzTurbo8Model.cachedFile()
-}),buildWorkflow:turbo8EditorWorkflow,filename:TURBO8_EDITOR_FILENAME});
+}),buildWorkflow:models=>withIntegratedRife60Editor(turbo8EditorWorkflow(models)),filename:RIFE60_EDITOR_FILENAME});
 installFrameDiagnostics({app,registry:taskRegistry,getAccount:taskAccount,request:axios.get,validUrl:validProviderUrl,
   getOutputs:async(taskId,account)=>{
     const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
@@ -881,7 +883,7 @@ async function handleGeneration(req,res){
           inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
-      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
+      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?integratedRifePlan(turbo8ExecutionPlan(h3Source)):h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
       req.progress?.('analyzing');
@@ -953,7 +955,7 @@ async function handleGeneration(req,res){
             resultArchiveExpected:task.resultArchiveExpected,
             video:videoFile.originalname,submittedAt:task.submittedAt,
             status:task.taskStatus==='RUNNING'?'running':'queued',
-            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):
+            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?integratedRifePlan(turbo8ExecutionPlan(h3Source)):h3ExecutionPlan(h3Source)):
               videoOnly?{revision:'rife-target-fps-v1',width:rifeSource.width,height:rifeSource.height,
                 sourceFps:rifeSource.sourceFps,targetFps:RIFE_TARGET_FPS,
                 durationSeconds:rifeSource.durationSeconds,adaptive:rifeSource.adaptive,

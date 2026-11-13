@@ -1,3 +1,4 @@
+import {withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS} from '../integrated-rife.js';
 import {withOriginalVideoArchive} from '../runninghub-output.js';
 import {isRunningHubWebKey} from '../runninghub-web-session.js';
 import assert from 'node:assert/strict';
@@ -241,7 +242,7 @@ assert.equal(graph['30'].inputs.image,'api/current-photo.png','No cross-request 
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
 const calls=[],uploads=[];let response={code:0,data:{taskId:'2113333333333333333',taskStatus:'RUNNING'}};
-const context={withOriginalVideoArchive,isRunningHubWebKey,workflowGraphs:{minimaxH3:manifest,current:JSON.parse(fs.readFileSync(new URL('../workflows/current-api.json',import.meta.url),'utf8'))},h3GraphForInputs,
+const context={withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS,withOriginalVideoArchive,isRunningHubWebKey,workflowGraphs:{minimaxH3:manifest,current:JSON.parse(fs.readFileSync(new URL('../workflows/current-api.json',import.meta.url),'utf8'))},h3GraphForInputs,
   uploadToRunningHub:async(key,file)=>{uploads.push(file);return 'api/'+file.originalname;},
   runningHubInstanceType,explicitQueueMaxed,queueCapacityError,graphValidationError,
   rhJson:async(url,key,payload)=>{calls.push({url,payload});return response;}};
@@ -257,7 +258,7 @@ assert.equal(calls[0].payload.retainSeconds,undefined);assert.equal(calls[0].pay
 assert.equal(JSON.parse(calls[0].payload.workflow)['7'].inputs.lora_name,H3_MODELS.motion);
 await context.createTask({...request,workflowKey:'current',h3Source:null});
 assert.equal(calls[1].payload.retainSeconds,259200);
-assert.deepEqual(JSON.parse(calls[1].payload.workflow),withOriginalVideoArchive(context.workflowGraphs.current));
+assert.deepEqual(JSON.parse(calls[1].payload.workflow),withOriginalVideoArchive(withIntegratedRife60(context.workflowGraphs.current)));
 const srgb={originalname:'reference-srgb.png'};
 await context.createTask({...request,h3Source:{...request.h3Source,referenceFile:srgb}});
 assert.equal(uploads.at(-2),srgb,'ICC-normalized reference, when present, must reach RunningHub');
