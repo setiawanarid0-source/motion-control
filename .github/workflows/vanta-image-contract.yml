@@ -21,6 +21,8 @@ jobs:
         run: node scripts/test-agent-mobile-browser.mjs
       - name: Test Account Pool refresh status at mobile and desktop widths
         run: node scripts/test-pool-refresh-browser.mjs
+      - name: Test Seedream 5.5 and GPT Image 2.6 in real Chrome
+        run: node scripts/test-kie-new-models-browser.mjs
       - name: Attach before-release responsive screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -29,6 +31,7 @@ jobs:
           path: |
             /tmp/vanta-mobile-agent-*.png
             /tmp/vanta-agent-desktop.png
+            /tmp/vanta-kie-models-*.png
           if-no-files-found: ignore
           retention-days: 7
       - name: Verify Grok model, VANTA menus, and preserved image workflows
@@ -39,6 +42,7 @@ jobs:
           node --check public/kie-ui.js
           node scripts/test-grok-image-2.mjs
           node scripts/test-kie-dashboard.mjs
+          node scripts/test-kie-new-models.mjs
           node scripts/test-create-bootstrap.mjs
           node scripts/test-kie-incremental-references.mjs
           node scripts/test-nora-gallery-history.mjs

@@ -90,12 +90,12 @@
   function updateModel(){
     const m=model();if(!m)return;
     el('kieAspectField').classList.toggle('hidden',!m.aspect);
-    if(m.aspectRatios?.length){
-      // Grok 2.0 only accepts these 5 ratios; other models retain the
-      // original complete selector. Preserve the prior choice when valid.
+    const ratios=kie.mode==='edit'&&m.editAspectRatios?m.editAspectRatios:m.aspectRatios;
+    if(ratios?.length){
+      // Provider-specific choices can differ between Create and Edit.
       const picker=el('kieAspect'),oldRatio=picker.value;
-      picker.innerHTML=m.aspectRatios.map(r=>'<option value="'+esc(r)+'">'+esc(r)+'</option>').join('');
-      picker.value=m.aspectRatios.includes(oldRatio)?oldRatio:'1:1';
+      picker.innerHTML=ratios.map(r=>'<option value="'+esc(r)+'">'+esc(r==='auto'?'Auto':r)+'</option>').join('');
+      picker.value=ratios.includes(oldRatio)?oldRatio:'1:1';
     }else{
       const picker=el('kieAspect'),oldRatio=picker.value;
       const allRatios=['1:1','9:16','16:9','3:2','2:3','4:3','3:4','21:9','auto'];
@@ -108,7 +108,9 @@
     el('kieResolution').innerHTML=(m.resolutions||[]).map(x=>
       '<option value="'+esc(x)+'">'+esc(x==='basic'?'Basic':x==='high'?'High':x)+'</option>').join('');
     if(m.resolutions?.includes(prev))el('kieResolution').value=prev;
-    el('kieModelHint').textContent=m.id==='wan'?'WAN 2.7 Pro mengatur aspect ratio otomatis. Biaya bergantung model dan resolusi.':
+    el('kiePrompt').maxLength=m.promptMaxLength||12000;
+    el('kiePrompt').minLength=m.promptMinLength||1;
+    el('kieModelHint').textContent=m.fixedResolution?'Resolusi keluaran '+m.fixedResolution+'. Kredit dipotong langsung oleh kie.ai.':m.id==='wan'?'WAN 2.7 Pro mengatur aspect ratio otomatis. Biaya bergantung model dan resolusi.':
       'Parameter hanya ditampilkan bila didukung model. Kredit dipotong langsung oleh kie.ai.';
   }
   // Native FileList is replaced every time mobile/desktop file pickers reopen.
@@ -287,6 +289,10 @@
   async function submitImage(){
     if(kie.busy)return;
     if(!el('kiePrompt').value.trim())return toast('Tulis prompt terlebih dahulu.',true);
+    const selected=model(),promptLength=el('kiePrompt').value.trim().length;
+    if(!selected)return toast('Pilih model terlebih dahulu.',true);
+    if(promptLength<(selected.promptMinLength||1)||promptLength>(selected.promptMaxLength||12000))
+      return toast('Prompt '+selected.name+' harus berisi '+fmt(selected.promptMinLength||1)+'–'+fmt(selected.promptMaxLength||12000)+' karakter.',true);
     const files=kie.mode==='edit'?selectedRefs.map(ref=>ref.file):[];
     if(kie.mode==='edit'&&(!files.length||files.length>2))return toast('Edit memerlukan satu atau dua gambar referensi.',true);
     if(kie.mode==='create'&&files.length)return toast('Beralih ke Edit Image untuk menggunakan gambar referensi.',true);

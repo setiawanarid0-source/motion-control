@@ -12,12 +12,15 @@ export const KIE_MODELS=[
  {id:'qwen',name:'Qwen Image 3.0 Pro',create:'qwen3/pro-text-to-image',edit:'qwen3/pro-image-to-image',images:'image_urls',aspect:'image_size',resolution:'resolution',resolutions:['1K','2K']},
  {id:'wan',name:'WAN 2.7 Image Pro',create:'wan/2-7-image-pro',edit:'wan/2-7-image-pro',images:'input_urls',resolution:'resolution',resolutions:['1K','2K']},
  {id:'seedream',name:'Seedream 5.0 Pro',create:'seedream/5-pro-text-to-image',edit:'seedream/5-pro-image-to-image',images:'image_urls',aspect:'aspect_ratio',resolution:'quality',resolutions:['basic','high']},
+ {id:'seedream55',name:'Seedream 5.5',create:'seedream/5-5-text-to-image',edit:'seedream/5-5-image-to-image',images:'image_urls',aspect:'aspect_ratio',aspectRatios:['1:1','4:3','3:4','16:9','9:16','2:3','3:2','21:9'],editAspectRatios:['1:1','4:3','3:4','16:9','9:16','2:3','3:2','21:9','auto'],resolution:'size',resolutions:['1K','1.5K','2K'],promptMinLength:5,promptMaxLength:5000,outputFormat:'png'},
  {id:'nano2',name:'Nano Banana 2',create:'nano-banana-2',edit:'nano-banana-2',images:'image_input',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
  {id:'nanopro',name:'Nano Banana Pro',create:'nano-banana-pro',edit:'nano-banana-pro',images:'image_input',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
  {id:'grok2',name:'Grok Image 2.0',create:'grok-imagine-image-2-0/text-to-image',edit:'grok-imagine-image-2-0/image-edit',images:'image_urls',aspect:'aspect_ratio',aspectRatios:['1:1','2:3','3:2','16:9','9:16'],resolutions:[]},
  {id:'gpt2',name:'GPT Image 2',create:'gpt-image-2-text-to-image',edit:'gpt-image-2-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolutions:[]},
  {id:'flare',name:'GPT Image 2.5 Flare',create:'gpt-image-2-5-flare-text-to-image',edit:'gpt-image-2-5-flare-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
- {id:'sunburst',name:'GPT Image 2.5 Sunburst',create:'gpt-image-2-5-sunburst-text-to-image',edit:'gpt-image-2-5-sunburst-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']}
+ {id:'sunburst',name:'GPT Image 2.5 Sunburst',create:'gpt-image-2-5-sunburst-text-to-image',edit:'gpt-image-2-5-sunburst-image-to-image',images:'input_urls',aspect:'aspect_ratio',resolution:'resolution',resolutions:['1K','2K','4K']},
+ ...['flare','sunburst'].map(variant=>({id:variant+'26',name:'GPT Image 2.6 '+(variant==='flare'?'Flare':'Sunburst'),create:'gpt-image-2-6/'+variant+'-text-to-image',edit:'gpt-image-2-6/'+variant+'-image-to-image',images:'input_urls',aspect:'aspect_ratio',aspectRatios:['auto','1:1','3:2','2:3','4:3','3:4','5:4','4:5','16:9','9:16','2:1','1:2','21:9','9:21','3:1','1:3'],resolution:'resolution',resolutions:['1K','2K','4K'],promptMaxLength:32000,outputFormat:'png'})),
+ {id:'economy26',name:'GPT Image 2.6 Economy',create:'gpt-image-2-6/economy-text-to-image',edit:'gpt-image-2-6/economy-image-to-image',images:'input_urls',aspect:'aspect_ratio',aspectRatios:['auto','1:1','16:9','9:16','3:2','2:3','21:9','4:3'],resolutions:[],fixedResolution:'1K',promptMaxLength:20000,outputFormat:'png'}
 ];
 const RATIOS=new Set(['auto','1:1','3:2','2:3','4:3','3:4','16:9','9:16','21:9']);
 const BASE='https://api.kie.ai';
@@ -34,16 +37,21 @@ const cleanError=e=>{
 };
 export function buildKieInput(model,mode,{prompt,aspect,resolution,urls=[]}){
   if(!model||!['create','edit'].includes(mode))throw Error('Model atau mode tidak dikenal.');
-  if(typeof prompt!=='string'||!prompt.trim()||prompt.length>12000)throw Error('Prompt wajib diisi (maksimal 12.000 karakter).');
+  const minimum=model.promptMinLength||1,maximum=model.promptMaxLength||12000;
+  if(typeof prompt!=='string'||prompt.trim().length<minimum||prompt.trim().length>maximum)
+    throw Error('Prompt '+model.name+' harus berisi '+minimum.toLocaleString('id-ID')+'–'+maximum.toLocaleString('id-ID')+' karakter.');
   if(mode==='edit'&&(!urls.length||urls.length>2))throw Error('Edit Image memerlukan 1–2 gambar referensi.');
   if(mode==='create'&&urls.length)throw Error('Create Image tidak menerima gambar referensi.');
   const input={prompt:prompt.trim()};
-  if(model.aspect){if(!RATIOS.has(aspect)||model.aspectRatios&&!model.aspectRatios.includes(aspect))throw Error('Aspect ratio tidak tersedia untuk model ini.');input[model.aspect]=aspect;}
+  const ratios=mode==='edit'&&model.editAspectRatios?model.editAspectRatios:model.aspectRatios;
+  if(model.aspect){if(ratios?!ratios.includes(aspect):!RATIOS.has(aspect))throw Error('Aspect ratio tidak tersedia untuk model ini.');input[model.aspect]=aspect;}
   if(model.resolution){if(!model.resolutions.includes(resolution))throw Error('Resolusi atau kualitas tidak tersedia.');input[model.resolution]=resolution;}
+  if(model.fixedResolution&&resolution&&resolution!==model.fixedResolution)throw Error('Model ini hanya mendukung resolusi '+model.fixedResolution+'.');
   if(mode==='edit')input[model.images]=urls;
   if(model.id==='qwen')input.output_format='png';
   if(model.id==='nano2'||model.id==='nanopro')input.output_format='png';
   if(model.id==='seedream')input.output_format='png';
+  if(model.outputFormat)input.output_format=model.outputFormat;
   if(model.id==='wan'){input.n=1;input.watermark=false;}
   return input;
 }
@@ -259,7 +267,9 @@ export function createKieStudio({encrypt,decrypt,dir}){
         if(!model||!['create','edit'].includes(mode))throw Error('Pilih model dan mode Create/Edit.');
         if(mode==='edit'&&(!incoming.length||incoming.length>2))throw Error('Pilih satu atau dua gambar referensi.');
         if(mode==='create'&&incoming.length)throw Error('Create Image tidak menerima referensi.');
-        if(!prompt.trim()||prompt.length>12000)throw Error('Prompt wajib diisi (maksimal 12.000 karakter).');
+        // Validate before balance probes or reference uploads. Placeholder URLs
+        // are local-only; only uploaded provider URLs enter the submitted task.
+        buildKieInput(model,mode,{prompt,aspect,resolution,urls:incoming.map((_,i)=>'reference-'+i)});
         const accounts=getAccounts(),candidates=accountId==='auto'?accounts.filter(a=>a.state==='ready')
           .sort((a,b)=>Number(b.credits||0)-Number(a.credits||0))
           :accounts.filter(a=>a.id===accountId);
