@@ -110,7 +110,7 @@
     // Exclude hidden pages from the DOM, including their image/video requests.
     // Polling can refresh statuses without reloading already visible thumbnails.
     const signature=JSON.stringify([pages[p],sorted.length,...visible.map(t=>
-      [idOf(p,t),t.status,labelOf(p,t),t.statusDetail||'',t.providerProgress?.lastUpdatedAt||'',t.resultUrls?.[0]||t.resultUrl||'',
+      [idOf(p,t),t.status,labelOf(p,t),t.statusDetail||'',t.providerProgress?.lastUpdatedAt||'',t.resultUrls?.[0]||t.resultUrl||'',Boolean(t.hasFrameDiagnostics),
        t.references?.[0]||'',t.error||'',t.finishedAt||''])]);
     if(signatures[p]!==signature){
       signatures[p]=signature;
@@ -131,6 +131,10 @@
   function actions(p,t){
     const all=[];
     if(t.status==='success'&&mediaOf(p,t))all.push('<a class="nora-action primary" href="'+safeText(mediaOf(p,t))+'" target="_blank" rel="noopener noreferrer" download>Unduh</a>');
+    if(p==='motion'&&t.status==='success'&&t.hasFrameDiagnostics){
+      const url=safeAsset(window.vantaMotionGallery?.framesUrl?.(t));
+      if(url)all.push('<a class="nora-action" href="'+safeText(url)+'" download>3 frame PNG</a>');
+    }
     if(p==='image'&&t.prompt){
       all.push('<button type="button" class="nora-action" data-nora-action="edit">Edit</button>');
     }

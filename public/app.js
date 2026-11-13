@@ -101,6 +101,7 @@ async function syncServerHistory(){
         ...(preserveSuccess?{}:{finishedAt:task.finishedAt||local.finishedAt,
           resultUrl:task.resultUrl||local.resultUrl,
           referenceMaskUrl:task.referenceMaskUrl||local.referenceMaskUrl,
+          hasFrameDiagnostics:task.hasFrameDiagnostics||local.hasFrameDiagnostics||false,
           cameraQA:task.cameraQA||local.cameraQA,
           inputDiagnostics:task.inputDiagnostics||local.inputDiagnostics,
           providerProgress:task.providerProgress||local.providerProgress,
@@ -608,7 +609,10 @@ async function pollTask(){
 }
 function selectTaskOutputs(outputs,kind,taskId,accountId){
   const items=Array.isArray(outputs)?outputs:[];
-  const archive=items.find(o=>/zip/i.test(String(o.fileType||''))||/\.zip(?:\?|$)/i.test(String(o.fileUrl||'')));
+  const isFrame=o=>String(o.nodeId)==='5108'||/VANTA_AKATZ_3_FRAME_PNG/i.test(String(o.fileUrl||'')+' '+String(o.filename||o.fileName||''));
+  const isArchive=o=>/zip/i.test(String(o.fileType||''))||/\.zip(?:\?|$)/i.test(String(o.fileUrl||''));
+  const archive=items.find(o=>isArchive(o)&&!isFrame(o));
+  const frames=items.find(o=>isArchive(o)&&isFrame(o));
   const video=(kind==='diagnostic'?items.find(o=>String(o.nodeId)==='393'):null)
     ||items.find(o=>String(o.fileType||'').toLowerCase().includes('video')||/\.mp4(?:\?|$)/i.test(String(o.fileUrl||'')));
   const referenceMask=kind==='diagnostic'
@@ -616,7 +620,9 @@ function selectTaskOutputs(outputs,kind,taskId,accountId){
     :null;
   const preview=(video||archive)&&taskId&&accountId?'/api/tasks/'+encodeURIComponent(taskId)+'/preview?accountId='+
     encodeURIComponent(accountId)+'&deviceId='+encodeURIComponent(getDeviceId()):null;
-  return {videoUrl:preview||video?.fileUrl||null,referenceMaskUrl:referenceMask?.fileUrl||null};
+  const frameZipUrl=frames&&taskId&&accountId?'/api/tasks/'+encodeURIComponent(taskId)+'/frames?accountId='+
+    encodeURIComponent(accountId)+'&deviceId='+encodeURIComponent(getDeviceId()):null;
+  return {videoUrl:preview||video?.fileUrl||null,referenceMaskUrl:referenceMask?.fileUrl||null,frameZipUrl};
 }
 function finishFailed(msg,failure=null){
   clearInterval(state.pollTimer);clearInterval(state.elapsedTimer);
@@ -638,6 +644,8 @@ function finishSuccess(result){
     /^\/api\/tasks\/\d+\/preview\?accountId=/.test(result.videoUrl))
       ?result.videoUrl.replace('/preview?','/download?'):result.videoUrl;
   $('#downloadBtn').href=finalDownload;
+  const framesDownload=$('#framesDownloadBtn');
+  if(framesDownload){framesDownload.classList.toggle('hidden',!result.frameZipUrl);if(result.frameZipUrl)framesDownload.href=result.frameZipUrl;else framesDownload.removeAttribute('href');}
   const diagnostic=state.task.workflow.outputKind==='diagnostic';
   $('#resultHeading').textContent=diagnostic?'Tes SAM3 selesai — hasil mask':'Generation completed';
   $('#resultMediaLabel').textContent=diagnostic?'Mask gerakan SAM3 (BUKAN hasil motion transfer)':'Video hasil generasi';
@@ -648,7 +656,7 @@ function finishSuccess(result){
   $('#referenceMaskWrap').classList.toggle('hidden',!diagnostic||!result.referenceMaskUrl);
   if(result.referenceMaskUrl){$('#referenceMaskPreview').src=result.referenceMaskUrl;$('#referenceMaskDownload').href=result.referenceMaskUrl;}
   $('#resultWorkflow').textContent=state.task.workflow.name;
-  updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:result.videoUrl,referenceMaskUrl:result.referenceMaskUrl,cameraQA:result.cameraQA||null,deliveryNote:result.deliveryNote||null});
+  updateHistory(state.task.taskId,{status:'success',finishedAt:new Date().toISOString(),runtimeMs:elapsed,resultUrl:result.videoUrl,referenceMaskUrl:result.referenceMaskUrl,hasFrameDiagnostics:Boolean(result.frameZipUrl),cameraQA:result.cameraQA||null,deliveryNote:result.deliveryNote||null});
   state.task=null;updateGenerate();
   $('#resultSection').scrollIntoView({behavior:'smooth',block:'start'});
   toast(result.deliveryNote|| (diagnostic?'Tes SAM3 selesai.':'Video berhasil dibuat.'));
@@ -847,8 +855,9 @@ function renderHistory(){
     const safeDownloadUrl=escapeHtml(rawDownloadUrl);
     const safePreviewUrl=escapeHtml(rawPreviewUrl);
     const extraMask=x.referenceMaskUrl?`<a class="history-action-btn download" href="${escapeHtml(x.referenceMaskUrl)}" target="_blank" rel="noopener noreferrer">Mask referensi</a>`:'';
+    const frameLink=x.hasFrameDiagnostics&&accountStillAvailable?`<a class="history-action-btn download" href="/api/tasks/${encodeURIComponent(x.taskId)}/frames?accountId=${encodeURIComponent(resolvedAccountId)}&deviceId=${encodeURIComponent(getDeviceId())}">3 frame PNG</a>`:'';
     const result=x.resultUrl
-      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safePreviewUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Lihat detail</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a>${extraMask}</div>`
+      ? `<div class="history-actions"><button type="button" class="history-action-btn preview" data-preview-url="${safePreviewUrl}" data-download-url="${safeDownloadUrl}" data-preview-task="${escapeHtml(x.taskId||'')}">Lihat detail</button><a class="history-action-btn download" href="${safeDownloadUrl}">Download</a>${frameLink}${extraMask}</div>`
       : (isActiveHistoryStatus(x.status)?'<span class="history-pending"><span class="history-live-dot"></span>Menunggu hasil</span>':'—');
     return `<tr data-task-id="${escapeHtml(x.taskId||'')}">
       <td data-label="Time">${new Date(x.startedAt).toLocaleString('id-ID')}</td>
@@ -1022,6 +1031,11 @@ function bindHistoryActions(){
 
 window.vantaMotionGallery={
   redraw(){renderHistory();},
+  framesUrl(item){
+    const id=String(item.taskId||''),accountId=resolveHistoryAccountId(item);
+    if(!item.hasFrameDiagnostics||!/^\d{10,25}$/.test(id)||!accountId)return null;
+    return '/api/tasks/'+encodeURIComponent(id)+'/frames?accountId='+encodeURIComponent(accountId)+'&deviceId='+encodeURIComponent(getDeviceId());
+  },
   videoUrl(item){
     const id=String(item.taskId||'');
     if(!/^\d{10,25}$/.test(id)||!item.resultUrl)return null;

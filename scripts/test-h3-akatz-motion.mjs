@@ -12,6 +12,7 @@ import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO
 import {h3PhotoPlan,h3ModelFrames,H3_DEFAULT_PROFILE} from '../minimax-h3-motion.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
+import {turbo8GraphForInputs,turbo8SeedNodeInfo} from '../h3-akatz-turbo8.js';
 
 const character='api-lora-usa/'+'a'.repeat(32)+'.safetensors',turbo='api-lora-usa/'+'b'.repeat(32)+'.safetensors';
 const sourceFor=(totalFrames,hasAudio=true)=>({...h3PhotoPlan(1143,2048),inferenceProfile:AKATZ_PROFILE,
@@ -175,6 +176,8 @@ const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
 const calls=[];let payload,submitted=0,uploaded=0;
 const context={withOriginalVideoArchive,isRunningHubWebKey,AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,akatzGraphForInputs,akatzSeedNodeInfo,runningHubInstanceType,
+  turbo8GraphForInputs,turbo8SeedNodeInfo,
+  h3AkatzTurbo8Model:{ensure:async()=>{calls.push('turbo');return turbo;}},
   DATA_DIR:'/fixture-only',assertH3MotionContextSchema:async()=>{calls.push('schema');},
   workflowGraphs:{minimaxH3Akatz:{revision:AKATZ_REVISION}},
   h3AkatzModels:{character:{ensure:async()=>{calls.push('character');return character;}},
@@ -187,12 +190,13 @@ const task={apiKey:'fixture-only',workflowId:'owner-workflow',workflowKey:'minim
   onBeforeSubmit:()=>calls.push('submit'),onModelPreparation:()=>calls.push('models')};
 await context.createTask(task);
 assert.deepEqual(calls,['schema','models','character','turbo','submit']);assert.equal(submitted,1);
-assert.equal(payload.instanceType,'plus');assert.deepEqual([...payload.nodeInfoList],akatzSeedNodeInfo(task.h3Source));
+assert.equal(payload.instanceType,'plus');assert.deepEqual([...payload.nodeInfoList],turbo8SeedNodeInfo(task.h3Source));
 assert.equal(payload.retainSeconds,undefined);
 const sent=JSON.parse(payload.workflow);assert.equal(sent['7'].inputs.file_name,character);
 assert.deepEqual(sent['1009'].inputs.noise_seed,['1016',0]);
-assert.equal(Object.values(sent).filter(n=>n.class_type==='SamplerCustomAdvanced').length,4);
-assert.equal(sent['41'].inputs.steps,4);
+assert.equal(Object.values(sent).filter(n=>n.class_type==='SamplerCustomAdvanced').length,3);
+assert.equal(sent['41'].inputs.steps,8);
+assert.ok(sent['5108'],'The web submission includes three-frame PNG diagnostics');
 const passedGate=context.assertH3MotionContextSchema;
 context.assertH3MotionContextSchema=async()=>{throw Error('Schema proof missing');};
 const beforeUploads=uploaded;
@@ -201,7 +205,7 @@ assert.equal(uploaded,beforeUploads,'Missing raw-latent proof must stop before m
 assert.equal(submitted,1,'Missing raw-latent proof cannot submit a paid task');
 context.assertH3MotionContextSchema=passedGate;
 await assert.rejects(context.createTask({...task,mode:'standard'}),/Plus/);assert.equal(submitted,1);
-context.h3AkatzModels.turbo.ensure=async()=>{throw Error('Model setup incomplete');};
+context.h3AkatzTurbo8Model.ensure=async()=>{throw Error('Model setup incomplete');};
 await assert.rejects(context.createTask(task),e=>e.code==='H3_MODEL_PREPARATION_FAILED'&&/Model setup incomplete/.test(e.message));assert.equal(submitted,1,
   'Failed model setup cannot submit a paid task');
 
