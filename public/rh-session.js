@@ -85,17 +85,20 @@ function exportRunningHubSession(){
     alert('Popup belum bisa dibuka. Muat ulang RunningHub dan coba lagi.');
   }
 }
-// Encode URL delimiters so address bars preserve the complete script.
+// Encode URL delimiters so the complete script survives bookmark URL storage.
 window.vantaRunningHubSessionCode='javascript:'+encodeURIComponent('void ('+exportRunningHubSession.toString().replace(/\r?\n\s*/g,' ')+')();');
-window.vantaCopyRunningHubCode=async function(){
-  var field=document.getElementById('rhSessionCodeManual'),help=document.getElementById('rhSessionBrowserHelp');
-  var code=window.vantaRunningHubSessionCode;if(!field||!code)return false;
+window.vantaRunningHubBookmarkTestCode="javascript:void(alert('VANTA bookmark berjalan'))";
+async function copyRunningHubBookmarkCode(fieldId,code){
+  var field=document.getElementById(fieldId),help=document.getElementById('rhSessionBrowserHelp');
+  if(!field||!code)return false;
   field.value=code;
   try{await navigator.clipboard.writeText(code);return true;}catch(e){}
   if(help)help.open=true;
   try{field.focus();field.select();field.setSelectionRange(0,code.length);}catch(e){}
   try{return document.execCommand('copy');}catch(e){return false;}
-};
+}
+window.vantaCopyRunningHubCode=function(){return copyRunningHubBookmarkCode('rhSessionCodeManual',window.vantaRunningHubSessionCode);};
+window.vantaCopyRunningHubBookmarkTest=function(){return copyRunningHubBookmarkCode('rhBookmarkTestCode',window.vantaRunningHubBookmarkTestCode);};
 window.vantaSelectRunningHubCode=function(){
   var field=document.getElementById('rhSessionCodeManual');if(!field)return;
   field.value=window.vantaRunningHubSessionCode;

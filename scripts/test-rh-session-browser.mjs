@@ -64,6 +64,7 @@ try{
         const button=document.createElement('button');button.id='fixture-copy-code';button.textContent='Copy code';
         button.onclick=()=>window.vantaCopyRunningHubCode();document.body.appendChild(button);
         document.getElementById('selectRhSessionCode').onclick=()=>window.vantaSelectRunningHubCode();
+        document.getElementById('copyRhBookmarkTestCode').onclick=()=>window.vantaCopyRunningHubBookmarkTest();
       },helpMarkup);
       await page.locator('#fixture-copy-code').click();
       assert.equal(await page.locator('#rhSessionBrowserHelp').evaluate(el=>el.open),true);
@@ -71,9 +72,14 @@ try{
       await page.locator('#selectRhSessionCode').click();
       const selected=await manual.evaluate(el=>el.selectionEnd-el.selectionStart===el.value.length);
       assert.equal(selected,true,'Vanta code remains manually selectable without clipboard permission');
+      await page.getByText('Uji jika bookmark menampilkan “Cannot Run Script”',{exact:true}).click();
+      await page.locator('#copyRhBookmarkTestCode').click();
+      const diagnostic=page.locator('#rhBookmarkTestCode');
+      assert.equal(await diagnostic.inputValue(),"javascript:void(alert('VANTA bookmark berjalan'))");
+      assert.equal(await diagnostic.evaluate(el=>el.selectionStart===0&&el.selectionEnd===el.value.length),true);
     }
     assert.equal(requests.length,1,'Session export never sends a request or opens another page');
     await context.close();
   }
-  console.log('PASS: '+type+' actual javascript: navigation, popup, storage denial, manual copy and 320/430/1280px layout. Synthetic session only; no RunningHub connection.');
+  console.log('PASS: '+type+' actual javascript: link navigation, popup, storage denial, manual token/diagnostic code copy and 320/430/1280px layout. Synthetic session only; no physical mobile bookmark coverage.');
 }finally{await browser.close();}

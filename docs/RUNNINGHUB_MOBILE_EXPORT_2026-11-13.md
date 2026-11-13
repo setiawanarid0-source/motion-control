@@ -1,65 +1,59 @@
-# RunningHub session popup on mobile browsers
+# RunningHub session export through bookmarks
 
-The Account Pool button still exports the same four fields: access token,
-refresh token, upload identity and upload authorization. Export remains local
-to the RunningHub page and makes no request. Backend refresh and imports stay
-unchanged.
+The user runs the code from a saved bookmark/favorite on a signed-in RunningHub
+page. This is the intended route; it does not require an extension. The Edge
+screenshot reports "Cannot Run Script". It does not establish that the user
+pasted the code into the address bar.
 
-The copied `javascript:` URL now encodes its source so URL delimiters and
-whitespace survive address-bar and bookmark handling. The exported function
-uses older JavaScript and DOM syntax. Storage objects and cookie access have
-independent exception guards. A dialog can attach to the document root when
-the body is unavailable, with a native prompt as the last local DOM fallback.
+The earlier extension detour has been removed from Account Pool, along with its
+installer, generated userscript and isolated-extension test. Desktop extension
+or link tests did not verify the user's requested mobile bookmark route.
 
-The dialog offers Copy and Select All; failed clipboard permission leaves the
-token visible for native selection. Closing or replacing it clears the old
-field and ignores pending clipboard callbacks. Vanta also exposes the code in
-a visible manual field when its own clipboard operation fails.
+## Existing exporter
 
-Open RunningHub signed in **in the browser running the code**. On browsers
-that allow JavaScript URLs, a bookmark can preserve a scheme that address-bar
-paste strips. This does **not** solve Edge mobile's native "Cannot Run Script"
-dialog. The user's screenshot confirms rejection before the exporter starts.
-Desktop Edge tests were insufficient evidence for the mobile address bar.
+The self-contained ES5 function remains unchanged. It exports only access,
+refresh, identify and comfyAuth, plus the site marker, into a local popup and
+makes no request. The latest stored refresh token takes precedence over an old
+cookie. Storage/cookie denial guards, manual selection, clipboard fallbacks
+and clearing on dismissal remain supported. Backend token import, encrypted
+storage and renewal are unchanged.
 
-## Edge Android: explicit extension channel
+Save the complete copied JavaScript URL, including `javascript:`, as the URL of
+a bookmark. Open RunningHub signed in in the same browser and invoke the saved
+bookmark on that tab. Code encoding preserves URL delimiters; encoding is not
+claimed to solve Edge's execution refusal.
 
-The Account Pool now links to the official Tampermonkey installation page and
-`public/vanta-runninghub-session.user.js` on raw GitHub. Installing the
-extension and script is a one-time user action. It is not installed or granted
-permissions by Vanta or by these changes.
+## Minimal bookmark diagnostic
 
-After installation, reload the signed-in RunningHub tab and tap **Salin sesi ke
-Vanta**. Only that tap reads the session. The same canonical exporter opens the
-same local popup; copy its JSON into Vanta's existing import field. The script
-does not fetch, upload, auto-copy, write storage, auto-update or share cookies
-across browsers. It cannot renew a session rejected by RunningHub.
+Account Pool now exposes a separate, optional diagnostic bookmark URL:
 
-The script matches only the two HTTPS RunningHub origins, refuses subframes
-and unrelated origins, and requests Tampermonkey's DOM sandbox without GM
-privileges. It needs no page globals or injected inline script. Existing
-bookmarklet support and the backend import/refresh protocol remain unchanged.
-Rebuild it with `node scripts/build-rh-session-userscript.mjs` after any exporter
-change; the unit test rejects drift from the canonical function.
+    javascript:void(alert('VANTA bookmark berjalan'))
 
-Primary references:
+It only displays that message, reads no credentials and sends no requests. Save
+it as a separate bookmark and invoke it on the same RunningHub tab through the
+same bookmark UI that failed for the exporter.
 
-- https://www.tampermonkey.net/faq.php?q=Q406 (official Edge Android availability)
-- https://www.tampermonkey.net/documentation.php?q=sandbox (DOM isolation)
-- https://www.tampermonkey.net/documentation.php?q=grant (omitting grants retains isolation)
-- https://playwright.dev/docs/chrome-extensions (isolated extension test harness)
+- A displayed message confirms JavaScript execution through that bookmark path
+  on that page. The exporter still needs investigation if it fails.
+- The same native refusal with this minimal code narrows the problem to the
+  execution path/browser/page policy before this test executes. It is not
+  evidence of an invalid access token or a failed clipboard permission.
 
-No browser protection or page CSP is disabled. This route is scoped to Edge
-Android with Tampermonkey; it is not a claim of Edge iOS compatibility.
+The device result is pending. Do not claim that Edge mobile is fixed, that every
+Edge version rejects bookmarks, or that a desktop browser with a narrow viewport
+verifies an Android/iOS app. Do not change browser protection settings or CSP.
 
-Validation uses synthetic session fixtures, denied storage/clipboard access,
-and actual JavaScript-URL navigation in Chromium, Firefox, Microsoft Edge and
-WebKit at mobile and desktop widths. These engine tests do not claim physical
-Android/iOS app or address-bar coverage.
+Primary references checked:
 
-The extension test loads the actual userscript through an isolated MV3 content
-script against synthetic RH pages with `script-src 'none'`, at the same three
-viewport widths. It checks the launcher, four-field export, rotated refresh
-token, manual selection, clearing/reopening and absence of export requests.
-It tests the extension execution context, **not Tampermonkey's installer or a
-physical Edge Android app**. Device confirmation remains outstanding.
+- https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/javascript
+- https://github.com/liriliri/eruda/issues/497 (original Android Edge bug report;
+  reporter observations, not a current Microsoft support guarantee)
+
+## Validation
+
+Unit tests cover the unchanged export format, browser storage/clipboard denial,
+clearing/reopening, and the diagnostic's no-session-read behavior. Browser CI
+exercises actual `javascript:` links and visible manual code selection in
+Chromium, Firefox, desktop Edge and WebKit at 320/430/1280px. It does not exercise
+the native Favorites UI or a physical phone. A user device diagnostic is required
+to distinguish the current reported bookmark failure.
