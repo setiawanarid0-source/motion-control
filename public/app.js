@@ -1162,7 +1162,7 @@ $('#copyRhSessionCode')?.addEventListener('click',async()=>{
   const code=window.vantaRunningHubSessionCode;
   if(!code)return toast('Kode belum tersedia. Muat ulang halaman.',true);
   const copied=await window.vantaCopyRunningHubCode();
-  toast(copied?'Kode tersalin. Jalankan saat membuka RunningHub yang sudah login.':'Kode ditampilkan. Tekan dan tahan teks kode, lalu pilih Salin.',!copied);
+  toast(copied?'Kode tersalin. Jika Edge menolak, buka cara Edge Android di bawah tombol.':'Kode ditampilkan. Tekan dan tahan teks kode, lalu pilih Salin.',!copied);
 });
 $('#selectRhSessionCode')?.addEventListener('click',()=>window.vantaSelectRunningHubCode());
 const rhSessionCodeManual=$('#rhSessionCodeManual');

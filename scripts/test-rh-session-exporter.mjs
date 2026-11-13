@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {parseRunningHubSession} from '../runninghub-web-session.js';
+import {buildRunningHubUserscript} from './build-rh-session-userscript.mjs';
 const source=fs.readFileSync(new URL('../public/rh-session.js',import.meta.url),'utf8');
+const userscript=fs.readFileSync(new URL('../public/vanta-runninghub-session.user.js',import.meta.url),'utf8');
 const access='fixture-access-token-browser',refresh='fixture-rotated-refresh-token';
-function fixture({blockedLocal=false,blockedCookie=false,missingBody=false,domFailure=false,clipboard,legacy=false,hostname='www.runninghub.ai'}={}){
+function fixture({blockedLocal=false,blockedCookie=false,missingBody=false,domFailure=false,clipboard,legacy=false,hostname='www.runninghub.ai',protocol='https:'}={}){
   const nodes=[],alerts=[],prompts=[],reads=[],legacyCalls=[];
+  let cookieReads=0;
   function find(node,match){if(match(node))return node;for(const child of node.children||[]){const found=find(child,match);if(found)return found;}return null;}
   function element(tag){
     const node={tag,style:{},children:[],attributes:{},value:'',
@@ -27,15 +30,15 @@ function fixture({blockedLocal=false,blockedCookie=false,missingBody=false,domFa
     getElementById:id=>find(root,n=>n.id===id),
     createElement:tag=>{if(domFailure)throw Error('DOM blocked');return element(tag);},
     execCommand:name=>{legacyCalls.push(name);return legacy;}};
-  Object.defineProperty(document,'cookie',{get(){if(blockedCookie)throw Error('Cookies blocked');
+  Object.defineProperty(document,'cookie',{get(){cookieReads++;if(blockedCookie)throw Error('Cookies blocked');
     return 'Rh-Accesstoken='+access+'; Rh-Refreshtoken=fixture-stale-cookie; private=never-export-this';}});
-  const context={document,location:{hostname},navigator:{clipboard},alert:m=>alerts.push(m),prompt:(m,value)=>prompts.push(value)};
-  context.window=context;context.sessionStorage=storage;
+  const context={document,location:{hostname,protocol},navigator:{clipboard},alert:m=>alerts.push(m),prompt:(m,value)=>prompts.push(value)};
+  context.window=context;context.top=context;context.self=context;context.sessionStorage=storage;
   Object.defineProperty(context,'localStorage',{get(){if(blockedLocal)throw Error('Storage getter denied');return storage;}});
   vm.createContext(context);vm.runInContext(source,context);
   const code=context.vantaRunningHubSessionCode;
   const run=()=>vm.runInContext(decodeURIComponent(code.slice('javascript:'.length)),context);
-  return {context,document,code,run,nodes,alerts,prompts,reads,legacyCalls,
+  return {context,document,code,run,nodes,alerts,prompts,reads,legacyCalls,cookieReads:()=>cookieReads,
     field:()=>find(root,n=>n.tag==='textarea'),
     button:text=>find(root,n=>n.tag==='button'&&n.textContent===text),
     status:()=>find(root,n=>n.attributes?.role==='status')};
@@ -91,4 +94,32 @@ test('Vanta offers a visible manual code field when clipboard access fails',asyn
   assert.equal(await f.context.vantaCopyRunningHubCode(),false);assert.equal(help.open,true);
   assert.equal(field.value,f.code);assert.equal(field.selected,f.code.length);
   field.value='';f.context.vantaSelectRunningHubCode();assert.equal(field.value,f.code);
+});
+test('userscript is generated from the canonical exporter, scoped to RH and has no network or update dependency',()=>{
+  assert.equal(userscript,buildRunningHubUserscript(),'Regenerate the userscript after changing the exporter');
+  const matches=[...userscript.matchAll(/^\/\/ @match\s+(.+)$/gm)].map(m=>m[1]);
+  assert.deepEqual(matches,['https://www.runninghub.ai/*','https://runninghub.ai/*']);
+  assert.match(userscript,/^\/\/ @sandbox\s+DOM$/m);assert.match(userscript,/^\/\/ @noframes$/m);
+  assert.match(userscript,/^\/\/ @downloadURL\s+none$/m);
+  assert.doesNotMatch(userscript,/^\/\/ @(?:grant|require|resource|connect|updateURL)\s/m);
+  assert.doesNotMatch(userscript,/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|window\.open|\.setItem\(|GM_/);
+});
+test('extension launcher reads no session until tapped; it exports rotated refresh token and can reopen safely',()=>{
+  const f=fixture();vm.runInContext(userscript,f.context);
+  assert.equal(f.reads.length,0);assert.equal(f.cookieReads(),0);assert.equal(f.field(),null);
+  const launcher=f.document.getElementById('vanta-rh-session-launcher');assert.ok(launcher);
+  vm.runInContext(userscript,f.context);
+  assert.equal(f.nodes.filter(n=>n.id==='vanta-rh-session-launcher').length,1);
+  launcher.click();const first=f.field(),data=JSON.parse(first.value);
+  assert.equal(data.access,access);assert.equal(data.refresh,refresh);
+  assert.equal(parseRunningHubSession(data).access,access);
+  f.button('Tutup').click();assert.equal(first.value,'');assert.equal(f.field(),null);
+  launcher.click();assert.equal(JSON.parse(f.field().value).refresh,refresh);
+});
+test('userscript refuses lookalike domains, insecure pages and subframes before reading session data',()=>{
+  for(const options of [{hostname:'runninghub.ai.attacker.example'},{protocol:'http:'},{frame:true}]){
+    const f=fixture(options);if(options.frame)f.context.top={};vm.runInContext(userscript,f.context);
+    assert.equal(f.document.getElementById('vanta-rh-session-launcher'),null);
+    assert.equal(f.reads.length,0);assert.equal(f.cookieReads(),0);
+  }
 });
