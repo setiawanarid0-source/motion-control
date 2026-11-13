@@ -80,15 +80,16 @@ test('legacy imports use the native localStorage refresh token instead of a stal
 
 test('the actual one-line exporter selects the rotated native refresh token without network requests',()=>{
   const nodes=[],alerts=[];
-  const element=tag=>{const node={tag,style:{},append(){},remove(){}};nodes.push(node);return node;};
+  const element=tag=>{const node={tag,style:{},appendChild(){},setAttribute(){},remove(){}};nodes.push(node);return node;};
   const storageRefresh='fixture-current-storage-refresh';
   const context={window:{},location:{hostname:'www.runninghub.ai'},alert:message=>alerts.push(message),
     document:{cookie:'Rh-Accesstoken='+encodeURIComponent(exported.access)+'; Rh-Refreshtoken=fixture-stale-cookie-refresh',
-      getElementById:()=>null,createElement:element,body:{append(){}}},
+      getElementById:()=>null,createElement:element,body:{appendChild(){}}},
     localStorage:{getItem:name=>name==='Rh-Refreshtoken'?storageRefresh:''},
     sessionStorage:{getItem:()=>''}};
+  context.window.localStorage=context.localStorage;context.window.sessionStorage=context.sessionStorage;
   vm.runInNewContext(fs.readFileSync(new URL('../public/rh-session.js',import.meta.url),'utf8'),context);
-  vm.runInNewContext(context.window.vantaRunningHubSessionCode.slice('javascript:'.length),context);
+  vm.runInNewContext(decodeURIComponent(context.window.vantaRunningHubSessionCode.slice('javascript:'.length)),context);
   assert.deepEqual(alerts,[]);
   const data=JSON.parse(nodes.find(node=>node.tag==='textarea').value);
   assert.equal(data.access,exported.access);assert.equal(data.refresh,storageRefresh);
@@ -462,9 +463,9 @@ test('export code is one-line JavaScript and contains only the intended session 
   const context={window:{}};vm.runInNewContext(fs.readFileSync(new URL('../public/rh-session.js',import.meta.url),'utf8'),context);
   const code=context.window.vantaRunningHubSessionCode;
   assert.ok(code.startsWith('javascript:'));assert.ok(!code.includes('\n'));
-  new vm.Script(code.slice('javascript:'.length));
-  assert.ok(!code.includes('fetch('));assert.ok(!code.includes('XMLHttpRequest'));
-  assert.ok(!code.includes('localStorage.length'));assert.ok(!code.includes('cookies:document.cookie'));
+  const decoded=decodeURIComponent(code.slice('javascript:'.length));new vm.Script(decoded);
+  assert.ok(!decoded.includes('fetch('));assert.ok(!decoded.includes('XMLHttpRequest'));
+  assert.ok(!decoded.includes('localStorage.length'));assert.ok(!decoded.includes('cookies:document.cookie'));
 });
 
 
