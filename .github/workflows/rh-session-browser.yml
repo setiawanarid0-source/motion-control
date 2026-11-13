@@ -6,7 +6,7 @@ on:
     branches: [main]
 jobs:
   popup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -26,7 +26,10 @@ jobs:
         run: npx playwright-core install --with-deps ${{ matrix.browser }}
       - name: Install Microsoft Edge
         if: matrix.browser == 'edge'
-        run: npx playwright-core install msedge
+        run: |
+          if [ ! -x /opt/microsoft/msedge/msedge ]; then
+            npx playwright-core install msedge
+          fi
       - name: Verify token popup and copy fallback
         run: node scripts/test-rh-session-browser.mjs
         env:
