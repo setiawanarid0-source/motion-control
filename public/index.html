@@ -242,6 +242,13 @@
             <div id="rhWebSessionPanel" class="rh-session-panel">
               <p class="form-note">Salin token dari akun RunningHub yang sudah login, lalu tempel di bawah.</p>
               <button id="copyRhSessionCode" class="ghost-btn" type="button">Salin kode pengambil token</button>
+              <details id="rhSessionBrowserHelp" class="form-note">
+                <summary>Cara memakai di Firefox, Edge, dan browser lain</summary>
+                <p>Buka RunningHub yang sudah login di browser tersebut. Pastikan kode diawali <code>javascript:</code>. Jika berubah menjadi pencarian, simpan kode sebagai URL bookmark/favorit, lalu jalankan bookmark itu pada tab RunningHub yang sudah login.</p>
+                <label class="field-label" for="rhSessionCodeManual">KODE PENGAMBIL TOKEN</label>
+                <textarea id="rhSessionCodeManual" class="text-input rh-session-input" rows="3" readonly autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Kode pengambil token untuk disalin manual"></textarea>
+                <button id="selectRhSessionCode" class="ghost-btn" type="button">Pilih kode untuk disalin</button>
+              </details>
               <label class="field-label" for="rhWebSessionInput">ACCESS TOKEN / JSON RUNNINGHUB</label>
               <textarea id="rhWebSessionInput" class="text-input rh-session-input" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Tempel access token atau JSON dari popup RunningHub"></textarea>
               <button id="connectRhWebSession" class="generate-btn compact" type="button">Hubungkan akun</button>
@@ -344,8 +351,8 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/auth.js?v=20261026-global-login" defer></script>
-  <script src="/rh-session.js?v=20261111-runninghub-points" defer></script>
-  <script src="/app.js?v=20261112-rife-live-progress" defer></script>
+  <script src="/rh-session.js?v=20261113-mobile-popup" defer></script>
+  <script src="/app.js?v=20261113-mobile-popup" defer></script>
   <script src="/kie-ui.js?v=20261113-seedream55-gpt26" defer></script>
   <script src="/history-gallery.js?v=20261112-rife-live-progress" defer></script>
 </body>

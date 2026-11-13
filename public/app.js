@@ -1161,15 +1161,12 @@ if(historyFilters) historyFilters.onclick=e=>{
 $('#copyRhSessionCode')?.addEventListener('click',async()=>{
   const code=window.vantaRunningHubSessionCode;
   if(!code)return toast('Kode belum tersedia. Muat ulang halaman.',true);
-  let copied=false;
-  try{await navigator.clipboard.writeText(code);copied=true;}
-  catch{
-    const field=document.createElement('textarea');field.value=code;
-    field.style.cssText='position:fixed;left:-9999px';document.body.append(field);
-    field.select();try{copied=document.execCommand('copy');}catch{}field.remove();
-  }
-  toast(copied?'Kode tersalin. Jalankan saat membuka RunningHub yang sudah login.':'Browser belum mengizinkan penyalinan kode.',!copied);
+  const copied=await window.vantaCopyRunningHubCode();
+  toast(copied?'Kode tersalin. Jalankan saat membuka RunningHub yang sudah login.':'Kode ditampilkan. Tekan dan tahan teks kode, lalu pilih Salin.',!copied);
 });
+$('#selectRhSessionCode')?.addEventListener('click',()=>window.vantaSelectRunningHubCode());
+const rhSessionCodeManual=$('#rhSessionCodeManual');
+if(rhSessionCodeManual)rhSessionCodeManual.value=window.vantaRunningHubSessionCode||'';
 $('#connectRhWebSession')?.addEventListener('click',async()=>{
   const input=$('#rhWebSessionInput'),value=input.value.trim(),button=$('#connectRhWebSession');
   if(!value)return toast('Tempel access token atau JSON RunningHub.',true);
