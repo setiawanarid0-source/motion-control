@@ -1121,7 +1121,13 @@ document.querySelector('.akatz-editor-download')?.addEventListener('click',async
   if(link.getAttribute('aria-busy')==='true')return;
   link.setAttribute('aria-busy','true');let url;
   try{
-    const response=await fetch(link.href,{credentials:'same-origin'});
+    const endpoint=new URL(link.href,location.href);
+    if(Number.isFinite(state.videoDuration)&&state.videoDuration>0){
+      endpoint.searchParams.set('frames',String(Math.max(6,Math.round(state.videoDuration*24))));
+      const photo=$('#imagePreview')?.querySelector('img');
+      if(photo?.naturalWidth&&photo?.naturalHeight){endpoint.searchParams.set('width',String(photo.naturalWidth));endpoint.searchParams.set('height',String(photo.naturalHeight));}
+    }
+    const response=await fetch(endpoint.href,{credentials:'same-origin'});
     if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.error||'Workflow belum dapat diunduh.');}
     const workflow=await response.json();
     if(!Array.isArray(workflow.nodes)||!Array.isArray(workflow.links))throw Error('File workflow belum valid.');

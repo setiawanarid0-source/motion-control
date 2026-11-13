@@ -22,6 +22,7 @@ import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,may
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
+import {prepareTurbo8Input} from './h3-akatz-turbo8-adaptive.js';
 import {withIntegratedRife60,withIntegratedRife60Editor,integratedRifePlan,INTEGRATED_RIFE_WORKFLOWS,RIFE60_EDITOR_FILENAME} from './integrated-rife.js';
 import {verifyRifeInput,rifeGraphForSourceFps,rifeBatchSize,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
@@ -43,7 +44,7 @@ import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionCon
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import * as akatzV3 from './h3-akatz-v3-motion.js';
 import {installAkatzEditorDownload} from './h3-runninghub-export.js';
-import {TURBO8_REVISION,TURBO8_ASSET,TURBO8_EDITOR_FILENAME,turbo8GraphForInputs,turbo8ExecutionPlan,turbo8SeedNodeInfo,turbo8EditorWorkflow} from './h3-akatz-turbo8.js';
+import {TURBO8_REVISION,TURBO8_ASSET,TURBO8_EDITOR_FILENAME,turbo8GraphForInputs,turbo8ExecutionPlan,turbo8SeedNodeInfo,turbo8EditorWorkflow,turbo8EditorForFrames} from './h3-akatz-turbo8.js';
 import {installFrameDiagnostics} from './h3-frame-diagnostics.js';
 import {createOutputArchiveClassifier} from './output-archive-roles.js';
 import {createRunningHubWebSession,isRunningHubWebKey,RH_AUTO_RENEW_INTERVAL_MS} from './runninghub-web-session.js';
@@ -90,8 +91,8 @@ const workflowMeta = {
   },
   minimaxH3Akatz: {
     id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz V1.5 Native · 1080p',
-    subtitle:'Turbo8 · 1080p · 60 FPS · Plus · hingga 15 detik',
-    detail:'Foto menjadi acuan tampilan; video memandu gerak dan kamera. Turbo8 memakai durasi adaptif, audio sumber, RIFE 60 FPS dalam satu job, MP4 dan ZIP tiga frame PNG dari hasil final. Hasil native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
+    subtitle:'Turbo8 · 1080p · 60 FPS · Plus · durasi adaptif',
+    detail:'Foto menjadi acuan tampilan; video memandu gerak dan kamera. Turbo8 membagi durasi aktual ke segmen otomatis tanpa batas maksimal 15 detik, dengan audio sumber, RIFE 60 FPS dalam satu job, MP4 dan ZIP tiga frame PNG dari hasil final. Hasil native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
     revision:TURBO8_REVISION,frameDiagnostics:true,
     outputKind:'video',experimental:true,requiredMode:'plus'
   },
@@ -714,7 +715,7 @@ app.get('/api/workflows', (req, res) => {
 installAkatzEditorDownload({app,getModelFiles:()=>({
   characterLoraFile:h3AkatzModels.character.cachedFile(),
   turboLoraFile:h3AkatzTurbo8Model.cachedFile()
-}),buildWorkflow:models=>withIntegratedRife60Editor(turbo8EditorWorkflow(models)),filename:RIFE60_EDITOR_FILENAME});
+}),buildWorkflow:(models,req)=>withIntegratedRife60Editor(turbo8EditorForFrames({...models,frames:req.query.frames?Number(req.query.frames):360,width:Number(req.query.width)||1080,height:Number(req.query.height)||1920})),filename:RIFE60_EDITOR_FILENAME});
 installFrameDiagnostics({app,registry:taskRegistry,getAccount:taskAccount,request:axios.get,validUrl:validProviderUrl,
   getOutputs:async(taskId,account)=>{
     const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
@@ -878,7 +879,7 @@ async function handleGeneration(req,res){
     if(['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(workflowKey)){
       req.progress?.('analyzing');
       h3Source=workflowKey==='minimaxH3AkatzV3'?await akatzV3.prepareAkatzInput(videoFile,mode,imageFile):
-        workflowKey==='minimaxH3Akatz'?await prepareAkatzInput(videoFile,mode,imageFile):
+        workflowKey==='minimaxH3Akatz'?await prepareTurbo8Input(videoFile,mode,imageFile):
         await prepareH3Input(videoFile,mode,imageFile,{
           inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;

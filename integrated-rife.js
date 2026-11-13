@@ -54,7 +54,7 @@ export function withIntegratedRife60Editor(source){
   const rateInput=final.inputs.find(i=>i.name==='frame_rate');
   const rateEdge=editor.links.find(l=>l[0]===rateInput?.link);
   if(!rateEdge&&!(Number.isFinite(originalRate)&&originalRate>0))throw Error('FPS editor tidak tersedia.');
-  let next=Math.max(editor.last_link_id||0,...editor.links.map(l=>l[0]))+1;
+  let next=editor.links.reduce((max,l)=>Math.max(max,l[0]),editor.last_link_id||0)+1;
   const named={...structuredClone(base['2'].inputs),source_fps:originalRate||24};delete named.images;
   const names=['source_fps','target_fps','scale','model_name','batch_size','use_fp16'];
   const n={id:target,type:'RIFEInterpolation',title:'RIFE · FINAL → 60 FPS · ONE JOB',

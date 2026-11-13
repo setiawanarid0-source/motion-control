@@ -2,8 +2,11 @@
 // duration-only controls on the server; never execute absent GPU branches.
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
+import {h3PhotoPlan} from './minimax-h3-motion.js';
+import {extendTurbo8Graph,serializeTurbo8Editor} from './h3-akatz-turbo8-adaptive.js';
 
-export const TURBO8_REVISION='akatz-native-1080-turbo8-template-r2';
+export const TURBO8_LEGACY_REVISION='akatz-native-1080-turbo8-template-r2';
+export const TURBO8_REVISION='akatz-native-1080-turbo8-adaptive-v1';
 export const TURBO8_TEMPLATE_SHA256='b3824c07c0f33c2a0df2318fd213a3debbedce480d76ab1ae4f62f9d582062c2';
 export const TURBO8_EDITOR_FILENAME='VANTA_AKATZ_TURBO8_TIGA_FRAME_ZIP_R2_RUNNINGHUB.json';
 export const TURBO8_ASSET=Object.freeze({
@@ -28,8 +31,8 @@ const file=name=>typeof name==='string'&&name.length>0&&name.length<=500&&!/[\u0
 
 export function turbo8TemporalPlan(source){
   const n=source?.totalFrames;
-  if(!Number.isSafeInteger(n)||n<6||n>362||source.fps!==24||typeof source.hasAudio!=='boolean')
-    throw Error('Akatz Turbo8 menerima video 0,25–15 detik pada 24 FPS.');
+  if(!Number.isSafeInteger(n)||n<6||source.fps!==24||typeof source.hasAudio!=='boolean')
+    throw Error('Metadata durasi Akatz Turbo8 tidak valid (minimal 0,25 detik pada 24 FPS).');
   for(const key of ['canvasWidth','canvasHeight','outputWidth','outputHeight'])
     if(!Number.isSafeInteger(source[key])||source[key]<64||source[key]>8192)
       throw Error('Canvas Akatz Turbo8 belum tervalidasi.');
@@ -39,20 +42,28 @@ export function turbo8TemporalPlan(source){
   for(const key of ['padLeft','padTop','referencePadRight','referencePadBottom'])
     if(!Number.isSafeInteger(source[key])||source[key]<0||source[key]>31)
       throw Error('Padding Akatz Turbo8 belum tervalidasi.');
-  const window=Math.max(124,5+17*Math.ceil((n-5)/51));
+  const window=124;
   const values={300:window,301:2*window-5,350:n/24};
   const segments=[];
-  for(let i=0;i<3;i++){
+  const count=n<=window?1:1+Math.ceil((n-window)/(window-5));
+  const used=new Set([...template.nodes.map(n=>n.id),760060,900001,900002,900003]);let nextBase=10000;
+  for(let i=0;i<Math.max(3,count);i++){
     const base=320+i*10,start=i?i*(window-5):0;
     const inputFrames=Math.max(1,Math.min(window,n-start));
     const frames=i?Math.max(1,inputFrames-5):inputFrames;
-    Object.assign(values,{[base]:start,[base+1]:inputFrames,[base+2]:frames,
+    if(i<3)Object.assign(values,{[base]:start,[base+1]:inputFrames,[base+2]:frames,
       [base+3]:inputFrames-1,[base+4]:Math.max(1,window-inputFrames),
       [base+5]:inputFrames/24,[base+6]:start/24,[base+7]:(start+5)/24,[base+8]:frames/24});
     if(i===0||n>i*window-(i-1)*5){
-      const noise=template.nodes.find(x=>x.id===1009+i*40);
+      let nodeBase=1000+i*40;
+      if(i>=3){
+        while(Array.from({length:40},(_,j)=>nextBase+j).some(id=>used.has(id)))nextBase+=40;
+        nodeBase=nextBase;for(let j=0;j<40;j++)used.add(nodeBase+j);nextBase+=40;
+      }
+      const noise=template.nodes.find(x=>x.id===1009+Math.min(i,2)*40);
+      const seed=(noise.widgets_values_named.noise_seed+Math.max(0,i-2))%2**32;
       segments.push({start:i?start+5:0,loadStart:start,frames,inputFrames,modelFrames:window,
-        contextFrames:i?5:0,seed:noise.widgets_values_named.noise_seed,seedNode:String(1016+i*40),noiseNode:String(noise.id)});
+        contextFrames:i?5:0,base:nodeBase,seed,seedNode:String(nodeBase+16),noiseNode:String(nodeBase+9)});
     }
   }
   if(segments.reduce((sum,s)=>sum+s.frames,0)!==n)throw Error('Durasi keluaran Akatz Turbo8 tidak cocok dengan sumber.');
@@ -80,7 +91,12 @@ function editorApi(){
 export function turbo8GraphForInputs({imageName,videoName,source,characterLoraFile,turboLoraFile}){
   if(!file(imageName)||!file(videoName)||!lora(characterLoraFile)||!lora(turboLoraFile))
     throw Error('Referensi atau receipt model Akatz Turbo8 belum valid.');
-  const temporal=turbo8TemporalPlan(source),graph=editorApi();
+  const temporal=turbo8TemporalPlan(source);
+  if(source.totalFrames>362){
+    const prototype=turbo8GraphForInputs({imageName,videoName,source:{...source,totalFrames:362},characterLoraFile,turboLoraFile});
+    return extendTurbo8Graph(prototype,source,temporal);
+  }
+  const graph=editorApi();
   graph['30'].inputs.image=imageName;
   graph['31'].inputs.right=source.referencePadRight;graph['31'].inputs.bottom=source.referencePadBottom;
   // API-uploaded weights require RH's loader. strength_clip=0 preserves the
@@ -155,15 +171,30 @@ export function turbo8ExecutionPlan(source){
       character:'Akatz V1.5',turbo:'FL2V Turbo 8-step v1.0 768p',turboSha256:TURBO8_ASSET.sha256},
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
     nativeWindowFrames:p.window,samplerCount:p.segments.length,segments:p.segments,seed:p.segments[0].seed,
+    durationStrategy:'automatic_bounded_windows',applicationMaxSeconds:null,
     seedTransport:'template_fixed_int_expression_with_api_override',
     continuation:'sampler_av_latent_tail',continuationFrames:5,continuationVaeRoundTrips:0,
     outputEncoding:{format:'video/h264-mp4',crf:12},frameDiagnostics:{zipNode:'5108',positions:['first','middle','last']},
     nodeClasses:Object.fromEntries(Object.entries(graph).map(([id,n])=>[id,n.class_type])),
-    workBudget:{totalSteps:p.segments.length*8,targetSeconds:1500,providerHardLimitSeconds:2400,measuredRuntimeSeconds:null},
+    workBudget:{totalSteps:p.segments.length*8,targetSeconds:source.totalFrames<=362?1500:null,
+      providerHardLimitSeconds:2400,measuredRuntimeSeconds:null},
     postDecodeResize:false,postRefinement:false,gpuExecutionQualified:false,visualAcceptance:'pending_owner_test'};
 }
 export function turbo8NodeClass(id,plan){
-  return plan?.revision===TURBO8_REVISION?plan.nodeClasses?.[String(id)]||null:null;
+  return [TURBO8_REVISION,TURBO8_LEGACY_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
+}
+
+export function turbo8EditorForFrames({characterLoraFile,turboLoraFile,frames,width=1080,height=1920}){
+  const source={...h3PhotoPlan(width,height),fps:24,totalFrames:frames,hasAudio:true};
+  const models={characterLoraFile,turboLoraFile};
+  const api=turbo8GraphForInputs({...models,source,imageName:'UPLOAD_PHOTO.png',videoName:'UPLOAD_VIDEO.mp4'});
+  const blueprint=turbo8EditorWorkflow(models),filename=blueprint.nodes.find(n=>n.type==='WidgetToString');
+  api['200']={class_type:'WidgetToString',inputs:{...clone(filename.widgets_values_named),any_input:['1000',0]}};
+  for(const [id,node] of Object.entries(api)){
+    if(node.class_type==='VHS_LoadAudioUpload')node.inputs.audio=['200',0];
+    if(node.class_type==='VHS_LoadVideo'&&id!=='1000')node.inputs.video=['200',0];
+  }
+  return serializeTurbo8Editor(api,blueprint,source);
 }
 
 export function turbo8EditorWorkflow({characterLoraFile,turboLoraFile}){

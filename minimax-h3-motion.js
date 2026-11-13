@@ -80,13 +80,15 @@ function displayedSize(video){
   const swapped=Math.abs(Math.round(rotation/90))%2===1;
   return {sourceWidth:swapped?video.height:video.width,sourceHeight:swapped?video.width:video.height};
 }
-export function validateH3Probe(probe,mode='plus'){
+export function validateH3Probe(probe,mode='plus',{maxSeconds=H3_MAX_SECONDS}={}){
   const v=probe?.streams?.find(s=>s.codec_type==='video');
   if(!v||![v.width,v.height].every(n=>Number.isSafeInteger(n)&&n>=64&&n<=8192))
     throw Error('Video H3 tidak memiliki dimensi yang valid (64–8192 px).');
   const duration=Number(v.duration)||Number(probe.format?.duration);
-  if(!Number.isFinite(duration)||duration<.25||duration>H3_MAX_SECONDS+.001)
-    throw Error('H3 menerima video 0,25–60 detik. Video tidak dipotong otomatis.');
+  if(!Number.isFinite(duration)||duration<.25||!Number.isSafeInteger(Math.round(duration*H3_FPS))||
+    (maxSeconds!==null&&duration>maxSeconds+.001))
+    throw Error(maxSeconds===null?'Durasi video H3 tidak valid (minimal 0,25 detik).':
+      'H3 menerima video 0,25–60 detik. Video tidak dipotong otomatis.');
   if(mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus. Resolusi tidak diturunkan otomatis.');
   return {...displayedSize(v),duration,totalFrames:Math.round(duration*H3_FPS),fps:H3_FPS,
     hasAudio:probe.streams.some(s=>s.codec_type==='audio')};
@@ -100,7 +102,7 @@ async function probe(file,kind){
     return JSON.parse(stdout);
   }catch{throw Error(`File ${kind.toLowerCase()} H3 tidak dapat dibaca. Task belum dikirim ke RunningHub.`);}
 }
-export async function probeH3Input(file,mode){return validateH3Probe(await probe(file,'Video'),mode);}
+export async function probeH3Input(file,mode,options){return validateH3Probe(await probe(file,'Video'),mode,options);}
 export function h3PhotoPlan(width,height){
   if(![width,height].every(n=>Number.isSafeInteger(n)&&n>=64&&n<=8192))
     throw Error('Dimensi foto H3 tidak valid (minimal 64 px).');
@@ -154,9 +156,10 @@ export function h3Segments(totalFrames,sceneCuts=[],continuationFrames=1,windowF
 }
 
 export async function prepareH3Input(file,mode,imageFile,{
-  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor','guide-dmad4-ffp-focus'].includes(inferenceProfile),diagnosticOutputs=false,nativeDriver=false
+  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor','guide-dmad4-ffp-focus'].includes(inferenceProfile),diagnosticOutputs=false,nativeDriver=false,
+  maxSeconds=H3_MAX_SECONDS,maxGuideBytes=100*1024*1024,detectScenes=true
 }={}){
-  const source=await probeH3Input(file,mode);
+  const source=await probeH3Input(file,mode,{maxSeconds});
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vanta-h3-motion-'));
   const release=()=>fs.rm(dir,{recursive:true,force:true});
   const output=path.join(dir,'motion-guide.mp4');
@@ -176,8 +179,8 @@ export async function prepareH3Input(file,mode,imageFile,{
         `scale=${plan.outputWidth}:${plan.outputHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,`+
         `pad=${plan.canvasWidth}:${plan.canvasHeight}:(ow-iw)/2:(oh-ih)/2:color=black`;
     // Preserve small expression/texture cues before Ref2VA sees the driver.
-    // Akatz's <=15s input stays below the existing 100 MiB upload ceiling with
-    // the bounded 24 Mb/s rate and 48 Mb buffer; other H3 profiles keep theirs.
+    // Keep the established driver quality. Adaptive Turbo8 may prepare a guide
+    // larger than its original uploaded file; never lower quality to fit 15s.
     const driverEncoding=nativeDriver?{crf:12,maxrate:'24M',bufsize:'48M'}:{crf:16,maxrate:'12M',bufsize:'24M'};
     await run('ffmpeg',['-hide_banner','-loglevel','error','-nostdin','-y','-threads','2','-i',file.path,
       '-map','0:v:0','-map','0:a:0?','-vf',filter,
@@ -185,19 +188,22 @@ export async function prepareH3Input(file,mode,imageFile,{
       '-frames:v',String(source.totalFrames),'-t',String(source.totalFrames/24),
       '-c:v','libx264','-preset','fast','-crf',String(driverEncoding.crf),'-maxrate',driverEncoding.maxrate,'-bufsize',driverEncoding.bufsize,
       '-pix_fmt','yuv420p','-threads','2','-c:a','aac','-b:a','192k','-movflags','+faststart',output],
-      {timeout:300000,maxBuffer:65536});
+      {timeout:maxSeconds===null?Math.min(2147483647,Math.max(300000,Math.ceil(source.duration*12000))):300000,maxBuffer:65536});
     const {stdout}=await run('ffprobe',['-v','error','-show_streams','-of','json',output],{timeout:30000,maxBuffer:65536});
     const tracks=JSON.parse(stdout).streams||[],v=tracks.find(s=>s.codec_type==='video'),frames=Number(v?.nb_frames);
     const bytes=(await fs.stat(output)).size;
     if(v?.width!==driverWidth||v?.height!==driverHeight||v?.r_frame_rate!=='24/1'||
-      !Number.isSafeInteger(frames)||frames<6||Math.abs(frames-source.totalFrames)>1||bytes>100*1024*1024||
+      !Number.isSafeInteger(frames)||frames<6||Math.abs(frames-source.totalFrames)>1||(maxGuideBytes!==null&&bytes>maxGuideBytes)||
       source.hasAudio!==tracks.some(s=>s.codec_type==='audio'))
       throw Error('Guide Motion Control H3 gagal divalidasi. Task belum dikirim ke RunningHub.');
-    const {stderr}=await run('ffmpeg',['-hide_banner','-loglevel','info','-nostdin','-threads','2',
-      '-i',output,'-an','-vf','scale=160:-2,select=gt(scene\\,0.35),showinfo','-fps_mode','vfr','-f','null','-'],
-      {timeout:120000,maxBuffer:1048576});
-    const sceneCuts=[...new Set([...stderr.matchAll(/pts_time:([0-9.]+)/g)]
-      .map(m=>Math.round(Number(m[1])*24)))].filter(n=>n>0&&n<frames);
+    let sceneCuts=[];
+    if(detectScenes){
+      const {stderr}=await run('ffmpeg',['-hide_banner','-loglevel','info','-nostdin','-threads','2',
+        '-i',output,'-an','-vf','scale=160:-2,select=gt(scene\\,0.35),showinfo','-fps_mode','vfr','-f','null','-'],
+        {timeout:120000,maxBuffer:1048576});
+      sceneCuts=[...new Set([...stderr.matchAll(/pts_time:([0-9.]+)/g)]
+        .map(m=>Math.round(Number(m[1])*24)))].filter(n=>n>0&&n<frames);
+    }
     return {...source,...plan,totalFrames:frames,sceneCuts,inferenceProfile,diagnosticOutputs:diagnosticOutputs===true,
       ...(nativeDriver?{driverCanvas:[driverWidth,driverHeight],driverEncoding}:{}),
       referenceFile:reference.file,referenceColor:reference.color,referenceFace,
