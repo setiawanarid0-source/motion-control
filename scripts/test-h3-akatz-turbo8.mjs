@@ -96,7 +96,8 @@ for(const [w,h] of [[1920,1080],[1080,1920],[1080,1080],[1080,1936]])for(const a
   }
   assert.equal(h3NodeClass('5108',plan),'CompressImages');assert.equal(h3NodeClass('1133',plan),null);
 }
-assert.throws(()=>build(source(363)),/0,25/);
+assert.equal(turbo8TemporalPlan(source(363)).segments.length,4);
+assert.throws(()=>build(source(5)),/0,25/);
 const editor=turbo8EditorWorkflow(models),editorNodes=new Map(editor.nodes.map(n=>[n.id,n]));
 for(const edge of editor.links){
   const [id,from,out,to,slot]=edge;

@@ -113,6 +113,15 @@ try{
   assert.deepEqual(hd['497'].inputs.image,['30',0]);
   assert.deepEqual(hd['489'].inputs.width,['497',1]);
   assert.deepEqual(hd['496'].inputs['images or video_path'],['494',0]);
+  const priorCount=created.length;
+  await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey:'minimaxH3Akatz',mode:'plus',
+    imageFile:{...media,mimetype:'image/png'},videoFile:media,
+    h3Source:{...source,totalFrames:2401,inferenceProfile:AKATZ_PROFILE}});
+  assert.equal(created.length,priorCount+1,'Long Akatz still creates exactly one provider task');
+  const long=created.at(-1);
+  assert.equal(Object.values(long).filter(n=>n.class_type==='SamplerCustomAdvanced').length,21);
+  assert.equal(Object.values(long).filter(n=>n.class_type==='RIFEInterpolation').length,1);
+  assert.equal(long['490'].inputs.frame_rate,60);
   const missing=createH3AppearanceModel({dir,asset:{...FFP_ASSET,name:'missing-pinned-model'},
     request:async()=>{throw Error('No API key fallback');},http:{get:async()=>{throw Error('No speculative download');}}});
   await assert.rejects(missing.ensure(key),error=>error.code==='H3_MODEL_PREPARATION_FAILED');

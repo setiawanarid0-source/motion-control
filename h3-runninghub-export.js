@@ -110,7 +110,7 @@ export function installAkatzEditorDownload({app,getModelFiles,buildWorkflow=akat
       const models=getModelFiles();
       if(!models.characterLoraFile||!models.turboLoraFile)
         return res.status(503).json({error:'Receipt kedua model Akatz belum tersedia untuk ekspor. Tidak ada model upload atau generate yang dijalankan.'});
-      const workflow=buildWorkflow(models);
+      const workflow=buildWorkflow(models,_req);
       res.set('Content-Type','application/json; charset=utf-8');
       res.set('Content-Disposition','attachment; filename="'+filename+'"');
       res.send(JSON.stringify(workflow,null,2)+'\n');
