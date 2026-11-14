@@ -16,6 +16,7 @@ const publicEntry=t=>({
   providerRuntimeSeconds:t.providerRuntimeSeconds??null,providerTimingCheckedAt:t.providerTimingCheckedAt||null,
   failureAuditCheckedAt:t.failureAuditCheckedAt||null,failureCategory:t.failureCategory||null,
   failureV2CheckedAt:t.failureV2CheckedAt||null,
+  failureAuditVersion:t.failureAuditVersion??null,
   inputDiagnostics:t.inputDiagnostics||null,
   providerProgress:t.providerProgress||null,
   resultUrl:t.resultUrl||null,referenceMaskUrl:t.referenceMaskUrl||null,
@@ -106,7 +107,7 @@ export function createTaskRegistry({dir,encrypt,decrypt,now=()=>Date.now()}){
     if(DONE.has(t.status)&&!DONE.has(patch.status))return publicEntry(t);
     const permitted=['status','lastCheckedAt','resultUrl','referenceMaskUrl','error','cameraQA','finishedAt',
       'statusDetail','providerCode','deliveryNote','providerRuntimeSeconds','providerTimingCheckedAt','providerProgress',
-      'failureAuditCheckedAt','failureCategory','failureV2CheckedAt','rifeAuditCheckedAt','rifeAuditVersion',
+      'failureAuditCheckedAt','failureCategory','failureV2CheckedAt','failureAuditVersion','rifeAuditCheckedAt','rifeAuditVersion',
       'resultArchiveExpected','resultArchiveUrl','resultSource','resultOriginalSHA256','resultOriginalBytes',
       'hasFrameDiagnostics','frameArchiveUrl'];
     for(const key of permitted)if(Object.hasOwn(patch,key))t[key]=patch[key];
