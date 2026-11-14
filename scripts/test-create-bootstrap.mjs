@@ -46,13 +46,14 @@ for(const key of workflow.map(x=>x.dataset.workflow)){
 }
 for(const key of ['r15','koh1AntiObject','r4Lab'])assert.ok(!html.includes('data-workflow="'+key+'"'),'Retired R4 card must be removed');
 const nodeKeys=['#menuBtn','#sidebar','#rifeNotice','#h3Notice','#akatzNotice','#mediaRequirements',
+  '#akatzExpression','#akatzExpressionStatus',
   '#imageDrop','#referenceImage','#videoDrop',
   '#videoReference','#generateBtn','#refreshAccounts','#motionGalleryRefresh',
   '#rhWebSessionPanel',
   '#copyRhSessionCode','#selectRhSessionCode','#copyRhBookmarkTestCode','#rhSessionCodeManual','#connectRhWebSession','#rhWebSessionInput'];
 const nodes=new Map(nodeKeys.map(key=>[key,makeElement()]));
 nodes.set('#historyFilters',null);
-const requested=[],uploads=[],errors=[],state={workflow:'motionflyHD',mode:'standard'};
+const requested=[],uploads=[],errors=[],state={workflow:'motionflyHD',mode:'standard',akatzExpression:true};
 const generated=()=>requested.push('generate');
 const refreshed=()=>requested.push('refresh');
 const documentQueries={
@@ -121,6 +122,12 @@ assert.equal(modes.find(x=>x.dataset.mode==='standard').disabled,true);
 assert.equal(nodes.get('#imageDrop').classList.contains('hidden'),false);
 assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),false);
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true);
+nodes.get('#akatzExpression').listener('change')({target:{value:'baseline'}});
+assert.equal(state.akatzExpression,false,'Previous-version choice must disable the candidate');
+assert.match(nodes.get('#akatzExpressionStatus').textContent,/Versi sebelumnya aktif/);
+nodes.get('#akatzExpression').listener('change')({target:{value:'expression'}});
+assert.equal(state.akatzExpression,true,'The expression candidate must be selectable again');
+assert.match(nodes.get('#akatzExpressionStatus').textContent,/Uji mimik aktif/);
 workflow.find(x=>x.dataset.workflow==='motionflyHD').onclick();
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true,'H3 help must not leak into old workflows');
 assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),true,'Akatz help is scoped to its own option');

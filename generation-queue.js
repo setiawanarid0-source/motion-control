@@ -181,7 +181,8 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1,me
         message:LABELS.queued,body:{
           workflow:String(body.workflow||'motionflyHD'),
           mode:String(body.mode||'standard'),
-          accountId:String(body.accountId||'auto')
+          accountId:String(body.accountId||'auto'),
+          ...(body.akatzExpression==null?{}:{akatzExpression:String(body.akatzExpression)})
         },image:storedImage||(image?.path?{path:imageDest,originalname:String(image.originalname||'reference.jpg'),
           mimetype:image.mimetype,size:image.size}:null),
         video:storedVideo||{path:videoDest,originalname:String(video.originalname||'driving.mp4'),

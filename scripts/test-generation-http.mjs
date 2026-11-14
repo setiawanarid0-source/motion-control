@@ -103,6 +103,17 @@ try{
   }
   const latest=await fetch(url+'/api/generate/jobs',{headers});
   assert.ok((await latest.json()).jobs.some(x=>x.jobId===jobId));
+  for(const [workflow,value] of [['current','true'],['minimaxH3Akatz','yes']]){
+    const invalid=form('plus',workflow);invalid.append('akatzExpression',value);
+    const result=await fetch(url+'/api/generate',{
+      method:'POST',headers:{...headers,'X-Vanta-Request-Id':crypto.randomUUID()},body:invalid});
+    assert.equal(result.status,400,'Invalid or cross-workflow expression options must stop before queueing');
+  }
+  const expressionId=crypto.randomUUID(),expressionForm=form('plus','minimaxH3Akatz');
+  expressionForm.append('akatzExpression','true');
+  const expression=await fetch(url+'/api/generate',{
+    method:'POST',headers:{...headers,'X-Vanta-Request-Id':expressionId},body:expressionForm});
+  assert.equal(expression.status,202,'A valid selected candidate enters the same durable upload queue');
   // Only Standard and Plus are offered/accepted for NEW requests.
   const plusId=crypto.randomUUID();
   const plusResponse=await fetch(url+'/api/generate',{

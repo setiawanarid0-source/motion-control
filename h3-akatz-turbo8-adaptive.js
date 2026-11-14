@@ -61,11 +61,17 @@ export function extendTurbo8Graph(prototype,source,plan){
 
 // A long editor export is compiled for the selected source duration. Its node
 // ports/widgets come from the same reviewed template and inspected RH schemas.
-export function serializeTurbo8Editor(api,blueprint,source){
-  const schemas=JSON.parse(fs.readFileSync(new URL('./workflows/runninghub-akatz-node-schemas.json',import.meta.url)));
+export function serializeTurbo8Editor(api,blueprint,source,additionalSchemas={}){
+  const schemas={...JSON.parse(fs.readFileSync(new URL('./workflows/runninghub-akatz-node-schemas.json',import.meta.url))),...additionalSchemas};
   const original=new Map(blueprint.nodes.map(n=>[String(n.id),n])),nodes=new Map();
   for(const [id,n] of Object.entries(api)){
-    const exact=original.get(id),proto=exact?.type===n.class_type?exact:blueprint.nodes.find(x=>x.type===n.class_type);
+    const exact=original.get(id);let proto=exact?.type===n.class_type?exact:blueprint.nodes.find(x=>x.type===n.class_type);
+    if(!proto&&additionalSchemas[n.class_type]){
+      const s=additionalSchemas[n.class_type];
+      proto={id:0,type:n.class_type,pos:[0,0],size:[350,300],flags:{},mode:0,order:0,
+        inputs:clone(s.inputs),outputs:clone(s.outputs),properties:{'Node name for S&R':n.class_type},
+        widgets_values:s.widgetOrder.map(k=>s.defaults[k]),widgets_values_named:clone(s.defaults)};
+    }
     if(!proto)throw Error('Schema editor Akatz tidak tersedia: '+n.class_type);
     const node=clone(proto);node.id=Number(id);node.mode=0;node.order=nodes.size;
     node.inputs=(node.inputs||[]).map(x=>({...x,link:null}));
