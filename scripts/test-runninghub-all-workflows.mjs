@@ -102,6 +102,10 @@ try{
   assert.equal(v3['6'].inputs.file_name,'api-lora-usa/'+'4'.repeat(32)+'.safetensors','v3 keeps its original Turbo4 receipt');
   assert.equal(native['6'].inputs.file_name,'api-lora-usa/'+'5'.repeat(32)+'.safetensors','the main Akatz option uses the distinct Turbo8 receipt');
   assert.equal(native['41'].inputs.steps,8);assert.equal(native['40'].inputs.sampler_name,'er_sde');
+  assert.match(native['30'].inputs.image,/^input-\d+\.bin$/,'Photo input remains dynamic in the actual token payload');
+  assert.deepEqual(native['32'].inputs.image,['30',0]);assert.deepEqual(native['1008'].inputs.image,['32',0]);
+  assert.deepEqual(native['1008'].inputs.vae,['3',0]);assert.deepEqual(native['1010'].inputs.positive,['1008',0]);
+  assert.equal(native['1008'].inputs.frame_idx,0);
   assert.ok(native['5108'],'Token submission includes the three-frame diagnostic archive');
   assert.equal(native['490'].inputs.frame_rate,24,'Akatz rollback exports native 24 FPS');
   assert.equal(Object.values(native).filter(n=>n.class_type==='RIFEInterpolation').length,0);
@@ -131,6 +135,7 @@ try{
     assert.equal(Object.values(long).filter(n=>n.class_type==='SamplerCustomAdvanced').length,samplers);
     assert.equal(Object.values(long).filter(n=>n.class_type==='RIFEInterpolation').length,0);
     assert.equal(long['490'].inputs.frame_rate,24);
+    assert.deepEqual(Object.entries(long).filter(([,n])=>n.class_type==='MiniMaxH3AddGuide'&&n.inputs.image).map(([id])=>id),['1008']);
   }
   const missing=createH3AppearanceModel({dir,asset:{...FFP_ASSET,name:'missing-pinned-model'},
     request:async()=>{throw Error('No API key fallback');},http:{get:async()=>{throw Error('No speculative download');}}});

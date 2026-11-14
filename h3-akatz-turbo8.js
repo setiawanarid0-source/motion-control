@@ -1,12 +1,14 @@
 // The owner's version-12 editor graph is the source of truth. Specialize its
-// duration-only controls on the server; never execute absent GPU branches.
+// duration controls on the server; never execute absent GPU branches. The edited
+// first frame is also an initial image guide, not a repeated continuation pose.
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import {h3PhotoPlan} from './minimax-h3-motion.js';
 import {extendTurbo8Graph,serializeTurbo8Editor} from './h3-akatz-turbo8-adaptive.js';
 
 export const TURBO8_LEGACY_REVISION='akatz-native-1080-turbo8-template-r2';
-export const TURBO8_REVISION='akatz-native-1080-turbo8-adaptive-v1';
+export const TURBO8_ADAPTIVE_REVISION='akatz-native-1080-turbo8-adaptive-v1';
+export const TURBO8_REVISION='akatz-native-1080-turbo8-firstframe-v2';
 export const TURBO8_TEMPLATE_SHA256='b3824c07c0f33c2a0df2318fd213a3debbedce480d76ab1ae4f62f9d582062c2';
 export const TURBO8_EDITOR_FILENAME='VANTA_AKATZ_TURBO8_TIGA_FRAME_ZIP_R2_RUNNINGHUB.json';
 export const TURBO8_ASSET=Object.freeze({
@@ -28,6 +30,16 @@ const clone=structuredClone;
 const lora=name=>typeof name==='string'&&/^api-lora-[a-z0-9-]+\/[a-f0-9]{32}\.safetensors$/.test(name);
 const file=name=>typeof name==='string'&&name.length>0&&name.length<=500&&!/[\u0000-\u001f\\]/.test(name)&&
   !name.startsWith('/')&&!name.includes('://')&&!name.split('/').includes('..');
+const guidePadding=(right,bottom)=>({left:Math.floor(right/2),top:Math.floor(bottom/2),
+  right:Math.ceil(right/2),bottom:Math.ceil(bottom/2),feathering:0});
+function firstFrameGuidePlan(source){
+  const padded=[source.referenceWidth+source.referencePadRight,source.referenceHeight+source.referencePadBottom];
+  return {node:'1008',imageNode:'32',frameIndex:0,scope:'first_segment_only',source:'uploaded_edited_first_frame',
+    padding:guidePadding(source.referencePadRight,source.referencePadBottom),paddedReference:padded,
+    encoderCanvas:[source.canvasWidth,source.canvasHeight],
+    internalConditioningResize:padded[0]!==source.canvasWidth||padded[1]!==source.canvasHeight,
+    continuationImageReset:false};
+}
 
 export function turbo8TemporalPlan(source){
   const n=source?.totalFrames;
@@ -99,6 +111,12 @@ export function turbo8GraphForInputs({imageName,videoName,source,characterLoraFi
   const graph=editorApi();
   graph['30'].inputs.image=imageName;
   graph['31'].inputs.right=source.referencePadRight;graph['31'].inputs.bottom=source.referencePadBottom;
+  if(graph['32'])throw Error('ID panduan frame awal Akatz sudah digunakan.');
+  // Keep the semantic reference pad unchanged. Center only this guide copy so
+  // the existing centered output crop does not offset a matching first frame.
+  graph['32']={class_type:'ImagePadForOutpaint',inputs:{image:['30',0],
+    ...guidePadding(source.referencePadRight,source.referencePadBottom)}};
+  Object.assign(graph['1008'].inputs,{image:['32',0],vae:['3',0],frame_idx:0});
   // API-uploaded weights require RH's loader. strength_clip=0 preserves the
   // template's model-only Turbo LoRA; the CLIP conditioning stays unchanged.
   graph['6']={class_type:'RHLoraLoader',inputs:{model:['1',0],clip:['2',0],lora_name:'',
@@ -114,6 +132,9 @@ export function turbo8GraphForInputs({imageName,videoName,source,characterLoraFi
     if(node.class_type==='ImageCrop')Object.assign(node.inputs,{width:source.outputWidth,height:source.outputHeight,
       x:source.padLeft,y:source.padTop});
     if(node.class_type==='VHS_VideoCombine'&&!source.hasAudio)delete node.inputs.audio;
+    if(node.class_type==='MiniMaxH3AddGuide'&&!source.hasAudio){
+      delete node.inputs.audio;delete node.inputs.audio_vae;
+    }
   }
   const resolve=(value,seen=new Set())=>{
     if(!link(value))return value;
@@ -133,7 +154,8 @@ export function turbo8GraphForInputs({imageName,videoName,source,characterLoraFi
       if(typeof choose!=='boolean')throw Error('Cabang durasi Akatz belum dapat dipilih.');
       return resolve(node.inputs[choose?'on_true':'on_false'],next);
     }
-    if(!source.hasAudio&&node.class_type==='MiniMaxH3AddGuide')return resolve(node.inputs.positive,next);
+    if(!source.hasAudio&&node.class_type==='MiniMaxH3AddGuide'&&!node.inputs.image)
+      return resolve(node.inputs.positive,next);
     return value;
   };
   for(const node of Object.values(graph))for(const [key,value] of Object.entries(node.inputs))node.inputs[key]=resolve(value);
@@ -174,6 +196,7 @@ export function turbo8ExecutionPlan(source){
     durationStrategy:'automatic_bounded_windows',applicationMaxSeconds:null,
     seedTransport:'template_fixed_int_expression_with_api_override',
     continuation:'sampler_av_latent_tail',continuationFrames:5,continuationVaeRoundTrips:0,
+    firstFrameGuide:firstFrameGuidePlan(source),
     outputEncoding:{format:'video/h264-mp4',crf:12},frameDiagnostics:{zipNode:'5108',positions:['first','middle','last']},
     nodeClasses:Object.fromEntries(Object.entries(graph).map(([id,n])=>[id,n.class_type])),
     workBudget:{totalSteps:p.segments.length*8,targetSeconds:source.totalFrames<=362?1500:null,
@@ -181,7 +204,7 @@ export function turbo8ExecutionPlan(source){
     postDecodeResize:false,postRefinement:false,gpuExecutionQualified:false,visualAcceptance:'pending_owner_test'};
 }
 export function turbo8NodeClass(id,plan){
-  return [TURBO8_REVISION,TURBO8_LEGACY_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
+  return [TURBO8_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_LEGACY_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
 }
 
 export function turbo8EditorForFrames({characterLoraFile,turboLoraFile,frames,width=1080,height=1920}){
@@ -194,7 +217,9 @@ export function turbo8EditorForFrames({characterLoraFile,turboLoraFile,frames,wi
     if(node.class_type==='VHS_LoadAudioUpload')node.inputs.audio=['200',0];
     if(node.class_type==='VHS_LoadVideo'&&id!=='1000')node.inputs.video=['200',0];
   }
-  return serializeTurbo8Editor(api,blueprint,source);
+  const editor=serializeTurbo8Editor(api,blueprint,source);
+  editor.extra.vanta_export.first_frame_guide=firstFrameGuidePlan(source);
+  return editor;
 }
 
 export function turbo8EditorWorkflow({characterLoraFile,turboLoraFile}){
@@ -216,6 +241,24 @@ export function turbo8EditorWorkflow({characterLoraFile,turboLoraFile}){
   n.widgets_values=characterSchema.widgetOrder.map(key=>n.widgets_values_named[key]);
   // RH expects the widget array as well as the named values on every import.
   const c=nodes.get(7);c.widgets_values=characterSchema.widgetOrder.map(key=>c.widgets_values_named[key]??characterSchema.defaults[key]);
+  // The downloadable blueprint and duration-compiled graph share the same
+  // first-only guide. Add optional ports from the inspected worker schema.
+  if(nodes.has(32))throw Error('ID panduan frame awal Akatz sudah digunakan.');
+  const pad=clone(nodes.get(31));pad.id=32;pad.title='FRAME AWAL - PADDING SIMETRIS';pad.order=editor.nodes.length;
+  pad.pos=[pad.pos[0],pad.pos[1]+400];
+  pad.inputs=pad.inputs.map(p=>({...p,link:null}));pad.outputs=pad.outputs.map(p=>({...p,links:[]}));
+  Object.assign(pad.widgets_values_named,guidePadding(pad.widgets_values_named.right,pad.widgets_values_named.bottom));
+  pad.widgets_values=['left','top','right','bottom','feathering'].map(k=>pad.widgets_values_named[k]);
+  editor.nodes.push(pad);nodes.set(32,pad);
+  const guide=nodes.get(1008),schema=JSON.parse(fs.readFileSync(new URL('./workflows/runninghub-akatz-node-schemas.json',import.meta.url))).MiniMaxH3AddGuide;
+  for(const name of ['image','vae'])if(!guide.inputs.some(p=>p.name===name))
+    guide.inputs.push({...clone(schema.inputs.find(p=>p.name===name)),link:null});
+  for(const [from,port,to,name] of [[30,0,32,'image'],[32,0,1008,'image'],[3,0,1008,'vae']]){
+    const target=nodes.get(to),slot=target.inputs.findIndex(p=>p.name===name),edge=++editor.last_link_id;
+    if(slot<0||target.inputs[slot].link!=null)throw Error('Port panduan frame awal Akatz tidak tersedia.');
+    target.inputs[slot].link=edge;nodes.get(from).outputs[port].links.push(edge);
+    editor.links.push([edge,from,port,to,slot,target.inputs[slot].type]);
+  }
   editor.extra.vanta_export={...editor.extra.vanta_export,source_revision:TURBO8_REVISION,
     source_template_sha256:TURBO8_TEMPLATE_SHA256,visual_acceptance:'pending_owner_test'};
   return editor;
