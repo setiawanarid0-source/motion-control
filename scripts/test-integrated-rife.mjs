@@ -79,4 +79,4 @@ try{
   const data=await r.json();assert.equal(data.extra.vanta_export.output_fps,60);
   assert.equal(data.nodes.filter(n=>n.type==='RIFEInterpolation').length,1);
 }finally{await new Promise(resolve=>server.close(resolve));}
-console.log('PASS: one in-graph RIFE for KOH/MotionFly/Turbo8; actual FPS links; shared 60 FPS MP4/ZIP/PNG batch; source/audio/size preserved; editor backlinks consistent. No GPU execution.');
+console.log('PASS: opt-in RIFE graph/editor utility; actual FPS links; shared 60 FPS MP4/ZIP/PNG batch; source/audio/size preserved. Production workflow membership is checked by the token transport suite. No GPU execution.');

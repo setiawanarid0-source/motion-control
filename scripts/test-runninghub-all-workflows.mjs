@@ -78,6 +78,7 @@ try{
     submitted[workflowKey]=created.at(-1);
   }
   assert.equal(created.length,6,'Every active workflow selection must reach the token task transport');
+  assert.deepEqual([...INTEGRATED_RIFE_WORKFLOWS],['current','motionflyHD'],'Only KOH and MotionFly retain automatic RIFE');
   for(const [name,graph] of Object.entries(submitted)){
     const nodes=Object.values(graph).filter(n=>n.class_type==='RIFEInterpolation');
     assert.equal(nodes.length,INTEGRATED_RIFE_WORKFLOWS.has(name)||name==='rife60'?1:0,name+' interpolation stage');
@@ -102,6 +103,13 @@ try{
   assert.equal(native['6'].inputs.file_name,'api-lora-usa/'+'5'.repeat(32)+'.safetensors','the main Akatz option uses the distinct Turbo8 receipt');
   assert.equal(native['41'].inputs.steps,8);assert.equal(native['40'].inputs.sampler_name,'er_sde');
   assert.ok(native['5108'],'Token submission includes the three-frame diagnostic archive');
+  assert.equal(native['490'].inputs.frame_rate,24,'Akatz rollback exports native 24 FPS');
+  assert.equal(Object.values(native).filter(n=>n.class_type==='RIFEInterpolation').length,0);
+  for(const id of ['493','5100','5103','5104','5105']){
+    const node=native[id];
+    assert.deepEqual(node.inputs.images??node.inputs.image,native['490'].inputs.images,'Akatz MP4/PNG share native frames: '+id);
+    if(node.class_type==='VHS_VideoCombine')assert.equal(node.inputs.frame_rate,24);
+  }
   assert.equal(v3['490'].inputs.crf,16,'Akatz v3 must retain its historical encoding recipe');
   assert.equal(v3['490'].inputs.frame_rate,24);
   assert.ok(v3['10'],'Akatz v3 must retain the original attention node');
@@ -113,15 +121,17 @@ try{
   assert.deepEqual(hd['497'].inputs.image,['30',0]);
   assert.deepEqual(hd['489'].inputs.width,['497',1]);
   assert.deepEqual(hd['496'].inputs['images or video_path'],['494',0]);
-  const priorCount=created.length;
-  await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey:'minimaxH3Akatz',mode:'plus',
-    imageFile:{...media,mimetype:'image/png'},videoFile:media,
-    h3Source:{...source,totalFrames:2401,inferenceProfile:AKATZ_PROFILE}});
-  assert.equal(created.length,priorCount+1,'Long Akatz still creates exactly one provider task');
-  const long=created.at(-1);
-  assert.equal(Object.values(long).filter(n=>n.class_type==='SamplerCustomAdvanced').length,21);
-  assert.equal(Object.values(long).filter(n=>n.class_type==='RIFEInterpolation').length,1);
-  assert.equal(long['490'].inputs.frame_rate,60);
+  for(const [frames,samplers] of [[482,5],[2401,21]]){
+    const priorCount=created.length;
+    await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey:'minimaxH3Akatz',mode:'plus',
+      imageFile:{...media,mimetype:'image/png'},videoFile:media,
+      h3Source:{...source,totalFrames:frames,inferenceProfile:AKATZ_PROFILE}});
+    assert.equal(created.length,priorCount+1,'Long Akatz still creates exactly one provider task');
+    const long=created.at(-1);
+    assert.equal(Object.values(long).filter(n=>n.class_type==='SamplerCustomAdvanced').length,samplers);
+    assert.equal(Object.values(long).filter(n=>n.class_type==='RIFEInterpolation').length,0);
+    assert.equal(long['490'].inputs.frame_rate,24);
+  }
   const missing=createH3AppearanceModel({dir,asset:{...FFP_ASSET,name:'missing-pinned-model'},
     request:async()=>{throw Error('No API key fallback');},http:{get:async()=>{throw Error('No speculative download');}}});
   await assert.rejects(missing.ensure(key),error=>error.code==='H3_MODEL_PREPARATION_FAILED');

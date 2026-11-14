@@ -23,7 +23,7 @@ import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from './runninghub-graph-validation.js';
 import {prepareTurbo8Input} from './h3-akatz-turbo8-adaptive.js';
-import {withIntegratedRife60,withIntegratedRife60Editor,integratedRifePlan,INTEGRATED_RIFE_WORKFLOWS,RIFE60_EDITOR_FILENAME} from './integrated-rife.js';
+import {withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS} from './integrated-rife.js';
 import {verifyRifeInput,rifeGraphForSourceFps,rifeBatchSize,RIFE_TARGET_FPS} from './rife-video.js';
 import {prepareAdaptiveRifeVideo} from './rife-cadence.mjs';
 import {auditRifeTasks} from './rife-task-audit.js';
@@ -91,8 +91,8 @@ const workflowMeta = {
   },
   minimaxH3Akatz: {
     id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz V1.5 Native · 1080p',
-    subtitle:'Turbo8 · 1080p · 60 FPS · Plus · durasi adaptif',
-    detail:'Foto menjadi acuan tampilan; video memandu gerak dan kamera. Turbo8 membagi durasi aktual ke segmen otomatis tanpa batas maksimal 15 detik, dengan audio sumber, RIFE 60 FPS dalam satu job, MP4 dan ZIP tiga frame PNG dari hasil final. Hasil native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
+    subtitle:'Turbo8 · 1080p · 24 FPS · Plus · durasi adaptif',
+    detail:'Foto menjadi acuan tampilan; video memandu gerak dan kamera. Turbo8 membagi durasi aktual ke segmen otomatis tanpa batas maksimal 15 detik, dengan audio sumber, MP4 24 FPS dan ZIP tiga frame PNG dari hasil native. Hasil native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
     revision:TURBO8_REVISION,frameDiagnostics:true,
     outputKind:'video',experimental:true,requiredMode:'plus'
   },
@@ -715,7 +715,7 @@ app.get('/api/workflows', (req, res) => {
 installAkatzEditorDownload({app,getModelFiles:()=>({
   characterLoraFile:h3AkatzModels.character.cachedFile(),
   turboLoraFile:h3AkatzTurbo8Model.cachedFile()
-}),buildWorkflow:(models,req)=>withIntegratedRife60Editor(turbo8EditorForFrames({...models,frames:req.query.frames?Number(req.query.frames):360,width:Number(req.query.width)||1080,height:Number(req.query.height)||1920})),filename:RIFE60_EDITOR_FILENAME});
+}),buildWorkflow:(models,req)=>turbo8EditorForFrames({...models,frames:req.query.frames?Number(req.query.frames):360,width:Number(req.query.width)||1080,height:Number(req.query.height)||1920}),filename:TURBO8_EDITOR_FILENAME});
 installFrameDiagnostics({app,registry:taskRegistry,getAccount:taskAccount,request:axios.get,validUrl:validProviderUrl,
   getOutputs:async(taskId,account)=>{
     const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
@@ -884,7 +884,7 @@ async function handleGeneration(req,res){
           inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
-      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?integratedRifePlan(turbo8ExecutionPlan(h3Source)):h3ExecutionPlan(h3Source)));
+      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
       req.progress?.('analyzing');
@@ -956,7 +956,7 @@ async function handleGeneration(req,res){
             resultArchiveExpected:task.resultArchiveExpected,
             video:videoFile.originalname,submittedAt:task.submittedAt,
             status:task.taskStatus==='RUNNING'?'running':'queued',
-            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?integratedRifePlan(turbo8ExecutionPlan(h3Source)):h3ExecutionPlan(h3Source)):
+            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):
               videoOnly?{revision:'rife-target-fps-v1',width:rifeSource.width,height:rifeSource.height,
                 sourceFps:rifeSource.sourceFps,targetFps:RIFE_TARGET_FPS,
                 durationSeconds:rifeSource.durationSeconds,adaptive:rifeSource.adaptive,

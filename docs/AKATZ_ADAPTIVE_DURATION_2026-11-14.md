@@ -15,8 +15,9 @@ New windows receive deterministic typed seeds without changing earlier windows.
 
 Long-video guide loaders read bounded 24 FPS slices from the prepared source.
 The global audio track and per-window audio offsets follow the full duration.
-The existing one-node RIFE stage still interpolates the final batch to 60 FPS
-inside the same RunningHub job, before the shared MP4/ZIP and three PNG outputs.
+The Akatz-only rollback removes the RIFE overlay. Its shared MP4/ZIP and three
+PNG outputs read the native 24 FPS batch again. Adaptive duration remains;
+KOH and MotionFly keep their existing one-job 60 FPS interpolation.
 
 Turbo8 alone opts out of the shared duration ceiling and prepared-guide size
 ceiling, retains the existing driver encoding quality, uses a preparation

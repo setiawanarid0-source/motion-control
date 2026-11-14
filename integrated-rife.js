@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 const base=JSON.parse(fs.readFileSync(new URL('./workflows/rife60-api.json',import.meta.url)));
 export const INTEGRATED_RIFE_ID='760060';
-export const INTEGRATED_RIFE_WORKFLOWS=new Set(['current','motionflyHD','minimaxH3Akatz']);
+export const INTEGRATED_RIFE_WORKFLOWS=new Set(['current','motionflyHD']);
 export const RIFE60_EDITOR_FILENAME='VANTA_AKATZ_TURBO8_RIFE60_TIGA_FRAME_ZIP_RUNNINGHUB.json';
 const edge=v=>Array.isArray(v)&&v.length===2&&typeof v[0]==='string'&&Number.isInteger(v[1]);
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
