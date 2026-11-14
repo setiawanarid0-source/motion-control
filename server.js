@@ -41,6 +41,7 @@ import {createH3AppearanceModel,CHARACTER_ASSET} from './h3-appearance-model.js'
 import {installNativePoseInspection,poseValidationSummary} from './h3-native-pose-inspect.js';
 import {installAkatzInspection} from './h3-akatz-inspect.js';
 import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionContextSchema} from './h3-context-inspect.js';
+import {installExpressionInspection} from './h3-expression-inspect.js';
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import * as akatzV3 from './h3-akatz-v3-motion.js';
 import {installAkatzEditorDownload} from './h3-runninghub-export.js';
@@ -678,6 +679,14 @@ for (const name of ['auth.css', 'auth.js']) {
   });
 }
 app.use(ownerAuth.requireOwner);
+installExpressionInspection({app,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),isOwner:ownerAuth.isOwner,
+  resolveTask:task=>selectContextInspectionTask(task,loadGlobalAccounts(),accountStatus),
+  probe:(task,graph)=>rhJson('/task/openapi/create',task.key,{apiKey:task.key,workflowId:LOCKED_WORKFLOW_ID,
+    instanceType:'plus',workflow:JSON.stringify(graph),nodeInfoList:[]},60000),
+  cancelUnexpected:async(task,id)=>{
+    const response=await rhJson('/task/openapi/cancel',task.key,{apiKey:task.key,taskId:id},30000);
+    if(Number(response?.code)!==0)throw Error('Expression inspection cancellation unconfirmed');
+  },log:report=>console.info('H3 expression schema inspection',JSON.stringify(report))});
 installH3ContextInspection({app,rootDir:DATA_DIR,getTask:id=>taskRegistry.get(id),isOwner:ownerAuth.isOwner,
   resolveTask:task=>selectContextInspectionTask(task,loadGlobalAccounts(),accountStatus),
   probe:(task,graph)=>rhJson('/task/openapi/create',task.key,{apiKey:task.key,workflowId:LOCKED_WORKFLOW_ID,
