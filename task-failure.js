@@ -1,14 +1,14 @@
 // Extract only bounded, user-relevant diagnostics from RunningHub /task/openapi/outputs.
 // Never return current_inputs, traceback, API keys, execution URLs, or raw task data.
 import {safeTaskMetrics,nativeTaskExecutionSeconds} from './rife-task-audit.js';
-export const H3_FAILURE_AUDIT_VERSION=2;
+export const H3_FAILURE_AUDIT_VERSION=3;
 const scalar=(value,max=400)=>typeof value==='string'||typeof value==='number'?String(value).trim().slice(0,max):'';
 const object=value=>value&&typeof value==='object'&&!Array.isArray(value)?value:null;
 function readReason(raw){
   if(!raw)return null;
   if(typeof raw==='object'&&!Array.isArray(raw))return raw;
   if(typeof raw==='string'){
-    try{const parsed=JSON.parse(raw);return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:null;}
+    try{const parsed=JSON.parse(raw);return typeof parsed==='string'?{exception_message:parsed}:object(parsed);}
     catch{return {exception_message:raw};}
   }
   return null;
@@ -21,18 +21,21 @@ export function extractTaskFailure(result){
   // not hide those terminal-record fields.
   for(const record of [payload,object(result)]){
     if(!record||!['FAILED','ERROR','CANCELED','CANCELLED'].includes(record.taskStatus??record.status))continue;
-    reasons.push(record.errorMessage,record);
+    reasons.push(record.taskResultDesc,record.errorMessage,record);
   }
   const failure={nodeId:'',nodeName:'',exceptionType:'',message:''};
   for(const raw of reasons){
-    const reason=readReason(raw);if(!reason)continue;
-    const fields={
-      nodeId:scalar(reason.node_id??reason.nodeId,40),
-      nodeName:scalar(reason.node_name??reason.nodeName,100),
-      exceptionType:scalar(reason.exception_type??reason.exceptionType??reason.errorType??reason.errorCode,100),
-      message:scalar(reason.exception_message??reason.exceptionMessage??reason.errorMessage,400)
-    };
-    for(const name of Object.keys(failure))if(!failure[name]&&fields[name])failure[name]=fields[name];
+    const outer=readReason(raw);if(!outer)continue;
+    for(const reason of [readReason(outer.failedReason??outer.failed_reason),outer]){
+      if(!reason)continue;
+      const fields={
+        nodeId:scalar(reason.node_id??reason.nodeId,40),
+        nodeName:scalar(reason.node_name??reason.nodeName,100),
+        exceptionType:scalar(reason.exception_type??reason.exceptionType??reason.errorType??reason.errorCode,100),
+        message:scalar(reason.exception_message??reason.exceptionMessage??reason.errorMessage??reason.message,400)
+      };
+      for(const name of Object.keys(failure))if(!failure[name]&&fields[name])failure[name]=fields[name];
+    }
   }
   return Object.values(failure).some(Boolean)?failure:null;
 }
@@ -84,8 +87,11 @@ export async function auditFailedH3Tasks({tasks,query,queryV2,update,log=()=>{},
       try{
         modern=await queryV2(task);detailLookupSucceeded=true;lookupSucceeded=true;
         const detail=extractTaskFailure(modern);
-        if(detail&&evidenceScore(modern)>evidenceScore(result))
-          result={...modern,code:result?.code??modern?.code,failure:detail};
+        if(detail&&evidenceScore(modern)>evidenceScore(result)){
+          const previous=result?.failure||extractTaskFailure(result)||{};
+          result={...modern,code:result?.code??modern?.code,
+            failure:{...previous,...Object.fromEntries(Object.entries(detail).filter(([,value])=>value))}};
+        }
       }catch{} // A diagnostics outage never changes the terminal state.
       failureV2CheckedAt=now();
     }
@@ -102,6 +108,12 @@ export async function auditFailedH3Tasks({tasks,query,queryV2,update,log=()=>{},
       exceptionType:safeCode(failure?.exceptionType),
       nativeStatus:safeCode(record?.taskStatus??record?.status),
       nativeErrorCode:safeCode(record?.errorCode),nativeErrorType:safeCode(record?.errorType),
+      resultDescription:{present:record?.taskResultDesc!==null&&record?.taskResultDesc!==undefined&&record?.taskResultDesc!=='',
+        type:record?.taskResultDesc==null?null:typeof record.taskResultDesc,
+        knownCode:typeof record?.taskResultDesc==='string'&&
+          /^(?:CRASH|ERROR|FAILED|TASK_TIMEOUT|TIMEOUT|OOM|OUT_OF_MEMORY)$/.test(record.taskResultDesc)?record.taskResultDesc:null,
+        fields:Object.keys(object(readReason(record?.taskResultDesc))||{}).filter(name=>
+          /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name)&&!/key|token|secret|password|prompt|url|input|output|message|traceback/i.test(name)).slice(0,30)},
       metrics:safeTaskMetrics(record),providerRuntimeSeconds:nativeTaskExecutionSeconds(record),
       technicalSignals:technicalSignals(failure,record),
       recordFields:Object.keys(record||{}).filter(name=>/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name)&&
