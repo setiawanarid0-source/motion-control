@@ -25,6 +25,10 @@ assert.deepEqual(extractTaskFailure({code:0,data:{taskStatus:'FAILED',errorType:
 assert.equal(extractTaskFailure({status:'FAILED',failedReason:{},errorCode:'TASK_TIMEOUT',
   errorMessage:'Maximum execution time exceeded'})?.exceptionType,'TASK_TIMEOUT');
 assert.equal(extractTaskFailure({code:0,data:{taskStatus:'RUNNING',errorMessage:'Not a terminal error'}}),null);
+assert.equal(extractTaskFailure({code:0,data:{taskStatus:'FAILED',taskResultDesc:'CUDA out of memory'}})?.message,'CUDA out of memory');
+assert.equal(extractTaskFailure({code:0,data:{taskStatus:'FAILED',taskResultDesc:'"CRASH"'}})?.message,'CRASH');
+assert.equal(extractTaskFailure({code:0,data:{taskStatus:'FAILED',taskResultDesc:JSON.stringify({failedReason:{
+  node_id:'760060',exception_type:'RuntimeError',exception_message:'tensor shape mismatch',current_inputs:'secret'}})}})?.nodeId,'760060');
 const updates=[],reports=[];
 const task={taskId:'2113333333333333333',status:'failed',workflow:'MiniMax H3 · Motion Control · 1080p'};
 const akatz={...task,taskId:'2117568678426140673',workflow:'MiniMax H3 · Akatz V1.5 Native · 1080p'};
@@ -111,6 +115,21 @@ await auditFailedH3Tasks({tasks:[oldCrash],query:async()=>sample,
   update:async(id,patch)=>updates.push({id,patch}),log:x=>reports.push(x)});
 assert.equal(reports.at(-1).nodeId,'492','A generic fallback must not erase a more informative node error');
 assert.equal(reports.at(-1).exceptionType,'TypeError');
+await auditFailedH3Tasks({tasks:[{...oldCrash,failureAuditVersion:2}],query:async()=>genericCrash,
+  queryV2:async()=>({code:0,data:{taskStatus:'FAILED',taskResultDesc:JSON.stringify({
+    node_id:'760060',exception_type:'RuntimeError',message:'CUDA out of memory',current_inputs:'secret',traceback:'secret'})}}),
+  update:async(id,patch)=>updates.push({id,patch}),log:x=>reports.push(x)});
+assert.equal(reports.at(-1).nodeId,'760060');
+assert.equal(reports.at(-1).category,'out_of_memory');
+assert.equal(reports.at(-1).resultDescription.present,true);
+assert.ok(!JSON.stringify(reports).includes('secret'));
+assert.ok(!JSON.stringify(reports).includes('CUDA out of memory'));
+await auditFailedH3Tasks({tasks:[{...oldCrash,failureAuditVersion:2}],query:async()=>genericCrash,
+  queryV2:async()=>({code:0,data:{taskStatus:'FAILED',taskResultDesc:'CRASH'}}),
+  update:async(id,patch)=>updates.push({id,patch}),log:x=>reports.push(x)});
+assert.equal(reports.at(-1).exceptionType,'CRASH','A text-only native description must preserve the original error type');
+assert.equal(reports.at(-1).resultDescription.knownCode,'CRASH');
+assert.equal(reports.at(-1).category,'unclassified');
 console.log('PASS: RunningHub failedReason extracts node/type/message only; hides traceback and current_inputs.');
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-failure-audit-'));
 try{
