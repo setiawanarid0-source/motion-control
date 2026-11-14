@@ -82,17 +82,53 @@ export function assertExpressionInspectionGraph(graph,check){
   return true;
 }
 
+export function expressionWorkerGraph(check){
+  const graph=expressionInspectionGraph(check);assertExpressionInspectionGraph(graph,check);
+  // RunningHub's task wrapper uses numeric IDs in production graphs. Do not
+  // require it to accept ComfyUI's otherwise valid symbolic node identifiers.
+  const ids=Object.fromEntries(Object.keys(graph).map((id,i)=>[id,String(i+1)]));
+  return Object.fromEntries(Object.entries(graph).map(([id,node])=>[ids[id],{
+    class_type:node.class_type,inputs:Object.fromEntries(Object.entries(node.inputs).map(([name,value])=>
+      [name,Array.isArray(value)&&ids[value[0]]?[ids[value[0]],value[1]]:value]))
+  }]));
+}
+
+function responseEvidence(response){
+  const numeric=value=>['number','string'].includes(typeof value)&&/^-?\d{1,10}$/.test(String(value))?Number(value):null;
+  const msg=typeof response?.msg==='string'?response.msg:'';
+  const category=/WORKFLOW_NOT_EXIST/.test(msg)?'workflow_not_found':
+    /TASK_QUEUE_MAXED|QUEUE|CONCURRENCY/.test(msg)?'queue_limit':
+    /BALANCE|COINS|CREDIT/.test(msg)?'balance':
+    /TOKEN|SESSION|AUTH|BANNED/.test(msg)?'authentication':
+    /VALIDAT|NODE|PROMPT/.test(msg)?'validation':msg?'unrecognized':'absent';
+  const fields=obj=>obj&&typeof obj==='object'?Object.keys(obj).filter(k=>
+    /^[A-Za-z][A-Za-z0-9_]{0,50}$/.test(k)&&!/key|token|secret|password|url|access|refresh/i.test(k)).slice(0,24):[];
+  return {providerCode:numeric(response?.code),messageCategory:category,
+    responseFields:fields(response),dataFields:fields(response?.data)};
+}
+
+export function expressionInspectionFailure(error){
+  const codes=new Set(['RH_ACCESS_TOKEN_REQUIRED','RH_WEB_AUTH_EXPIRED','RH_WEB_TRANSPORT_ERROR',
+    'RH_WEB_PROTOCOL_ERROR','RH_WEB_REFRESH_REJECTED','RH_WEB_REFRESH_MISSING',
+    'RH_WEB_IDENTITY_MISMATCH','RH_WEB_INVALID_GRAPH','RH_WEB_ERROR','RH_WEB_STORAGE_ERROR']);
+  return {status:'unconfirmed',taskCreated:error?.definitelyRejected===true?false:null,
+    errorCode:codes.has(error?.code)?error.code:'unrecognized',
+    providerCode:Number.isInteger(error?.providerCode)?error.providerCode:null};
+}
+
 export function expressionInspectionSummary(response,check){
   const graph=expressionInspectionGraph(check);
   const taskId=response?.data?.taskId||response?.taskId;
   if(taskId)return {check,status:'unexpected_acceptance',taskCreated:true,
     taskId:/^\d{10,25}$/.test(String(taskId))?String(taskId):null};
   const rejection=findValidationRejection(response);
-  if(!rejection)return {check,status:'unconfirmed',taskCreated:false};
+  if(!rejection)return {check,status:'unconfirmed',taskCreated:null,...responseEvidence(response)};
   const type=rejection.error?.type;
   const missing=type==='missing_node_type'?[...allowedClasses].filter(n=>
     JSON.stringify(rejection.error).includes(n)):[];
-  const raw=rejection.node_errors||{};
+  const names=Object.keys(graph);
+  const raw=Object.fromEntries(Object.entries(rejection.node_errors||{}).map(([id,value])=>
+    [graph[id]?id:/^[1-9]\d*$/.test(id)&&names[Number(id)-1]?names[Number(id)-1]:id,value]));
   const nodeErrors=Object.entries(raw).map(([id,node])=>({
     id:graph[id]?id:'other',classType:allowedClasses.has(node?.class_type)?node.class_type:'other',
     errors:(Array.isArray(node?.errors)?node.errors:[]).map(e=>({
@@ -134,7 +170,7 @@ function page(report,canCheck){
 export function installExpressionInspection({app,rootDir,getTask,isOwner,probe,cancelUnexpected,
   resolveTask=async task=>({task,summary:{selection:'source_task'}}),
   expires=EXPRESSION_INSPECT_EXPIRES,now=Date.now,log=()=>{}}){
-  const file=path.join(rootDir,'h3-benchmark-checkpoints','expression-schema-v1-'+EXPRESSION_INSPECT_TASK+'.json');
+  const file=path.join(rootDir,'h3-benchmark-checkpoints','expression-schema-v2-'+EXPRESSION_INSPECT_TASK+'.json');
   let pending=null;
   const read=async()=>{try{return JSON.parse(await fs.readFile(file,'utf8'));}
     catch(e){return {status:e.code==='ENOENT'?'not_checked':'checkpoint_unreadable'};}};
@@ -162,9 +198,9 @@ export function installExpressionInspection({app,rootDir,getTask,isOwner,probe,c
       const results=[];let status=prepared?.task?'unconfirmed':'no_eligible_inspection_account';
       for(const check of EXPRESSION_CHECKS){
         if(!prepared?.task)break;
-        const graph=expressionInspectionGraph(check);assertExpressionInspectionGraph(graph,check);
+        const graph=expressionWorkerGraph(check);
         let result;try{result=expressionInspectionSummary(await probe(prepared.task,graph),check);}
-        catch{result={check,status:'unconfirmed',taskCreated:false};}
+        catch(error){result={check,...expressionInspectionFailure(error)};}
         if(result.status==='unexpected_acceptance'){
           result.cancelled=false;
           if(result.taskId&&result.taskId!==EXPRESSION_INSPECT_TASK&&cancelUnexpected)
@@ -173,7 +209,7 @@ export function installExpressionInspection({app,rootDir,getTask,isOwner,probe,c
         results.push(result);status=result.status;
         if(status!==expected(check))break;
       }
-      const report={status,sourceTaskId:EXPRESSION_INSPECT_TASK,requestedNodes:targets,
+      const report={status,revision:'numeric-worker-v2',sourceTaskId:EXPRESSION_INSPECT_TASK,requestedNodes:targets,
         samplerPresent:false,mediaUploaded:false,gpuExecutionQualified:false,visualQualified:false,
         checkedAt:new Date(now()).toISOString(),results};
       await fs.writeFile(file,JSON.stringify(report),{mode:0o600});

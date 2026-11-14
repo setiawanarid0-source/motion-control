@@ -5,7 +5,8 @@ import path from 'node:path';
 import express from 'express';
 import {EXPRESSION_CHECKS,EXPRESSION_GUARD,EXPRESSION_NEGATIVE,EXPRESSION_INSPECT_TASK,
   EXPRESSION_INSPECT_ROUTE,expressionInspectionGraph,assertExpressionInspectionGraph,
-  expressionInspectionSummary,installExpressionInspection} from '../h3-expression-inspect.js';
+  expressionInspectionSummary,installExpressionInspection,expressionWorkerGraph,
+  expressionInspectionFailure} from '../h3-expression-inspect.js';
 
 const rejected=(node_errors,error={type:'prompt_outputs_failed_validation'})=>
   ({code:1,msg:JSON.stringify({result:false,error,node_errors})});
@@ -26,6 +27,10 @@ for(const check of EXPRESSION_CHECKS){
   const graph=expressionInspectionGraph(check);
   assert.equal(assertExpressionInspectionGraph(graph,check),true);
   assert.equal(graph.guard.inputs.image,EXPRESSION_GUARD);
+  const worker=expressionWorkerGraph(check);
+  assert.ok(Object.keys(worker).every(id=>/^[1-9]\d*$/.test(id)));
+  for(const node of Object.values(worker))for(const input of Object.values(node.inputs))
+    if(Array.isArray(input))assert.ok(worker[input[0]],'Every transported link must use a valid numeric ID');
   assert.ok(!Object.values(graph).some(n=>/Sampler|Save|VideoCombine|Encode|Lora/.test(n.class_type)));
   const outputIds=Object.keys(graph).filter(id=>/^Preview/.test(graph[id].class_type));
   for(const output of outputIds){
@@ -49,6 +54,14 @@ assert.equal(expressionInspectionSummary(typed('process','LivePortraitProcess','
 assert.equal(expressionInspectionSummary(missing('LivePortraitProcess'),'registration').status,'unsupported');
 assert.equal(expressionInspectionSummary({code:0},'signature').status,'unconfirmed');
 assert.equal(expressionInspectionSummary({code:421,msg:'SECRET_RAW_PROVIDER_RESPONSE'},'signature').status,'unconfirmed');
+const evidence=expressionInspectionSummary({code:424,msg:'TASK_QUEUE_MAXED',data:{accessToken:secretPlaceholder(),safeField:1}},'signature');
+assert.equal(evidence.providerCode,424);assert.equal(evidence.messageCategory,'queue_limit');
+assert.equal(evidence.taskCreated,null);assert.deepEqual(evidence.dataFields,['safeField']);
+function secretPlaceholder(){return 'PRIVATE_RAW_VALUE';}
+assert.ok(!JSON.stringify(evidence).includes('PRIVATE_RAW_VALUE'));
+assert.equal(expressionInspectionFailure({code:'RH_WEB_TRANSPORT_ERROR'}).taskCreated,null);
+assert.equal(expressionInspectionFailure({code:'RH_WEB_AUTH_EXPIRED',definitelyRejected:true}).taskCreated,false);
+assert.equal(expressionInspectionSummary(rejected({'1':guard.guard}),'signature').status,'schema_recognized');
 assert.equal(expressionInspectionSummary(rejected({}),'signature').status,'schema_incompatible',
   'A response without a positive missing-image guard rejection is not evidence');
 assert.equal(expressionInspectionSummary(rejected({...guard,other:{class_type:'Other',errors:[]}}),'signature').status,'schema_incompatible');
@@ -64,7 +77,16 @@ async function build(name,{fixture=successFixture,owner=true,expired=false,sourc
     now:()=>Date.parse(expired?'2026-11-18T00:00:00Z':'2026-11-14T12:00:00Z'),
     isOwner:()=>owner,getTask:id=>{assert.equal(id,EXPRESSION_INSPECT_TASK);return source;},
     resolveTask:async t=>{assert.equal(t,original);state.resolved++;return {task:{...t,key:'POOL_FIXTURE'}};},
-    probe:async(t,g)=>{assert.equal(t.key,'POOL_FIXTURE');state.calls++;return fixture(g);},
+    probe:async(t,g)=>{
+      assert.equal(t.key,'POOL_FIXTURE');assert.ok(Object.keys(g).every(id=>/^[1-9]\d*$/.test(id)));state.calls++;
+      const check=g['5']?.class_type==='LivePortraitProcess'?'signature':
+        g['3']?.class_type===EXPRESSION_NEGATIVE?'validator-control':'registration';
+      const names=Object.keys(expressionInspectionGraph(check)),human={};
+      for(const [id,node] of Object.entries(g))human[names[Number(id)-1]]={...node,
+        inputs:Object.fromEntries(Object.entries(node.inputs).map(([p,v])=>[p,
+          Array.isArray(v)?[names[Number(v[0])-1],v[1]]:v]))};
+      return fixture(human);
+    },
     cancelUnexpected:async(t,id)=>{assert.equal(t.key,'POOL_FIXTURE');state.cancelled.push(id);},
     log:report=>state.reports.push(report)});
   const server=app.listen(0,'127.0.0.1');servers.push(server);
