@@ -135,10 +135,11 @@
             <div id="akatzNotice" class="diagnostic-notice hidden" role="note"><strong>Akatz V1.5 Native · Turbo8</strong>
               <label class="field-label" for="akatzExpression">VERSI WORKFLOW</label>
               <select id="akatzExpression" aria-describedby="akatzExpressionStatus">
-                <option value="expression" selected>Uji mimik wajah · baru</option>
-                <option value="baseline">Versi sebelumnya</option>
+                <option value="controlnet" selected>ControlNet wajah · baru</option>
+                <option value="expression">Uji mimik sebelumnya</option>
+                <option value="baseline">Versi dasar Akatz</option>
               </select>
-              <p id="akatzExpressionStatus" role="status">Uji mimik aktif. Panduan wajah dari video dipindahkan ke karakter foto. Hasil visual menunggu tes Anda.</p>
+              <p id="akatzExpressionStatus" role="status">ControlNet wajah aktif. Ekspresi video menjadi panduan untuk wajah karakter foto. Hasil visual menunggu tes Anda.</p>
               <p>Unggah satu foto dan satu video minimal 0,25 detik. Gunakan Plus. Hasil native 1080p mengikuti rasio foto, 24 FPS, dengan audio sumber; tanpa upscale, downscale atau refinement hasil.</p><p>Durasi mengikuti video secara otomatis. Hasil menyediakan video native dan ZIP tiga frame PNG awal, tengah, dan akhir. Batas upload, memori dan waktu proses RunningHub tetap berlaku.</p><p><a class="akatz-editor-download" href="/api/workflows/minimaxH3Akatz/runninghub" download="VANTA_AKATZ_TURBO8_TIGA_FRAME_ZIP_R2_RUNNINGHUB.json">Unduh workflow yang dipilih + ZIP</a></p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
             <div class="mode-grid">
@@ -371,7 +372,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/auth.js?v=20261026-global-login" defer></script>
   <script src="/rh-session.js?v=20261113-bookmark-flow" defer></script>
-  <script src="/app.js?v=20261114-adaptive-akatz" defer></script>
+  <script src="/app.js?v=20261115-akatz-face-controlnet" defer></script>
   <script src="/kie-ui.js?v=20261113-seedream55-gpt26" defer></script>
   <script src="/history-gallery.js?v=20261113-akatz-turbo8" defer></script>
 </body>

@@ -1,6 +1,7 @@
 // Experimental face-performance conditioning, inside the existing H3 job.
 // Only conditioning copies are cropped. Native decoded output is untouched.
 import fs from 'node:fs';
+import {withAkatzFaceControl,akatzFaceControlPlan,parseAkatzFaceControlOption,AKATZ_FACE_CONTROL_SCHEMAS} from './h3-akatz-face-control.js';
 
 export const AKATZ_EXPRESSION_REVISION='akatz-native-1080-turbo8-expression-v2-framealigned';
 export const AKATZ_EXPRESSION_LEGACY_REVISION='akatz-native-1080-turbo8-expression-v1';
@@ -17,6 +18,12 @@ export function parseAkatzExpressionOption(workflow,value){
   return value==='true';
 }
 
+export function parseAkatzOptions(workflow,options={}){
+  const akatzExpression=parseAkatzExpressionOption(workflow,options.akatzExpression);
+  const akatzFaceControl=parseAkatzFaceControlOption(workflow,options.akatzFaceControl,akatzExpression);
+  return {akatzExpression,akatzFaceControl};
+}
+
 const facePrompt='The aligned <Video 2> has the same full-frame composition, subject scale and camera trajectory as <Video 1>; '+
   'only its facial performance has been retargeted to the character in <Picture 1>. '+
   'At each matching moment use it for eyebrow and eyelid motion, blinks, gaze, cheeks, mouth and lip articulation, '+
@@ -30,6 +37,7 @@ const identityCaption='Describe only stable visible appearance in the attached p
   'Do not invent objects, identity, age, ethnicity, hidden details or beauty changes. Return only the appearance description.';
 
 export function withAkatzExpression(baseline,source,segments){
+  if(source.akatzFaceControl===true)return withAkatzFaceControl(baseline,source,segments);
   if(source.akatzExpression!==true)return baseline;
   if(!Array.isArray(segments)||!segments.length||source.fps!==24)throw Error('Timeline uji mimik belum valid.');
   const graph=structuredClone(baseline);
@@ -89,6 +97,7 @@ export function withAkatzExpression(baseline,source,segments){
 }
 
 export function akatzExpressionPlan(source,segments){
+  if(source.akatzFaceControl===true)return akatzFaceControlPlan(source,segments);
   if(source.akatzExpression!==true)return null;
   return {revision:AKATZ_EXPRESSION_REVISION,role:'full_frame_face_performance_reference',
     characterSource:'uploaded_edited_first_frame',drivingSource:'original_video_face_crops',
@@ -109,7 +118,7 @@ export function akatzExpressionPlan(source,segments){
 // Autogrow's prefix and max live INSIDE template on the installed V3 schema.
 export function akatzExpressionEditorSchemas(){
   const result={};
-  for(const [name,node] of Object.entries(AKATZ_EXPRESSION_SCHEMAS)){
+  for(const [name,node] of Object.entries({...AKATZ_EXPRESSION_SCHEMAS,...AKATZ_FACE_CONTROL_SCHEMAS})){
     const inputs=[],defaults={},widgetOrder=[];
     for(const group of ['required','optional'])for(const [key,spec] of Object.entries(node.input[group]||{})){
       const type=spec[0],config=spec[1]||{};

@@ -42,7 +42,8 @@ import {installNativePoseInspection,poseValidationSummary} from './h3-native-pos
 import {installAkatzInspection} from './h3-akatz-inspect.js';
 import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionContextSchema} from './h3-context-inspect.js';
 import {installExpressionInspection} from './h3-expression-inspect.js';
-import {parseAkatzExpressionOption,AKATZ_EXPRESSION_FILENAME} from './h3-akatz-expression.js';
+import {parseAkatzOptions,AKATZ_EXPRESSION_FILENAME} from './h3-akatz-expression.js';
+import {AKATZ_FACE_CONTROL_FILENAME} from './h3-akatz-face-control.js';
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import * as akatzV3 from './h3-akatz-v3-motion.js';
 import {installAkatzEditorDownload} from './h3-runninghub-export.js';
@@ -727,8 +728,11 @@ installAkatzEditorDownload({app,getModelFiles:()=>({
   turboLoraFile:h3AkatzTurbo8Model.cachedFile()
 }),buildWorkflow:(models,req)=>turbo8EditorForFrames({...models,frames:req.query.frames?Number(req.query.frames):360,
   width:Number(req.query.width)||1080,height:Number(req.query.height)||1920,
-  akatzExpression:parseAkatzExpressionOption('minimaxH3Akatz',req.query.akatzExpression)}),
-  filename:req=>parseAkatzExpressionOption('minimaxH3Akatz',req.query.akatzExpression)?AKATZ_EXPRESSION_FILENAME:TURBO8_EDITOR_FILENAME});
+  ...parseAkatzOptions('minimaxH3Akatz',req.query)}),
+  filename:req=>{
+    const options=parseAkatzOptions('minimaxH3Akatz',req.query);
+    return options.akatzFaceControl?AKATZ_FACE_CONTROL_FILENAME:options.akatzExpression?AKATZ_EXPRESSION_FILENAME:TURBO8_EDITOR_FILENAME;
+  }});
 installFrameDiagnostics({app,registry:taskRegistry,getAccount:taskAccount,request:axios.get,validUrl:validProviderUrl,
   getOutputs:async(taskId,account)=>{
     const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
@@ -881,6 +885,7 @@ async function handleGeneration(req,res){
     // The public upload boundary validates this option before durable queueing.
     // Legacy queued jobs have no flag and retain the previous graph.
     const akatzExpression=workflowKey==='minimaxH3Akatz'&&req.body?.akatzExpression==='true';
+    const akatzFaceControl=akatzExpression&&req.body?.akatzFaceControl==='true';
     const videoOnly=workflowKey==='rife60';
     if ((!videoOnly&&!imageFile) || !videoFile) throw new Error('Media input wajib diisi.');
     if (imageFile?.size > IMAGE_MAX) throw new Error('Reference Image maksimal 20 MB.');
@@ -899,6 +904,7 @@ async function handleGeneration(req,res){
         await prepareH3Input(videoFile,mode,imageFile,{
           inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
       if(akatzExpression)h3Source.akatzExpression=true;
+      if(akatzFaceControl)h3Source.akatzFaceControl=true;
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
       console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
@@ -945,7 +951,7 @@ async function handleGeneration(req,res){
     let rejectedAtCapacity=0;
     let rejectedByBilling=0;
     const submittedWorkflow=h3Source?.akatzExpression===true?
-      {...workflowMeta[workflowKey],name:workflowMeta[workflowKey].name+' · Uji mimik'}:workflowMeta[workflowKey];
+      {...workflowMeta[workflowKey],name:workflowMeta[workflowKey].name+(h3Source.akatzFaceControl===true?' · ControlNet wajah':' · Uji mimik')}:workflowMeta[workflowKey];
     for (const account of candidates) {
       try {
         req.progress?.('uploading_inputs');
@@ -1130,7 +1136,7 @@ app.post('/api/generate', upload.fields([
     const deviceId=getDeviceId(req);
     if(!deviceId)return res.status(400).json({error:'Sesi perangkat tidak tersedia. Muat ulang halaman.'});
     const workflowKey=String(req.body?.workflow||'motionflyHD');
-    try{parseAkatzExpressionOption(workflowKey,req.body?.akatzExpression);}
+    try{parseAkatzOptions(workflowKey,req.body);}
     catch(error){return res.status(400).json({error:error.message});}
     if(['r15','koh1AntiObject','r4Lab'].includes(workflowKey))
       return res.status(410).json({error:'Workflow R4 sudah diganti. Muat ulang Vanta dan pilih MotionFly HD.'});

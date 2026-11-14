@@ -4,6 +4,7 @@ const state = {
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false, historyFilter: 'all',
   registeredTaskIds: new Set(), submission:null, submissionTimer:null, submissionPolling:false,
   akatzExpression:true,
+  akatzFaceControl:true,
 };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -269,7 +270,7 @@ function updateGenerate(){
 function workflowName(){
   if(state.workflow==='motionflyHD')return 'MotionFly · 1080 HD + ZIP';
   if(state.workflow==='minimaxH3AkatzV3')return 'MiniMax H3 · Akatz v3 · 1080p';
-  if(state.workflow==='minimaxH3Akatz')return 'MiniMax H3 · Akatz V1.5 Native · 1080p'+(state.akatzExpression?' · Uji mimik':' · Versi sebelumnya');
+  if(state.workflow==='minimaxH3Akatz')return 'MiniMax H3 · Akatz V1.5 Native · 1080p'+(state.akatzFaceControl?' · ControlNet wajah':state.akatzExpression?' · Uji mimik':' · Versi dasar');
   if(state.workflow==='minimaxH3')return 'MiniMax H3 · Motion Control · 1080p';
   if(state.workflow==='rife60')return 'RIFE Adaptive · hingga 60 FPS';
   return 'Current Workflow';
@@ -500,11 +501,12 @@ async function generate(){
     return;
   }
   const fd=new FormData();
-  if(state.workflow==='minimaxH3Akatz')state.akatzExpression=$('#akatzExpression')?.value==='expression';
+  if(state.workflow==='minimaxH3Akatz')readAkatzMode();
   if(state.workflow!=='rife60')fd.append('referenceImage',state.image);
   fd.append('videoReference',state.video);
   fd.append('workflow',state.workflow);
   if(state.workflow==='minimaxH3Akatz')fd.append('akatzExpression',state.akatzExpression?'true':'false');
+  if(state.workflow==='minimaxH3Akatz')fd.append('akatzFaceControl',state.akatzFaceControl?'true':'false');
   fd.append('mode',state.mode);
   fd.append('accountId',$('#accountSelect').value||'auto');
   // Stop the old single-task Live panel poll before showing a new upload.
@@ -1124,9 +1126,10 @@ document.querySelector('.akatz-editor-download')?.addEventListener('click',async
   if(link.getAttribute('aria-busy')==='true')return;
   link.setAttribute('aria-busy','true');let url;
   try{
-    state.akatzExpression=$('#akatzExpression')?.value==='expression';
+    readAkatzMode();
     const endpoint=new URL(link.href,location.href);
     endpoint.searchParams.set('akatzExpression',state.akatzExpression?'true':'false');
+    endpoint.searchParams.set('akatzFaceControl',state.akatzFaceControl?'true':'false');
     if(Number.isFinite(state.videoDuration)&&state.videoDuration>0){
       endpoint.searchParams.set('frames',String(Math.max(6,Math.round(state.videoDuration*24))));
       const photo=$('#imagePreview')?.querySelector('img');
@@ -1137,7 +1140,8 @@ document.querySelector('.akatz-editor-download')?.addEventListener('click',async
     const workflow=await response.json();
     if(!Array.isArray(workflow.nodes)||!Array.isArray(workflow.links))throw Error('File workflow belum valid.');
     url=URL.createObjectURL(new Blob([JSON.stringify(workflow,null,2)+'\n'],{type:'application/json'}));
-    const save=document.createElement('a');save.href=url;save.download=state.akatzExpression?
+    const save=document.createElement('a');save.href=url;save.download=state.akatzFaceControl?
+      'VANTA_AKATZ_CONTROLNET_WAJAH_RUNNINGHUB.json':state.akatzExpression?
       'VANTA_AKATZ_UJI_MIMIK_RUNNINGHUB.json':link.download;
     document.body.append(save);save.click();save.remove();toast('Workflow diunduh.');
   }catch(error){toast(error.message||'Unduhan workflow gagal.',true);}
@@ -1146,12 +1150,17 @@ document.querySelector('.akatz-editor-download')?.addEventListener('click',async
 
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
-$('#akatzExpression')?.addEventListener('change',event=>{
-  state.akatzExpression=event.target.value==='expression';
-  $('#akatzExpressionStatus').textContent=state.akatzExpression?
-    'Uji mimik aktif. Panduan wajah kini memakai framing video utuh agar ukuran subjek dan gerak kamera mengikuti video referensi. Hasil visual menunggu tes Anda.':
-    'Versi sebelumnya aktif untuk membandingkan hasil dengan uji mimik.';
-});
+function readAkatzMode(){
+  const mode=$('#akatzExpression')?.value;
+  state.akatzFaceControl=mode==='controlnet';
+  state.akatzExpression=state.akatzFaceControl||mode==='expression';
+  const status=$('#akatzExpressionStatus');
+  if(status)status.textContent=state.akatzFaceControl?
+    'ControlNet wajah aktif. Ekspresi video menjadi panduan untuk wajah karakter foto. Hasil visual menunggu tes Anda.':
+    state.akatzExpression?'Uji mimik sebelumnya aktif. Hasil visual mengikuti versi sebelum ControlNet.':
+    'Versi dasar Akatz aktif.';
+}
+$('#akatzExpression')?.addEventListener('change',readAkatzMode);
 $$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');
 $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $$('.workflow-card').forEach(x=>x.classList.remove('selected'));
@@ -1165,6 +1174,7 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $('#rifeNotice').classList.toggle('hidden',!videoOnly);
   $('#h3Notice').classList.toggle('hidden',state.workflow!=='minimaxH3');
   $('#akatzNotice').classList.toggle('hidden',state.workflow!=='minimaxH3Akatz');
+  if(state.workflow==='minimaxH3Akatz')readAkatzMode();
   const h3=['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(state.workflow);
   $$('.mode-card').forEach(x=>{x.disabled=h3&&x.dataset.mode!=='plus';});
   if(h3){
