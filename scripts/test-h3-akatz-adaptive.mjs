@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import express from 'express';
 import {h3PhotoPlan,validateH3Probe,probeH3Input} from '../minimax-h3-motion.js';
 import {prepareTurbo8Input} from '../h3-akatz-turbo8-adaptive.js';
-import {turbo8TemporalPlan,turbo8GraphForInputs,turbo8SeedNodeInfo,turbo8EditorForFrames,turbo8ExecutionPlan,TURBO8_ASSET,TURBO8_LEGACY_REVISION,TURBO8_EDITOR_FILENAME} from '../h3-akatz-turbo8.js';
+import {turbo8TemporalPlan,turbo8GraphForInputs,turbo8SeedNodeInfo,turbo8EditorForFrames,turbo8ExecutionPlan,TURBO8_ASSET,TURBO8_LEGACY_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_EDITOR_FILENAME} from '../h3-akatz-turbo8.js';
 import {installAkatzEditorDownload} from '../h3-runninghub-export.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
 const models={characterLoraFile:'api-lora-usa/55c5bb53f1104e3cd4fed7fbe5d522d7.safetensors',turboLoraFile:TURBO8_ASSET.publishedUpload.name};
@@ -55,6 +55,11 @@ for(const n of cases)for(const audio of [true,false]){
   const s=source(n,audio),p=turbo8TemporalPlan(s),g=build(s);
   assert.equal(p.window,124);assert.equal(p.segments.reduce((a,b)=>a+b.frames,0),n);
   assert.equal(Object.values(g).filter(x=>x.class_type==='SamplerCustomAdvanced').length,p.segments.length);
+  assert.deepEqual(Object.entries(g).filter(([,x])=>x.class_type==='MiniMaxH3AddGuide'&&x.inputs.image).map(([id])=>id),['1008'],
+    'Only the first segment uses the edited image pose; continuation never resets it');
+  assert.deepEqual(g['1010'].inputs.positive,['1008',0]);
+  assert.deepEqual(g['1008'].inputs.image,['32',0]);assert.equal(!!g['1008'].inputs.audio,audio);
+  if(!audio)assert.equal(g['1008'].inputs.audio_vae,undefined);
   let delivered=0;
   for(const [i,part] of p.segments.entries()){
     assert.equal(part.start,delivered);delivered+=part.frames;assert.ok(part.inputFrames<=124);
@@ -86,11 +91,18 @@ for(const n of cases)for(const audio of [true,false]){
 for(const n of [0,5,NaN,Infinity,2**53])assert.throws(()=>turbo8TemporalPlan(source(n)));
 const legacy={revision:TURBO8_LEGACY_REVISION,nodeClasses:{760060:'RIFEInterpolation'}};
 assert.equal(h3NodeClass('760060',legacy),'RIFEInterpolation','Old running jobs stay observable');
+assert.equal(h3NodeClass('1011',{revision:TURBO8_ADAPTIVE_REVISION,nodeClasses:{1011:'SamplerCustomAdvanced'}}),
+  'SamplerCustomAdvanced','Jobs from the previous adaptive revision stay observable');
 
 for(const n of [49,363,482,720,1464]){
   const editor=turbo8EditorForFrames({...models,frames:n});
   const nodes=new Map(editor.nodes.map(x=>[x.id,x])),links=new Map(editor.links.map(x=>[x[0],x]));
   assert.equal(nodes.size,editor.nodes.length);
+  for(const [name,from] of [['image',32],['vae',3]]){
+    const input=nodes.get(1008).inputs.find(x=>x.name===name);
+    assert.equal(links.get(input.link)[1],from,'Compiled editor retains the first-frame guide: '+name);
+  }
+  assert.equal(editor.extra.vanta_export.first_frame_guide.frameIndex,0);
   for(const l of editor.links){assert.ok(nodes.get(l[1]).outputs[l[2]].links.includes(l[0]));assert.equal(nodes.get(l[3]).inputs[l[4]].link,l[0]);}
   for(const node of editor.nodes){
     for(const input of node.inputs)if(input.link!=null)assert.ok(links.has(input.link));

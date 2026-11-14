@@ -68,6 +68,8 @@ for(let frames=6;frames<=362;frames++){
   assert.deepEqual(p.segments.map(s=>s.frames),expected);
   assert.equal(expected.reduce((a,b)=>a+b,0),frames);
   assert.equal(Object.values(g).filter(n=>n.class_type==='SamplerCustomAdvanced').length,expected.length);
+  assert.deepEqual(Object.entries(g).filter(([,n])=>n.class_type==='MiniMaxH3AddGuide'&&n.inputs.image).map(([id])=>id),['1008']);
+  assert.deepEqual(g['1010'].inputs.positive,['1008',0],'The sampler must consume the image-guided conditioning');
   assert.ok(!Object.values(g).some(n=>['LazySwitchKJ','WidgetToString','easy compare'].includes(n.class_type)));
   for(const node of Object.values(g))for(const value of Object.values(node.inputs))if(isLink(value))assert.ok(g[value[0]]);
   const batches=batchTools(g,frames);
@@ -85,15 +87,36 @@ for(let frames=6;frames<=362;frames++){
   assert.deepEqual(turbo8SeedNodeInfo(s).map(x=>x.nodeId),p.segments.map(x=>x.seedNode));
 }
 assert.deepEqual(turbo8TemporalPlan(source(361)).segments.map(s=>s.frames),[124,119,118]);
-for(const [w,h] of [[1920,1080],[1080,1920],[1080,1080],[1080,1936]])for(const audio of [true,false]){
+for(const [w,h] of [[1920,1080],[1080,1920],[1080,1080],[1080,1936],[1079,1919],[720,1280]])for(const audio of [true,false]){
   const s=source(48,audio,w,h),g=build(s),plan=turbo8ExecutionPlan(s);
   assert.deepEqual(plan.output,[s.outputWidth,s.outputHeight]);assert.equal(plan.revision,TURBO8_REVISION);
   assert.equal(plan.visualAcceptance,'pending_owner_test');assert.equal(plan.postDecodeResize,false);
   for(const node of Object.values(g)){
     if(node.class_type==='ImageCrop')assert.deepEqual([node.inputs.width,node.inputs.height],[s.outputWidth,s.outputHeight]);
-    if(!audio)assert.ok(!['VHS_LoadAudioUpload','MiniMaxH3AddGuide'].includes(node.class_type));
+    if(!audio){
+      assert.notEqual(node.class_type,'VHS_LoadAudioUpload');
+      if(node.class_type==='MiniMaxH3AddGuide'){
+        assert.ok(node.inputs.image);assert.equal(node.inputs.audio,undefined);assert.equal(node.inputs.audio_vae,undefined);
+      }
+    }
     if(node.class_type==='VHS_VideoCombine')assert.equal(!!node.inputs.audio,audio);
   }
+  const pad=g['32'].inputs;
+  assert.deepEqual(pad.image,['30',0]);assert.equal(g['30'].inputs.image,'photo.png');
+  assert.deepEqual(g['1008'].inputs.image,['32',0]);assert.deepEqual(g['1008'].inputs.vae,['3',0]);
+  assert.equal(g['1008'].inputs.frame_idx,0);assert.equal(pad.left+pad.right,s.referencePadRight);
+  assert.equal(pad.top+pad.bottom,s.referencePadBottom);assert.ok(Math.abs(pad.left-pad.right)<=1);
+  assert.ok(Math.abs(pad.top-pad.bottom)<=1);assert.equal(pad.feathering,0);
+  assert.equal(g['31'].inputs.right,s.referencePadRight,'Original semantic-reference padding stays unchanged');
+  assert.deepEqual(plan.firstFrameGuide.paddedReference,[w+s.referencePadRight,h+s.referencePadBottom]);
+  const matches=w===s.outputWidth&&h===s.outputHeight;
+  assert.equal(plan.firstFrameGuide.internalConditioningResize,
+    w+s.referencePadRight!==s.canvasWidth||h+s.referencePadBottom!==s.canvasHeight);
+  if(matches){
+    assert.equal(pad.left,s.padLeft,'A native-size first frame remains aligned after the output crop');
+    assert.equal(pad.top,s.padTop);
+  }
+  assert.equal(!!g['1008'].inputs.audio,audio);
   assert.equal(h3NodeClass('5108',plan),'CompressImages');assert.equal(h3NodeClass('1133',plan),null);
 }
 assert.equal(turbo8TemporalPlan(source(363)).segments.length,4);
@@ -108,6 +131,10 @@ assert.equal(editorNodes.get(6).type,'RHLoraLoader');
 assert.equal(editorNodes.get(6).widgets_values_named.file_name,models.turboLoraFile);
 assert.equal(editor.extra.vanta_export.source_revision,TURBO8_REVISION);
 assert.equal(editorNodes.get(41).widgets_values_named.steps,8);
+for(const [from,to,name] of [[30,32,'image'],[32,1008,'image'],[3,1008,'vae']]){
+  const port=editorNodes.get(to).inputs.find(x=>x.name===name);
+  assert.equal(editor.links.find(x=>x[0]===port.link)[1],from,'Raw editor includes the same first-frame guide');
+}
 assert.ok(editorNodes.has(5108));
 
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'turbo8-receipt-'));

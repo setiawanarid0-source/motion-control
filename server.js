@@ -92,7 +92,7 @@ const workflowMeta = {
   minimaxH3Akatz: {
     id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz V1.5 Native · 1080p',
     subtitle:'Turbo8 · 1080p · 24 FPS · Plus · durasi adaptif',
-    detail:'Foto menjadi acuan tampilan; video memandu gerak dan kamera. Turbo8 membagi durasi aktual ke segmen otomatis tanpa batas maksimal 15 detik, dengan audio sumber, MP4 24 FPS dan ZIP tiga frame PNG dari hasil native. Hasil native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
+    detail:'Gunakan frame pertama video yang sudah diedit menjadi karakter Anda sebagai foto referensi. Foto menjadi acuan tampilan dan frame awal; video memandu gerak dan kamera. Durasi adaptif tanpa batas maksimal 15 detik, dengan audio sumber, MP4 24 FPS dan ZIP tiga frame PNG. Output native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
     revision:TURBO8_REVISION,frameDiagnostics:true,
     outputKind:'video',experimental:true,requiredMode:'plus'
   },
