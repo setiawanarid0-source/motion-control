@@ -1,0 +1,603 @@
+{
+  "provenance": {
+    "source": "https://www.runninghub.ai/object_info",
+    "retrievedAt": "2026-11-14T18:29:29.811740+00:00",
+    "registrySha256": "6093a99b64a17c8af35df1230afbc797cf91cba8a301c9c7ba6688d8b2d505f1",
+    "scope": "Actual provider declarations; ModelPatchLoader choices restricted to the selected H3 Union 2.0 int8 file. Availability does not prove GPU or visual success."
+  },
+  "nodes": {
+    "ModelPatchLoader": {
+      "input": {
+        "required": {
+          "name": [
+            [
+              "minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors"
+            ]
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "name"
+        ]
+      },
+      "output": [
+        "MODEL_PATCH"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "MODEL_PATCH"
+      ],
+      "name": "ModelPatchLoader",
+      "display_name": "Load Model Patch",
+      "description": "",
+      "python_module": "comfy_extras.nodes_model_patch",
+      "category": "model/loaders",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "experimental": true
+    },
+    "MiniMaxH3FunControlNetApply": {
+      "input": {
+        "required": {
+          "model": [
+            "MODEL",
+            {}
+          ],
+          "model_patch": [
+            "MODEL_PATCH",
+            {}
+          ],
+          "vae": [
+            "VAE",
+            {}
+          ],
+          "strength": [
+            "FLOAT",
+            {
+              "default": 1.0,
+              "min": 0.0,
+              "max": 10.0,
+              "step": 0.01
+            }
+          ],
+          "start_percent": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 0.0,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.001
+            }
+          ],
+          "end_percent": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 1.0,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.001
+            }
+          ]
+        },
+        "optional": {
+          "control_video": [
+            "IMAGE",
+            {}
+          ],
+          "mask": [
+            "MASK",
+            {
+              "tooltip": "1 marks the regions to regenerate."
+            }
+          ],
+          "source_video": [
+            "IMAGE",
+            {
+              "tooltip": "Video behind the mask; only read when a mask is given."
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "model",
+          "model_patch",
+          "vae",
+          "strength",
+          "start_percent",
+          "end_percent"
+        ],
+        "optional": [
+          "control_video",
+          "mask",
+          "source_video"
+        ]
+      },
+      "output": [
+        "MODEL"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "MODEL"
+      ],
+      "name": "MiniMaxH3FunControlNetApply",
+      "display_name": "Apply MiniMax H3 Fun ControlNet",
+      "description": "Apply a MiniMax H3 Fun ControlNet to a text-to-video model as a model patch.",
+      "python_module": "comfy_extras.nodes_minimax_h3",
+      "category": "model/patch/minimax",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "LivePortraitComposite": {
+      "input": {
+        "required": {
+          "source_image": [
+            "IMAGE"
+          ],
+          "cropped_image": [
+            "IMAGE"
+          ],
+          "liveportrait_out": [
+            "LP_OUT"
+          ]
+        },
+        "optional": {
+          "mask": [
+            "MASK",
+            {
+              "default": null
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "source_image",
+          "cropped_image",
+          "liveportrait_out"
+        ],
+        "optional": [
+          "mask"
+        ]
+      },
+      "output": [
+        "IMAGE",
+        "MASK"
+      ],
+      "output_is_list": [
+        false,
+        false
+      ],
+      "output_name": [
+        "full_images",
+        "mask"
+      ],
+      "name": "LivePortraitComposite",
+      "display_name": "LivePortrait Composite",
+      "description": "",
+      "python_module": "custom_nodes.ComfyUI-LivePortrait",
+      "category": "LivePortrait",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "EmptyImage": {
+      "input": {
+        "required": {
+          "width": [
+            "INT",
+            {
+              "default": 512,
+              "min": 1,
+              "max": 16384,
+              "step": 1
+            }
+          ],
+          "height": [
+            "INT",
+            {
+              "default": 512,
+              "min": 1,
+              "max": 16384,
+              "step": 1
+            }
+          ],
+          "batch_size": [
+            "INT",
+            {
+              "default": 1,
+              "min": 1,
+              "max": 4096
+            }
+          ],
+          "color": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 16777215,
+              "step": 1,
+              "display": "color"
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "width",
+          "height",
+          "batch_size",
+          "color"
+        ]
+      },
+      "output": [
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "IMAGE"
+      ],
+      "name": "EmptyImage",
+      "display_name": "Empty Image",
+      "description": "",
+      "python_module": "nodes",
+      "category": "image",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "ImageScale": {
+      "input": {
+        "required": {
+          "image": [
+            "IMAGE"
+          ],
+          "upscale_method": [
+            [
+              "nearest-exact",
+              "bilinear",
+              "area",
+              "bicubic",
+              "lanczos"
+            ]
+          ],
+          "width": [
+            "INT",
+            {
+              "default": 512,
+              "min": 0,
+              "max": 16384,
+              "step": 1
+            }
+          ],
+          "height": [
+            "INT",
+            {
+              "default": 512,
+              "min": 0,
+              "max": 16384,
+              "step": 1
+            }
+          ],
+          "crop": [
+            [
+              "disabled",
+              "center"
+            ]
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "image",
+          "upscale_method",
+          "width",
+          "height",
+          "crop"
+        ]
+      },
+      "output": [
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "IMAGE"
+      ],
+      "name": "ImageScale",
+      "display_name": "Upscale Image",
+      "description": "",
+      "python_module": "nodes",
+      "category": "image/upscaling",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "ImageToMask": {
+      "input": {
+        "required": {
+          "image": [
+            "IMAGE",
+            {}
+          ],
+          "channel": [
+            "COMBO",
+            {
+              "multiselect": false,
+              "options": [
+                "red",
+                "green",
+                "blue",
+                "alpha"
+              ]
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "image",
+          "channel"
+        ]
+      },
+      "output": [
+        "MASK"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "MASK"
+      ],
+      "name": "ImageToMask",
+      "display_name": "Convert Image to Mask",
+      "description": "",
+      "python_module": "comfy_extras.nodes_mask",
+      "category": "image/mask",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "ThresholdMask": {
+      "input": {
+        "required": {
+          "mask": [
+            "MASK",
+            {}
+          ],
+          "value": [
+            "FLOAT",
+            {
+              "default": 0.5,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.01
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "mask",
+          "value"
+        ]
+      },
+      "output": [
+        "MASK"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "MASK"
+      ],
+      "name": "ThresholdMask",
+      "display_name": "Threshold Mask",
+      "description": "",
+      "python_module": "comfy_extras.nodes_mask",
+      "category": "image/mask",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "ImageCompositeMasked": {
+      "input": {
+        "required": {
+          "destination": [
+            "IMAGE",
+            {}
+          ],
+          "source": [
+            "IMAGE",
+            {}
+          ],
+          "x": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 16384,
+              "step": 1
+            }
+          ],
+          "y": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 16384,
+              "step": 1
+            }
+          ],
+          "resize_source": [
+            "BOOLEAN",
+            {
+              "default": false
+            }
+          ]
+        },
+        "optional": {
+          "mask": [
+            "MASK",
+            {}
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "destination",
+          "source",
+          "x",
+          "y",
+          "resize_source"
+        ],
+        "optional": [
+          "mask"
+        ]
+      },
+      "output": [
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "IMAGE"
+      ],
+      "name": "ImageCompositeMasked",
+      "display_name": "Image Composite Masked",
+      "description": "",
+      "python_module": "comfy_extras.nodes_mask",
+      "category": "image/compositing",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "Canny": {
+      "input": {
+        "required": {
+          "image": [
+            "IMAGE",
+            {}
+          ],
+          "low_threshold": [
+            "FLOAT",
+            {
+              "default": 0.4,
+              "min": 0.01,
+              "max": 0.99,
+              "step": 0.01
+            }
+          ],
+          "high_threshold": [
+            "FLOAT",
+            {
+              "default": 0.8,
+              "min": 0.01,
+              "max": 0.99,
+              "step": 0.01
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "image",
+          "low_threshold",
+          "high_threshold"
+        ]
+      },
+      "output": [
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "IMAGE"
+      ],
+      "name": "Canny",
+      "display_name": "Detect Edges (Canny)",
+      "description": "",
+      "python_module": "comfy_extras.nodes_canny",
+      "category": "image/filters",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "GetImageSize": {
+      "input": {
+        "required": {
+          "image": [
+            "IMAGE",
+            {}
+          ]
+        },
+        "hidden": {
+          "unique_id": [
+            "UNIQUE_ID"
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "image"
+        ],
+        "hidden": [
+          "unique_id"
+        ]
+      },
+      "output": [
+        "INT",
+        "INT",
+        "INT"
+      ],
+      "output_is_list": [
+        false,
+        false,
+        false
+      ],
+      "output_name": [
+        "width",
+        "height",
+        "batch_size"
+      ],
+      "name": "GetImageSize",
+      "display_name": "Get Image Size",
+      "description": "Returns the width, height, and batch size of the image.",
+      "python_module": "comfy_extras.nodes_images",
+      "category": "image",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null,
+        null,
+        null
+      ],
+      "api_node": false
+    }
+  }
+}

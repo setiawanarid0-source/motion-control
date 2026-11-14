@@ -197,8 +197,8 @@ try{
   const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
   const js=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   const source=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
-  assert.match(html,/<option value="expression" selected>Uji mimik wajah/);
-  assert.match(html,/<option value="baseline">Versi sebelumnya/);
+  assert.match(html,/<option value="expression">Uji mimik sebelumnya/);
+  assert.match(html,/<option value="baseline">Versi dasar Akatz/);
   assert.match(js,/fd\.append\('akatzExpression',state\.akatzExpression\?'true':'false'\)/);
   assert.match(source,/if\(akatzExpression\)h3Source\.akatzExpression=true/);
   assert.match(source,/workflow:submittedWorkflow\.name/);

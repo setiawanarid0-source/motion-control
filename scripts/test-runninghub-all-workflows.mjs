@@ -10,7 +10,7 @@ import {createH3AppearanceModel,FFP_ASSET,CHARACTER_ASSET} from '../h3-appearanc
 import {h3PhotoPlan,h3GraphForInputs,H3_DEFAULT_PROFILE} from '../minimax-h3-motion.js';
 import {AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,akatzGraphForInputs,akatzSeedNodeInfo} from '../h3-akatz-motion.js';
 import * as akatzV3 from '../h3-akatz-v3-motion.js';
-import {TURBO8_ASSET,turbo8GraphForInputs,turbo8SeedNodeInfo} from '../h3-akatz-turbo8.js';
+import {TURBO8_ASSET,turbo8GraphForInputs,turbo8SeedNodeInfo,turbo8TemporalPlan} from '../h3-akatz-turbo8.js';
 import {rifeGraphForSourceFps,RIFE_TARGET_FPS} from '../rife-video.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
 import {compileMotionFlyHD} from '../motionfly-hd-workflow.js';
@@ -137,20 +137,28 @@ try{
     assert.equal(long['490'].inputs.frame_rate,24);
     assert.deepEqual(Object.entries(long).filter(([,n])=>n.class_type==='MiniMaxH3AddGuide'&&n.inputs.image).map(([id])=>id),['1008']);
   }
-  for(const frames of [49,463]){
+  for(const [frames,control] of [[49,false],[463,false],[49,true],[463,true]]){
     const before=created.length;
     await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey:'minimaxH3Akatz',mode:'plus',
       imageFile:{...media,mimetype:'image/png'},videoFile:media,
-      h3Source:{...source,totalFrames:frames,inferenceProfile:AKATZ_PROFILE,akatzExpression:true}});
+      h3Source:{...source,totalFrames:frames,inferenceProfile:AKATZ_PROFILE,akatzExpression:true,akatzFaceControl:control}});
     assert.equal(created.length,before+1,'The expression candidate is still exactly one provider task');
     const candidate=created.at(-1),windows=Object.values(candidate).filter(n=>n.class_type==='MiniMaxH3ReferenceToVideo');
     assert.equal(Object.values(candidate).filter(n=>n.class_type==='LivePortraitProcess').length,windows.length);
     assert.equal(Object.values(candidate).filter(n=>n.class_type==='H3FaceStitch').length,windows.length);
-    assert.ok(windows.every(n=>n.inputs['ref_videos.ref_video_2']));
-    for(const window of windows){
+    assert.ok(windows.every(n=>Boolean(n.inputs['ref_videos.ref_video_2'])===!control));
+    for(const window of control?[]:windows){
       let reference=window.inputs['ref_videos.ref_video_2'];
       while(candidate[reference[0]].class_type==='ImageBatch')reference=candidate[reference[0]].inputs.image1;
       assert.equal(candidate[reference[0]].class_type,'H3FaceStitch','Web payload must send restored full frames, never a standalone close-up');
+    }
+    assert.equal(Object.values(candidate).filter(n=>n.class_type==='MiniMaxH3FunControlNetApply').length,control?windows.length:0);
+    if(control)for(const segment of turbo8TemporalPlan({...source,totalFrames:frames}).segments){
+      const apply=candidate[candidate[String(segment.base+10)].inputs.model[0]];
+      assert.equal(apply.class_type,'MiniMaxH3FunControlNetApply');assert.ok(apply.inputs.control_video);
+      assert.deepEqual(apply.inputs.model,['8',0]);assert.deepEqual(apply.inputs.vae,['3',0]);
+      assert.equal(candidate[apply.inputs.model_patch[0]].inputs.name,'minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors');
+      assert.ok(!apply.inputs.mask&&!apply.inputs.source_video);
     }
     assert.equal(candidate['490'].inputs.frame_rate,24);
     assert.ok(!Object.values(candidate).some(n=>n.class_type==='RIFEInterpolation'));

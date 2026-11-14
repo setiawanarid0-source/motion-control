@@ -114,6 +114,22 @@ try{
   const expression=await fetch(url+'/api/generate',{
     method:'POST',headers:{...headers,'X-Vanta-Request-Id':expressionId},body:expressionForm});
   assert.equal(expression.status,202,'A valid selected candidate enters the same durable upload queue');
+  for(const [workflow,expressionFlag,controlFlag] of [
+    ['minimaxH3Akatz',undefined,'true'],['minimaxH3Akatz','false','true'],
+    ['minimaxH3Akatz','true','yes'],['current','false','true']]){
+    const invalid=form('plus',workflow),requestId=crypto.randomUUID();
+    if(expressionFlag!==undefined)invalid.append('akatzExpression',expressionFlag);
+    invalid.append('akatzFaceControl',controlFlag);
+    const result=await fetch(url+'/api/generate',{
+      method:'POST',headers:{...headers,'X-Vanta-Request-Id':requestId},body:invalid});
+    assert.equal(result.status,400,'Invalid ControlNet combinations stop before durable queueing');
+    const missing=await fetch(url+'/api/generate/jobs/'+requestId,{headers});assert.equal(missing.status,404);
+  }
+  const controlId=crypto.randomUUID(),controlForm=form('plus','minimaxH3Akatz');
+  controlForm.append('akatzExpression','true');controlForm.append('akatzFaceControl','true');
+  const control=await fetch(url+'/api/generate',{
+    method:'POST',headers:{...headers,'X-Vanta-Request-Id':controlId},body:controlForm});
+  assert.equal(control.status,202,'ControlNet uses the same upload endpoint and durable queue');
   // Only Standard and Plus are offered/accepted for NEW requests.
   const plusId=crypto.randomUUID();
   const plusResponse=await fetch(url+'/api/generate',{

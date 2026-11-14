@@ -119,7 +119,8 @@ const client={state:{videoDuration:0},location:{href:'https://vanta.test/'},$ : 
   fetch:async url=>{urls.push(url);return failed?{ok:false,json:async()=>({error:'Receipt belum tersedia'})}:{ok:true,json:async()=>workflow};},
   URL:DownloadURL,Blob,
   setTimeout:fn=>fn(),toast:(text,error)=>notices.push({text,error})};
-vm.runInNewContext(appSource.slice(begin,end),client);
+const modeHelper=appSource.slice(appSource.indexOf('function readAkatzMode(){'),appSource.indexOf("$('#akatzExpression')?.addEventListener"));
+vm.runInNewContext(modeHelper+appSource.slice(begin,end),client);
 await handler({preventDefault(){},currentTarget:link});assert.equal(saved,1);
 assert.equal(attributes.has('aria-busy'),false);
 client.state.videoDuration=61;
