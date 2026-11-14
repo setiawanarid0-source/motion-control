@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 
 export const AKATZ_EXPRESSION_REVISION='akatz-native-1080-turbo8-expression-v2-framealigned';
+export const AKATZ_EXPRESSION_LEGACY_REVISION='akatz-native-1080-turbo8-expression-v1';
 export const AKATZ_EXPRESSION_FILENAME='VANTA_AKATZ_UJI_MIMIK_RUNNINGHUB.json';
 export const AKATZ_EXPRESSION_SCHEMAS=JSON.parse(fs.readFileSync(
   new URL('./workflows/runninghub-akatz-expression-node-schemas.json',import.meta.url),'utf8')).nodes;

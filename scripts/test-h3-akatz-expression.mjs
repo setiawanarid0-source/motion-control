@@ -147,6 +147,8 @@ for(const test of fixture.cases){
     for(const v of Object.values(n.inputs))if(edge(v)&&schemas[g[v[0]].class_type]?.outputs[v[1]]?.type==='IMAGE')images.push(v);
   }
 }
+assert.equal(h3NodeClass('10048',{revision:'akatz-native-1080-turbo8-expression-v1',
+  nodeClasses:{'10048':'LivePortraitProcess'}}),'LivePortraitProcess','Existing v1 task progress keeps its stored node map');
 assert.equal(parseAkatzExpressionOption('minimaxH3Akatz',undefined),false);
 assert.equal(parseAkatzExpressionOption('minimaxH3Akatz','true'),true);
 assert.equal(parseAkatzExpressionOption('minimaxH3Akatz','false'),false);
