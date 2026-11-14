@@ -478,6 +478,7 @@ button,input,select{font:inherit}button,a{touch-action:manipulation}.hidden{disp
 
 /* MotionFly R4 mask-only diagnostic mode */
 .diagnostic-notice{padding:13px 15px;border:1px solid #64748b;border-radius:12px;margin:12px 0;color:var(--text,#e2e8f0);background:rgba(100,116,139,.10)}
+#akatzExpression{width:100%;min-height:48px;margin:6px 0;font-size:16px}
 .diagnostic-notice strong{font-size:13px}.diagnostic-notice p{font-size:12px;line-height:1.65;margin:6px 0 0}
 .akatz-editor-download{display:inline-flex;align-items:center;min-height:44px;padding:8px 12px;margin-top:6px;border:1px solid var(--line-strong);border-radius:9px;color:var(--accent);font-weight:650;text-decoration:none;background:#141b24}
 .akatz-editor-download:hover{border-color:var(--accent);background:#1b2530}

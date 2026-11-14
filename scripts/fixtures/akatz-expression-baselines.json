@@ -1,0 +1,425 @@
+{
+  "sourceCommit": "4f09101deb2427e0510318ffb7c51edf92caf5a5",
+  "cases": [
+    {
+      "frames": 6,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "c122f1697d4432f4da3f62e31cbc367529c168a8e96bb32f47ce788975a5d727"
+    },
+    {
+      "frames": 6,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "d500a17feac4bff336d3525a2f83ac6831a70233acc32840fa6f1310cd6f8e90"
+    },
+    {
+      "frames": 6,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "794e6f4f8806c455ce584ba55ebc45ee1135e2901a50330c8ddfe753a956dcec"
+    },
+    {
+      "frames": 6,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "789f7728cbbe7768aa66ef15f836e05cd3a07fb8f1db521762b7163016710ff5"
+    },
+    {
+      "frames": 6,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "7ec86da0b9f711c60795388610b31dd3a56dd0cc5e7796f87b22d36b0c884fc0"
+    },
+    {
+      "frames": 6,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "45e0582ccc0f2944625a66f8ebef2f10739d7dca0a2fb2c5d89e145fa6cf4b73"
+    },
+    {
+      "frames": 49,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "2e7b262cbbdcf68ebbc7bc7bf5e830cc4b62d8eae2b0517dabc47f9a02f465cf"
+    },
+    {
+      "frames": 49,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "ab5f90b63e015d00f0eeeeedf63b81d97e870f4f64b30290efb3500ca4b0a309"
+    },
+    {
+      "frames": 49,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "19e5c7c8b0b9a16b22e85adf01fc435a86a39a8ae7cd8a62415ab7e339b8d886"
+    },
+    {
+      "frames": 49,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "65bf69699469589326b34f158601568fdde763ee29ec3b3923b1be3612197d82"
+    },
+    {
+      "frames": 49,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "b977ddcf2bea5915ec5844a0d884768134825aa5b5f9418435e1b34a49809def"
+    },
+    {
+      "frames": 49,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "5389060102930dce7fab200b7d34cdb2e6ba3f5c67fa3ad69704048d76861d74"
+    },
+    {
+      "frames": 124,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "58ebfd2bfc1890a3b2c1a12e22eec803b4ca7fe51a28e62d042cf0824f0d3cfe"
+    },
+    {
+      "frames": 124,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "d261001c45000e9d85605a206ab18f7aff61c65827dbce1481ce1cfbb65e52ee"
+    },
+    {
+      "frames": 124,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "bad40a4972f203bbfd22d6faa6c9a2d1de5043883cf6fbe9cbbc84a9d4f5fbac"
+    },
+    {
+      "frames": 124,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "23bc5504ead000c1b1a15f096f80fe7b57e70d95271f70a5016866ae8fc177ec"
+    },
+    {
+      "frames": 124,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "45091199140443e128822d92675dcabab45b6f05feaff263a934cd06b1310d12"
+    },
+    {
+      "frames": 124,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "106b6d797fe87b1afa831816c065a6f36fc8dd9fcef357cc9213e869106f65a7"
+    },
+    {
+      "frames": 125,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "07159cd11ad5c88b446da40d0ffbaf771aee2041e71d1ef24cd47f3f44e63035"
+    },
+    {
+      "frames": 125,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "f8972a646e0d6f2e7cfcff876cadbcc2e07ec54a0f6fca30951bf0ff1cc602f3"
+    },
+    {
+      "frames": 125,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "dfbf0a23b1b2bcd8d3638b876fdd93086645913a336c3024fb7fa6a8f54e7835"
+    },
+    {
+      "frames": 125,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "502f40e46f0430bda590781936d3d2a32a098fa37b2554f7e17e8cc8bf1822bd"
+    },
+    {
+      "frames": 125,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "6421d8a9e0c34b89ed81073fd8806ee4af9d5820d8c548566e76174762cff577"
+    },
+    {
+      "frames": 125,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "a46d1a459bd8424bce79f26b6ad2dba7d794ce8040d4f714bf97333b4cdbd8b5"
+    },
+    {
+      "frames": 243,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "6e0315961eda8eec76ac5ee7deaf0a3953ebf32b5bec5372c07e75f9902721f7"
+    },
+    {
+      "frames": 243,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "8fea10fc3a9c564ca2b55f11f37bf57dfc9788f8c227f639a9eddcd6fbcb1c78"
+    },
+    {
+      "frames": 243,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "955435018dc62751bbad941aa17194f93488fa5b08e720f251b9578e84fa5b15"
+    },
+    {
+      "frames": 243,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "d217ff5803f7666d08a58f061ce3ec42915228842ffe44fb391d5482c9e0d207"
+    },
+    {
+      "frames": 243,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "649b0d6d4b85908e03b92dfa086d6b2acbf7cf6b3e190811be70a927979ae5a3"
+    },
+    {
+      "frames": 243,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "9e8b1d8fecc13ce6de943406f54613d26351613398f6b4ac9fe94adcd9295186"
+    },
+    {
+      "frames": 244,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "12b615df1afa7e4b752e8f64ca4f19bd5c6c877e99064f9449e48c2e72f31321"
+    },
+    {
+      "frames": 244,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "1e82dbfb87c59ef719cd28682a800dad5cd20dc5d10fbe89777fe1102a43a11e"
+    },
+    {
+      "frames": 244,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "eb868c776b8363099b0f25160c9c5d4674c3f686ac4ec09bc44439247cd60b46"
+    },
+    {
+      "frames": 244,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "43c43f6fd8fbaf2c47a3ff519957400e9b70f0f5cd67ebe49fe5cd97fec1d7ba"
+    },
+    {
+      "frames": 244,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "b044bce93281b2cfab288016a65e2ebbe725ce0f4e995aaaa8acfde61b4d84a1"
+    },
+    {
+      "frames": 244,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "b18edc26fdf6baffd45b5ceff68c8d5f03d45c71d7b43135da98b8afe16123d8"
+    },
+    {
+      "frames": 362,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "fb0fdfd7d93aa14d3f411d22ae7b27560dba46519c813c1652271fcee81350ef"
+    },
+    {
+      "frames": 362,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "6e706e0c20d6092806354ea98ca32e438902f9c72636a4f83444f30bf70052fe"
+    },
+    {
+      "frames": 362,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "547f5752cceb268edb1b8dfbc5758be65514657638faba8aca8938b70d74fbdf"
+    },
+    {
+      "frames": 362,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "8a8759b45cff780129b59c7c8f48f8834bc122788342f7d149bf533b4d30e43f"
+    },
+    {
+      "frames": 362,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "8a969771e27a6d98f435274c334c1658546df8fc6cee344c8329374d792a8215"
+    },
+    {
+      "frames": 362,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "b3cd3a9c16bfcf06a57a9ccfc3db1eee5fbb4d3fea22c7d5e8ac6d9784706c9c"
+    },
+    {
+      "frames": 363,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "71fa0be55e3c86f9228ebe58f983754bb4944a98a47b17dec385568e2ac10d47"
+    },
+    {
+      "frames": 363,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "b2e2e745650cf89f8b9d268524c69d86bad52154114e99d39b942fa1efdb0a22"
+    },
+    {
+      "frames": 363,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "fbf403739a4960df27636faa7d5ce37c4055dfbbf1f2dff198df3a64623ef8c1"
+    },
+    {
+      "frames": 363,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "2e63a8883d8f62e91f408259919eaf7b166db0b5a42c21c5a0f1efd3f56fad80"
+    },
+    {
+      "frames": 363,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "c00398d078134f1fce0eab571f62f62562c71e8e7d823f450dd90256870610a6"
+    },
+    {
+      "frames": 363,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "153f02d95c90bd22e225199d13473e3b2e63c8a7fcfa6142ae4a3e06dce96587"
+    },
+    {
+      "frames": 463,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "185c3e9b73cce90a76ad4dceccebc14e21e690d69d7495cfe921116ccdda6f03"
+    },
+    {
+      "frames": 463,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "eb9abd490c9379198116e1663b14cf208cd8319737f1a8203c7e753e82805739"
+    },
+    {
+      "frames": 463,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "961a971f17dbc222e20aa51712e3f1dc6bbc33367493756adff06c1310305365"
+    },
+    {
+      "frames": 463,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "04a57878fcfe51d6370b01321142dd48423d04c5c974060a41fa75fd2ed45a6f"
+    },
+    {
+      "frames": 463,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "3e99e8f803dfb891f68504c1874d74fc92327ab16d7f3e6d5fc9c0e5d04d91c2"
+    },
+    {
+      "frames": 463,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "f02aec04523c218d013f270d21fa6b2dd36454c435c5ff445fa97ab0f1835042"
+    },
+    {
+      "frames": 1441,
+      "audio": false,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "4d7ef83ec7e999bb34be553ec598f341d9007e77dd7b50fcd96f3260c7e58f48"
+    },
+    {
+      "frames": 1441,
+      "audio": false,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "2a52eaa9bb9ac2f3c58dbf5f5eaa317b53cf511eaac1430786a921c846064554"
+    },
+    {
+      "frames": 1441,
+      "audio": false,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "59ceba1bbf49cb8ffe751d66f0e0fd23f133a08bd208b78ceb422639c639957e"
+    },
+    {
+      "frames": 1441,
+      "audio": true,
+      "width": 1080,
+      "height": 1920,
+      "sha256": "a0ed4528b6e047008d738db191a5928a91c6c00b20c79da541048f0cdfeb913e"
+    },
+    {
+      "frames": 1441,
+      "audio": true,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "6b1f7f6e18bc6f63da2fc14ce168a678f97067ecbeb89bf14ec8ee74e528b359"
+    },
+    {
+      "frames": 1441,
+      "audio": true,
+      "width": 1080,
+      "height": 1080,
+      "sha256": "c009c094e62869e6a1686204cf6093d8b87a7ad4540b61176a80b9344984d04b"
+    }
+  ]
+}

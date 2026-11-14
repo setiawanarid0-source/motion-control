@@ -3,6 +3,7 @@ const state = {
   image: null, video: null, videoDuration: 0, task: null, pollTimer: null, elapsedTimer: null, startedAt: null,
   historyPollTimer: null, historyClockTimer: null, historyPollBusy: false, historyFilter: 'all',
   registeredTaskIds: new Set(), submission:null, submissionTimer:null, submissionPolling:false,
+  akatzExpression:true,
 };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -268,7 +269,7 @@ function updateGenerate(){
 function workflowName(){
   if(state.workflow==='motionflyHD')return 'MotionFly · 1080 HD + ZIP';
   if(state.workflow==='minimaxH3AkatzV3')return 'MiniMax H3 · Akatz v3 · 1080p';
-  if(state.workflow==='minimaxH3Akatz')return 'MiniMax H3 · Akatz V1.5 Native · 1080p';
+  if(state.workflow==='minimaxH3Akatz')return 'MiniMax H3 · Akatz V1.5 Native · 1080p'+(state.akatzExpression?' · Uji mimik':' · Versi sebelumnya');
   if(state.workflow==='minimaxH3')return 'MiniMax H3 · Motion Control · 1080p';
   if(state.workflow==='rife60')return 'RIFE Adaptive · hingga 60 FPS';
   return 'Current Workflow';
@@ -499,9 +500,11 @@ async function generate(){
     return;
   }
   const fd=new FormData();
+  if(state.workflow==='minimaxH3Akatz')state.akatzExpression=$('#akatzExpression')?.value==='expression';
   if(state.workflow!=='rife60')fd.append('referenceImage',state.image);
   fd.append('videoReference',state.video);
   fd.append('workflow',state.workflow);
+  if(state.workflow==='minimaxH3Akatz')fd.append('akatzExpression',state.akatzExpression?'true':'false');
   fd.append('mode',state.mode);
   fd.append('accountId',$('#accountSelect').value||'auto');
   // Stop the old single-task Live panel poll before showing a new upload.
@@ -1121,7 +1124,9 @@ document.querySelector('.akatz-editor-download')?.addEventListener('click',async
   if(link.getAttribute('aria-busy')==='true')return;
   link.setAttribute('aria-busy','true');let url;
   try{
+    state.akatzExpression=$('#akatzExpression')?.value==='expression';
     const endpoint=new URL(link.href,location.href);
+    endpoint.searchParams.set('akatzExpression',state.akatzExpression?'true':'false');
     if(Number.isFinite(state.videoDuration)&&state.videoDuration>0){
       endpoint.searchParams.set('frames',String(Math.max(6,Math.round(state.videoDuration*24))));
       const photo=$('#imagePreview')?.querySelector('img');
@@ -1132,7 +1137,8 @@ document.querySelector('.akatz-editor-download')?.addEventListener('click',async
     const workflow=await response.json();
     if(!Array.isArray(workflow.nodes)||!Array.isArray(workflow.links))throw Error('File workflow belum valid.');
     url=URL.createObjectURL(new Blob([JSON.stringify(workflow,null,2)+'\n'],{type:'application/json'}));
-    const save=document.createElement('a');save.href=url;save.download=link.download;
+    const save=document.createElement('a');save.href=url;save.download=state.akatzExpression?
+      'VANTA_AKATZ_UJI_MIMIK_RUNNINGHUB.json':link.download;
     document.body.append(save);save.click();save.remove();toast('Workflow diunduh.');
   }catch(error){toast(error.message||'Unduhan workflow gagal.',true);}
   finally{link.removeAttribute('aria-busy');if(url)setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -1140,6 +1146,12 @@ document.querySelector('.akatz-editor-download')?.addEventListener('click',async
 
 function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.preventDefault();label.classList.add('dragover')});label.addEventListener('dragleave',()=>label.classList.remove('dragover'));label.addEventListener('drop',e=>{e.preventDefault();label.classList.remove('dragover');const f=e.dataTransfer.files?.[0];if(f)setMedia(kind,f)});input.onchange=()=>{const f=input.files?.[0];if(f)setMedia(kind,f)};}
 
+$('#akatzExpression')?.addEventListener('change',event=>{
+  state.akatzExpression=event.target.value==='expression';
+  $('#akatzExpressionStatus').textContent=state.akatzExpression?
+    'Uji mimik aktif. Panduan wajah dari video dipindahkan ke karakter foto. Hasil visual menunggu tes Anda.':
+    'Versi sebelumnya aktif untuk membandingkan hasil dengan uji mimik.';
+});
 $$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');
 $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $$('.workflow-card').forEach(x=>x.classList.remove('selected'));

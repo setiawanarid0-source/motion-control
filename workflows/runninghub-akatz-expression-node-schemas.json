@@ -1,0 +1,1002 @@
+{
+  "provenance": {
+    "url": "https://www.runninghub.ai/object_info",
+    "retrievedAt": "2026-11-14T12:13:23.198629Z",
+    "rawSha256": "f31680048b41e5cacec541c0d93aa3a4cebf659ab05be1a3c9eb4da9c9fb759a",
+    "cropperSource": "Carasibana/ComfyUI-H3-FaceRefine@d8521d14fe0d721d80cd9417fff5a559cbc21aba",
+    "livePortraitSource": "kijai/ComfyUI-LivePortraitKJ@4d9dc6205b793ffd0fb319816136d9b8c0dbfdff",
+    "scope": "Selected editor definitions; detector options limited to the selected face model. Not GPU qualification."
+  },
+  "nodes": {
+    "DownloadAndLoadLivePortraitModels": {
+      "input": {
+        "required": {},
+        "optional": {
+          "precision": [
+            [
+              "fp16",
+              "fp32",
+              "auto"
+            ],
+            {
+              "default": "auto"
+            }
+          ],
+          "mode": [
+            [
+              "human",
+              "animal"
+            ]
+          ]
+        }
+      },
+      "input_order": {
+        "required": [],
+        "optional": [
+          "precision",
+          "mode"
+        ]
+      },
+      "output": [
+        "LIVEPORTRAITPIPE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "live_portrait_pipe"
+      ],
+      "name": "DownloadAndLoadLivePortraitModels",
+      "display_name": "(Down)Load LivePortraitModels",
+      "description": "",
+      "python_module": "custom_nodes.ComfyUI-LivePortrait",
+      "category": "LivePortrait",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "LivePortraitLoadMediaPipeCropper": {
+      "input": {
+        "required": {
+          "landmarkrunner_onnx_device": [
+            [
+              "CPU",
+              "CUDA",
+              "ROCM",
+              "CoreML",
+              "torch_gpu"
+            ],
+            {
+              "default": "CPU"
+            }
+          ],
+          "keep_model_loaded": [
+            "BOOLEAN",
+            {
+              "default": true
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "landmarkrunner_onnx_device",
+          "keep_model_loaded"
+        ]
+      },
+      "output": [
+        "LPCROPPER"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "cropper"
+      ],
+      "name": "LivePortraitLoadMediaPipeCropper",
+      "display_name": "LivePortrait Load MediaPipeCropper",
+      "description": "",
+      "python_module": "custom_nodes.ComfyUI-LivePortrait",
+      "category": "LivePortrait",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "LivePortraitCropper": {
+      "input": {
+        "required": {
+          "pipeline": [
+            "LIVEPORTRAITPIPE"
+          ],
+          "cropper": [
+            "LPCROPPER"
+          ],
+          "source_image": [
+            "IMAGE"
+          ],
+          "dsize": [
+            "INT",
+            {
+              "default": 512,
+              "min": 64,
+              "max": 2048
+            }
+          ],
+          "scale": [
+            "FLOAT",
+            {
+              "default": 2.3,
+              "min": 1.0,
+              "max": 4.0,
+              "step": 0.01
+            }
+          ],
+          "vx_ratio": [
+            "FLOAT",
+            {
+              "default": 0.0,
+              "min": -1.0,
+              "max": 1.0,
+              "step": 0.001
+            }
+          ],
+          "vy_ratio": [
+            "FLOAT",
+            {
+              "default": -0.125,
+              "min": -1.0,
+              "max": 1.0,
+              "step": 0.001
+            }
+          ],
+          "face_index": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "face_index_order": [
+            [
+              "large-small",
+              "left-right",
+              "right-left",
+              "top-bottom",
+              "bottom-top",
+              "small-large",
+              "distance-from-retarget-face"
+            ]
+          ],
+          "rotate": [
+            "BOOLEAN",
+            {
+              "default": true
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "pipeline",
+          "cropper",
+          "source_image",
+          "dsize",
+          "scale",
+          "vx_ratio",
+          "vy_ratio",
+          "face_index",
+          "face_index_order",
+          "rotate"
+        ]
+      },
+      "output": [
+        "IMAGE",
+        "CROPINFO"
+      ],
+      "output_is_list": [
+        false,
+        false
+      ],
+      "output_name": [
+        "cropped_image",
+        "crop_info"
+      ],
+      "name": "LivePortraitCropper",
+      "display_name": "LivePortrait Cropper",
+      "description": "",
+      "python_module": "custom_nodes.ComfyUI-LivePortrait",
+      "category": "LivePortrait",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "LivePortraitProcess": {
+      "input": {
+        "required": {
+          "pipeline": [
+            "LIVEPORTRAITPIPE"
+          ],
+          "crop_info": [
+            "CROPINFO",
+            {
+              "default": {}
+            }
+          ],
+          "source_image": [
+            "IMAGE"
+          ],
+          "driving_images": [
+            "IMAGE"
+          ],
+          "lip_zero": [
+            "BOOLEAN",
+            {
+              "default": false
+            }
+          ],
+          "lip_zero_threshold": [
+            "FLOAT",
+            {
+              "default": 0.03,
+              "min": 0.001,
+              "max": 4.0,
+              "step": 0.001
+            }
+          ],
+          "stitching": [
+            "BOOLEAN",
+            {
+              "default": true
+            }
+          ],
+          "delta_multiplier": [
+            "FLOAT",
+            {
+              "default": 1.0,
+              "min": -100.0,
+              "max": 100.0,
+              "step": 0.001
+            }
+          ],
+          "mismatch_method": [
+            [
+              "constant",
+              "cycle",
+              "mirror",
+              "cut"
+            ],
+            {
+              "default": "constant"
+            }
+          ],
+          "relative_motion_mode": [
+            [
+              "relative",
+              "source_video_smoothed",
+              "relative_rotation_only",
+              "single_frame",
+              "off"
+            ]
+          ],
+          "driving_smooth_observation_variance": [
+            "FLOAT",
+            {
+              "default": 3e-06,
+              "min": 1e-11,
+              "max": 0.01,
+              "step": 1e-11
+            }
+          ]
+        },
+        "optional": {
+          "opt_retargeting_info": [
+            "RETARGETINGINFO",
+            {
+              "default": null
+            }
+          ],
+          "expression_friendly": [
+            "BOOLEAN",
+            {
+              "default": false
+            }
+          ],
+          "expression_friendly_multiplier": [
+            "FLOAT",
+            {
+              "default": 1.0,
+              "min": 0.01,
+              "max": 100.0,
+              "step": 0.001
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "pipeline",
+          "crop_info",
+          "source_image",
+          "driving_images",
+          "lip_zero",
+          "lip_zero_threshold",
+          "stitching",
+          "delta_multiplier",
+          "mismatch_method",
+          "relative_motion_mode",
+          "driving_smooth_observation_variance"
+        ],
+        "optional": [
+          "opt_retargeting_info",
+          "expression_friendly",
+          "expression_friendly_multiplier"
+        ]
+      },
+      "output": [
+        "IMAGE",
+        "LP_OUT"
+      ],
+      "output_is_list": [
+        false,
+        false
+      ],
+      "output_name": [
+        "cropped_image",
+        "output"
+      ],
+      "name": "LivePortraitProcess",
+      "display_name": "LivePortrait Process",
+      "description": "",
+      "python_module": "custom_nodes.ComfyUI-LivePortrait",
+      "category": "LivePortrait",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "H3FaceTrackCrop": {
+      "input": {
+        "required": {
+          "images": [
+            "IMAGE"
+          ],
+          "detector": [
+            [
+              "face_yolov8m.pt"
+            ]
+          ],
+          "confidence": [
+            "FLOAT",
+            {
+              "default": 0.35,
+              "min": 0.05,
+              "max": 0.95,
+              "step": 0.05
+            }
+          ],
+          "crop_factor": [
+            "FLOAT",
+            {
+              "default": 2.5,
+              "min": 1.2,
+              "max": 8.0,
+              "step": 0.1,
+              "tooltip": "Crop side as a multiple of detected face HEIGHT. 2.5 puts the face at ~40% of the crop, comfortably inside H3's good regime. Bigger = more context so the seam lands in hair/background, but less magnification. 2.0-3.0 is the useful range."
+            }
+          ],
+          "canvas_width": [
+            "INT",
+            {
+              "default": 768,
+              "min": 128,
+              "max": 1344,
+              "step": 32,
+              "tooltip": "Resolution H3 generates at. 768 is H3's native short edge and the default here; 512 is cheaper. In manual mode this is used exactly as typed, high or low. Ignored when canvas_mode is not 'manual', where the canvas comes from the crop instead and never falls below 512x512. Cost scales with area: 768 is 2.25x the latent tokens of 512."
+            }
+          ],
+          "canvas_height": [
+            "INT",
+            {
+              "default": 768,
+              "min": 128,
+              "max": 1344,
+              "step": 32
+            }
+          ],
+          "canvas_mode": [
+            [
+              "manual",
+              "auto_no_downscale",
+              "auto_capped_768"
+            ],
+            {
+              "default": "manual",
+              "tooltip": "manual: use canvas_width/height as given.\nauto_no_downscale: size the canvas from the LARGEST crop in the video so no frame is ever downscaled (magnification never drops below 1.0x). Can get expensive on videos that include close-ups.\nauto_capped_768: same, but clamped to 768 - H3's native short edge and a sane VRAM ceiling.\nBoth auto modes clamp UP to a minimum of 512x512, whatever the crop, so a small face in a low-resolution clip is still magnified. manual is not clamped - it uses canvas_width and canvas_height exactly as typed."
+            }
+          ],
+          "smooth_window": [
+            "INT",
+            {
+              "default": 21,
+              "min": 1,
+              "max": 201,
+              "step": 2,
+              "tooltip": "Frames of smoothing on the crop CENTRE. 21 at 24fps is ~0.9s. Raise if the box still shivers; lower if it lags behind fast head movement."
+            }
+          ],
+          "size_smooth_window": [
+            "INT",
+            {
+              "default": 51,
+              "min": 1,
+              "max": 201,
+              "step": 2,
+              "tooltip": "Frames of smoothing on the crop SIZE. Wants MORE than the centre: size jitter makes the crop breathe, which changes the resample factor every frame and reads as shimmer. Real zoom moves are slow, so heavy smoothing here costs nothing."
+            }
+          ],
+          "smooth_method": [
+            [
+              "gaussian",
+              "savgol",
+              "moving_average"
+            ],
+            {
+              "default": "gaussian",
+              "tooltip": "gaussian: best jitter rejection. savgol: preserves the shape of a push-in better at large windows. moving_average: the old boxcar, leaves residual jitter."
+            }
+          ],
+          "size_mode": [
+            [
+              "max_of_clip",
+              "per_frame"
+            ],
+            {
+              "default": "per_frame",
+              "tooltip": "per_frame: constant face-fraction in every crop (correct for push-ins). max_of_clip: one size for the whole video, only useful when the shot is genuinely static."
+            }
+          ]
+        },
+        "optional": {
+          "identity_reference": [
+            "IMAGE",
+            {
+              "tooltip": "A clear face image of the person to track. When supplied, the subject is chosen by FACE IDENTITY rather than by size, so a crowd scene locks onto the right person even when someone else is briefly larger or nearer.\n\nOPTIONAL on this node. identity_track works without it: the anchor is then built FROM THE CLIP, off frames where one face clearly dominates, which is usually the better anchor since a stylised reference sits in a different domain. Supply one only to name a specific person.\n\nRead only while identity_track is ON. With it off this input is ignored, and the report says so.\n\nWithout either, 'largest_face' has no notion of WHO it is following - it just takes the biggest box each frame, which switches subject whenever the framing changes.\n\nFOR MULTIPLE PEOPLE: run the pipeline once per subject, each with that person's reference here and their own refs on the H3 node, and chain them - feed run 1's stitched output in as run 2's base_images. The composites accumulate."
+            }
+          ],
+          "identity_track": [
+            "BOOLEAN",
+            {
+              "default": true,
+              "tooltip": "Hold one subject through a crowd. Continuity (nearest box to the previous position) decides most frames; the face-identity embedding is consulted only when two candidates are similarly plausible or their boxes overlap - which is both the accurate and the cheap arrangement, since the embedding model then runs on a handful of frames instead of all of them. The anchor is taken FROM THE CLIP by default (frames where one face clearly dominates), because an external stylised reference sits in a different domain - measured similarity between an illustration and a render of the same character was only 0.305, where same-domain faces score 0.5-0.7.\n\nThis switch also gates identity_reference: with it OFF a connected reference is not read at all, and the subject is chosen by select instead. The report says so when that happens."
+            }
+          ],
+          "identity_threshold": [
+            "FLOAT",
+            {
+              "default": 0.28,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.01,
+              "tooltip": "Minimum score to accept a face as the reference person. Below this the frame falls back to continuity (nearest to the previous position at a similar size), which is what carries tracking through profiles and partial occlusion where embeddings become unreliable.\nThe scale depends on identity_model. 0.28 suits insightface cosine; clip_vision sits much higher (~0.80) because its similarities are compressed.\nSET 0 to use whichever default the chosen model recommends. The report prints the scores actually seen, so it can be tuned from evidence rather than guessed."
+            }
+          ],
+          "select": [
+            [
+              "largest_face",
+              "smallest_face",
+              "left_most",
+              "right_most",
+              "top_most",
+              "bottom_most",
+              "centre_most",
+              "closest_to_xy",
+              "detector_score"
+            ],
+            {
+              "default": "largest_face",
+              "tooltip": "How the subject is chosen. It is chosen ONCE per shot, on the first frame that holds it, and continuity follows that same face from there - it is NOT re-ranked each frame. A subject who walks from the left of frame to the right while someone else crosses the other way is still tracked correctly.\n\nlargest_face / smallest_face: biggest or smallest face by height.\nleft_most / right_most / top_most / bottom_most: by the CENTRE of the face box.\ncentre_most: nearest the centre of the frame.\nclosest_to_xy: nearest the X, Y you give, measured on frame_index.\ndetector_score: the detection the detector is most confident about.\n\nAT A HARD CUT a rank means nothing across the join - everyone is renumbered. With cut_detection ON, each shot chooses again by this rule, so a cut can land on a different person. With it OFF the video counts as one shot and continuity runs straight through a real cut onto whichever face is nearest the last position, which may be anyone.\n\nTo hold one person across cuts, wire identity_reference, or choose the face in H3 Load Video + Face Select.\n\nUsed only when no identity_reference is connected."
+            }
+          ],
+          "fallback_detector": [
+            [
+              "none"
+            ],
+            {
+              "default": "none",
+              "tooltip": "Used only on frames where the FACE detector finds nothing (subject turned away). A person/body model such as segm\\person_yolov8m-seg.pt gives a real head position from the top of the body box, which beats interpolating blindly between the last and next face. Set 'none' to interpolate instead."
+            }
+          ],
+          "fallback_head_frac": [
+            "FLOAT",
+            {
+              "default": 0.5,
+              "min": 0.0,
+              "max": 1.5,
+              "step": 0.05,
+              "tooltip": "Head centre as a multiple of face height below the top of the person box. 0.5 puts it half a face-height down, which is about right for a head seen from behind."
+            }
+          ],
+          "select_index": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 63,
+              "tooltip": "Which face in that ranking to track. 0 is the first, 1 the second, and so on.\nThe subject is locked on the first frame that actually contains this index, so a video that opens on one face and only later shows a crowd still finds face 1. Frames before that lock-on are interpolated from it and faded out of the composite, the same as a detection dropout; the report counts them. Clamped, with a warning in the report, if the video never shows that many faces at once. Ignored entirely when identity_reference is connected.\nH3 Load Video + Face Select shows the faces numbered, if you need to see which number is who."
+            }
+          ],
+          "identity_model": [
+            [
+              "insightface",
+              "clip_vision"
+            ],
+            {
+              "default": "insightface",
+              "tooltip": "Which model decides that two faces are the same person.\ninsightface: ArcFace/buffalo_l. Photographed human faces. It reaches faces through its OWN detector, which does not fire on illustration - so on anime it finds no candidates at all and tracking quietly falls back to continuity.\nclip_vision: ComfyUI's CLIP vision, wired into identity_clip_vision from a CLIPVisionLoader. No extra install, works on any domain - anime, 3D, stylised - but it describes appearance rather than identity, so two characters with a similar palette can collide.\nPair CLIP vision with an anime face detector for illustration. The implicit-download CCIP backend is disabled on RH."
+            }
+          ],
+          "cut_detection": [
+            [
+              "none",
+              "auto (pyscenedetect)"
+            ],
+            {
+              "default": "none",
+              "tooltip": "Hard-cut detection, so the crop is not smoothed ACROSS a cut.\nnone: off. Correct for single-shot videos, which is what H3 generates.\nauto: split at the cuts and treat each shot as its own window for the smoothing, interpolation and composite fade. The canvas is still sized once for the whole video."
+            }
+          ],
+          "cut_threshold": [
+            "FLOAT",
+            {
+              "default": 3.0,
+              "min": 0.5,
+              "max": 20.0,
+              "step": 0.25,
+              "tooltip": "How far a frame has to stand out from its NEIGHBOURS to count as a cut. 3.0 is PySceneDetect's adaptive default.\nLower catches more and risks splitting a continuous shot, which costs smoothing on both sides. Higher takes only unambiguous cuts.\nOnly used when cut detection is on. The report says how many cuts were found and where, so tune it from that."
+            }
+          ],
+          "identity_clip_vision": [
+            "CLIP_VISION",
+            {
+              "tooltip": "A CLIP vision model from a CLIPVisionLoader, used only when identity_model is clip_vision. Any of the usual ComfyUI clip_vision checkpoints works; the bigger ViT-L/H models separate characters better than the small ones."
+            }
+          ],
+          "absent_shots": [
+            [
+              "off",
+              "by_identity"
+            ],
+            {
+              "default": "off",
+              "tooltip": "Find shots the subject is not in, so they are not rendered at all.\nby_identity: a shot where no sampled face matches the identity anchor above identity_threshold is treated as not containing the subject. Its frames keep their original pixels and drop out of the batch. Needs identity matching to be working - it does nothing without an anchor.\nSampled, not exhaustive, so a brief appearance can be missed. The report names every shot it drops and the score it saw."
+            }
+          ],
+          "X": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 16384,
+              "step": 1,
+              "tooltip": "Only used by select=closest_to_xy.\n\nHorizontal position in PIXELS of the source video frame, measured from the TOP-LEFT corner, increasing to the right. On a 960x544 clip, 0 is the left edge, 960 the right, 480 the middle.\n\nThe point does not have to sit on a face: the nearest face CENTRE wins, however far away it is."
+            }
+          ],
+          "Y": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 16384,
+              "step": 1,
+              "tooltip": "Only used by select=closest_to_xy.\n\nVertical position in PIXELS of the source video frame, measured from the TOP-LEFT corner, increasing DOWNWARD. On a 960x544 clip, 0 is the top edge, 544 the bottom, 272 the middle."
+            }
+          ],
+          "frame_index": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 999999,
+              "step": 1,
+              "tooltip": "Only used by select=closest_to_xy.\n\nThe frame the X, Y measurement is taken on, counting from 0 for the FIRST frame. It counts the frames this node loaded, so with skip_first_frames or select_every_nth set it counts from the first frame kept, not the first frame of the file.\n\nThe face found there is followed forwards and backwards through its shot, so pick a frame where the subject is clearly visible rather than one the detector may miss them on."
+            }
+          ],
+          "face_pick": [
+            "H3FACEPICK",
+            {
+              "tooltip": "The subject chosen upstream by H3 Load Video + Face Select.\nDecides who to follow, per shot, and carries the boxes and shot boundaries with it so this node does not detect the video again. select, select_index, cut_detection and cut_threshold are then unused, and detector and confidence are too unless a fallback_detector or a crop-based identity_model still needs them - they are then unused - the report names the detector that actually produced the boxes."
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "images",
+          "detector",
+          "confidence",
+          "crop_factor",
+          "canvas_width",
+          "canvas_height",
+          "canvas_mode",
+          "smooth_window",
+          "size_smooth_window",
+          "smooth_method",
+          "size_mode"
+        ],
+        "optional": [
+          "identity_reference",
+          "identity_track",
+          "identity_threshold",
+          "select",
+          "fallback_detector",
+          "fallback_head_frac",
+          "select_index",
+          "identity_model",
+          "cut_detection",
+          "cut_threshold",
+          "identity_clip_vision",
+          "absent_shots",
+          "X",
+          "Y",
+          "frame_index",
+          "face_pick"
+        ]
+      },
+      "output": [
+        "IMAGE",
+        "H3FACEXFORM",
+        "IMAGE",
+        "STRING",
+        "INT",
+        "INT",
+        "INT"
+      ],
+      "output_is_list": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "output_name": [
+        "crops",
+        "transform",
+        "preview",
+        "report",
+        "canvas_w",
+        "canvas_h",
+        "frame_count"
+      ],
+      "name": "H3FaceTrackCrop",
+      "display_name": "H3 Face Track + Crop",
+      "description": "Per-frame face track -> smoothed, normalised crop -> constant-size batch for H3, plus the transform needed to paste the result back.",
+      "python_module": "custom_nodes.ComfyUI-H3-FaceRefine",
+      "category": "MiniMax H3/Face Refine",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "MiniMaxH3ReferenceToVideo": {
+      "input": {
+        "required": {
+          "clip": [
+            "CLIP",
+            {}
+          ],
+          "prompt": [
+            "STRING",
+            {
+              "multiline": true,
+              "dynamicPrompts": true
+            }
+          ],
+          "width": [
+            "INT",
+            {
+              "default": 1344,
+              "min": 32,
+              "max": 16384,
+              "step": 32
+            }
+          ],
+          "height": [
+            "INT",
+            {
+              "default": 768,
+              "min": 32,
+              "max": 16384,
+              "step": 32
+            }
+          ],
+          "length": [
+            "INT",
+            {
+              "tooltip": "Frame count at 24 fps, (124 = ~5s, trained range is ~124-362)",
+              "default": 124,
+              "min": 5,
+              "max": 3600,
+              "step": 17
+            }
+          ],
+          "ref_image_size": [
+            "COMBO",
+            {
+              "tooltip": "Reference image sizing. 'match' scales each ref (down only, keeping aspect) to the generation's pixel area; 'max' uses the reference pipeline's 2048px short edge for best identity fidelity. Reference tokens ride through every sampling step, so 'max' can be several times slower.",
+              "default": "match",
+              "multiselect": false,
+              "options": [
+                "match",
+                "max"
+              ]
+            }
+          ]
+        },
+        "optional": {
+          "vae": [
+            "VAE",
+            {
+              "tooltip": "Video VAE. Without it reference images/videos only condition the text encoder."
+            }
+          ],
+          "audio_vae": [
+            "VAE",
+            {
+              "tooltip": "Audio VAE. Without it reference audio only conditions the text encoder."
+            }
+          ],
+          "ref_images": [
+            "COMFY_AUTOGROW_V3",
+            {
+              "template": {
+                "input": {
+                  "required": {
+                    "ref_image": [
+                      "IMAGE",
+                      {
+                        "tooltip": "Reference image (downscaled to 2048 short edge if larger, never upscaled)"
+                      }
+                    ]
+                  }
+                },
+                "prefix": "ref_image_",
+                "min": 0,
+                "max": 9
+              }
+            }
+          ],
+          "ref_videos": [
+            "COMFY_AUTOGROW_V3",
+            {
+              "template": {
+                "input": {
+                  "required": {
+                    "ref_video": [
+                      "IMAGE",
+                      {
+                        "tooltip": "Reference video frames at 24 fps (2-15s)"
+                      }
+                    ]
+                  }
+                },
+                "prefix": "ref_video_",
+                "min": 0,
+                "max": 3
+              }
+            }
+          ],
+          "ref_video_audios": [
+            "COMFY_AUTOGROW_V3",
+            {
+              "template": {
+                "input": {
+                  "required": {
+                    "ref_video_audio": [
+                      "AUDIO",
+                      {
+                        "tooltip": "Soundtrack of the same-numbered reference video"
+                      }
+                    ]
+                  }
+                },
+                "prefix": "ref_video_audio_",
+                "min": 0,
+                "max": 3
+              }
+            }
+          ],
+          "ref_audios": [
+            "COMFY_AUTOGROW_V3",
+            {
+              "template": {
+                "input": {
+                  "required": {
+                    "ref_audio": [
+                      "AUDIO",
+                      {
+                        "tooltip": "Standalone reference audio"
+                      }
+                    ]
+                  }
+                },
+                "prefix": "ref_audio_",
+                "min": 0,
+                "max": 3
+              }
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "clip",
+          "prompt",
+          "width",
+          "height",
+          "length",
+          "ref_image_size"
+        ],
+        "optional": [
+          "vae",
+          "audio_vae",
+          "ref_images",
+          "ref_videos",
+          "ref_video_audios",
+          "ref_audios"
+        ]
+      },
+      "output": [
+        "CONDITIONING",
+        "LATENT"
+      ],
+      "output_is_list": [
+        false,
+        false
+      ],
+      "output_name": [
+        "positive",
+        "LATENT"
+      ],
+      "name": "MiniMaxH3ReferenceToVideo",
+      "display_name": "MiniMax H3 Reference to Video",
+      "description": "<Picture i> / <Video k> / <Audio j> reference conditioning for MiniMax H3. Use the same tags when prompting.",
+      "python_module": "comfy_extras.nodes_minimax_h3",
+      "category": "model/conditioning/minimax",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null,
+        null
+      ],
+      "api_node": false
+    },
+    "ImageBatch": {
+      "input": {
+        "required": {
+          "image1": [
+            "IMAGE"
+          ],
+          "image2": [
+            "IMAGE"
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "image1",
+          "image2"
+        ]
+      },
+      "output": [
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "IMAGE"
+      ],
+      "name": "ImageBatch",
+      "display_name": "Batch Images (DEPRECATED)",
+      "description": "",
+      "python_module": "nodes",
+      "category": "image/batch",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "deprecated": true
+    },
+    "ImageFromBatch": {
+      "input": {
+        "required": {
+          "image": [
+            "IMAGE",
+            {}
+          ],
+          "batch_index": [
+            "INT",
+            {
+              "default": 0,
+              "min": -16384,
+              "max": 16384
+            }
+          ],
+          "length": [
+            "INT",
+            {
+              "default": 1,
+              "min": 1,
+              "max": 4096
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "image",
+          "batch_index",
+          "length"
+        ]
+      },
+      "output": [
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "IMAGE"
+      ],
+      "name": "ImageFromBatch",
+      "display_name": "Get Image from Batch",
+      "description": "",
+      "python_module": "comfy_extras.nodes_images",
+      "category": "image/batch",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "RepeatImageBatch": {
+      "input": {
+        "required": {
+          "image": [
+            "IMAGE",
+            {}
+          ],
+          "amount": [
+            "INT",
+            {
+              "default": 1,
+              "min": 1,
+              "max": 4096
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "image",
+          "amount"
+        ]
+      },
+      "output": [
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "IMAGE"
+      ],
+      "name": "RepeatImageBatch",
+      "display_name": "Repeat Image Batch",
+      "description": "",
+      "python_module": "comfy_extras.nodes_images",
+      "category": "image/batch",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    }
+  }
+}

@@ -137,6 +137,21 @@ try{
     assert.equal(long['490'].inputs.frame_rate,24);
     assert.deepEqual(Object.entries(long).filter(([,n])=>n.class_type==='MiniMaxH3AddGuide'&&n.inputs.image).map(([id])=>id),['1008']);
   }
+  for(const frames of [49,463]){
+    const before=created.length;
+    await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey:'minimaxH3Akatz',mode:'plus',
+      imageFile:{...media,mimetype:'image/png'},videoFile:media,
+      h3Source:{...source,totalFrames:frames,inferenceProfile:AKATZ_PROFILE,akatzExpression:true}});
+    assert.equal(created.length,before+1,'The expression candidate is still exactly one provider task');
+    const candidate=created.at(-1),windows=Object.values(candidate).filter(n=>n.class_type==='MiniMaxH3ReferenceToVideo');
+    assert.equal(Object.values(candidate).filter(n=>n.class_type==='LivePortraitProcess').length,windows.length);
+    assert.ok(windows.every(n=>n.inputs['ref_videos.ref_video_2']));
+    assert.equal(candidate['490'].inputs.frame_rate,24);
+    assert.ok(!Object.values(candidate).some(n=>n.class_type==='RIFEInterpolation'));
+    assert.equal(candidate['7'].inputs.file_name,'api-lora-usa/'+'3'.repeat(32)+'.safetensors');
+    assert.equal(candidate['6'].inputs.file_name,'api-lora-usa/'+'5'.repeat(32)+'.safetensors');
+    assert.ok(candidate['5108']);
+  }
   const missing=createH3AppearanceModel({dir,asset:{...FFP_ASSET,name:'missing-pinned-model'},
     request:async()=>{throw Error('No API key fallback');},http:{get:async()=>{throw Error('No speculative download');}}});
   await assert.rejects(missing.ensure(key),error=>error.code==='H3_MODEL_PREPARATION_FAILED');
