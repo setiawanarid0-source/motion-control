@@ -1149,7 +1149,7 @@ function initDropzone(label,input,kind){label.addEventListener('dragover',e=>{e.
 $('#akatzExpression')?.addEventListener('change',event=>{
   state.akatzExpression=event.target.value==='expression';
   $('#akatzExpressionStatus').textContent=state.akatzExpression?
-    'Uji mimik aktif. Panduan wajah dari video dipindahkan ke karakter foto. Hasil visual menunggu tes Anda.':
+    'Uji mimik aktif. Panduan wajah kini memakai framing video utuh agar ukuran subjek dan gerak kamera mengikuti video referensi. Hasil visual menunggu tes Anda.':
     'Versi sebelumnya aktif untuk membandingkan hasil dengan uji mimik.';
 });
 $$('.nav-item').forEach(b=>b.onclick=()=>switchView(b.dataset.view));$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');

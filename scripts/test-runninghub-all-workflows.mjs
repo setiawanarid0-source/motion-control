@@ -145,7 +145,13 @@ try{
     assert.equal(created.length,before+1,'The expression candidate is still exactly one provider task');
     const candidate=created.at(-1),windows=Object.values(candidate).filter(n=>n.class_type==='MiniMaxH3ReferenceToVideo');
     assert.equal(Object.values(candidate).filter(n=>n.class_type==='LivePortraitProcess').length,windows.length);
+    assert.equal(Object.values(candidate).filter(n=>n.class_type==='H3FaceStitch').length,windows.length);
     assert.ok(windows.every(n=>n.inputs['ref_videos.ref_video_2']));
+    for(const window of windows){
+      let reference=window.inputs['ref_videos.ref_video_2'];
+      while(candidate[reference[0]].class_type==='ImageBatch')reference=candidate[reference[0]].inputs.image1;
+      assert.equal(candidate[reference[0]].class_type,'H3FaceStitch','Web payload must send restored full frames, never a standalone close-up');
+    }
     assert.equal(candidate['490'].inputs.frame_rate,24);
     assert.ok(!Object.values(candidate).some(n=>n.class_type==='RIFEInterpolation'));
     assert.equal(candidate['7'].inputs.file_name,'api-lora-usa/'+'3'.repeat(32)+'.safetensors');

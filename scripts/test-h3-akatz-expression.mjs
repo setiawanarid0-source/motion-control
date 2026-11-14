@@ -23,7 +23,7 @@ assert.equal(fixture.sourceCommit,'4f09101deb2427e0510318ffb7c51edf92caf5a5');
 // A deterministic motion signal makes a window-local reset distinguishable
 // from the desired global frame-0 reference. No neural inference is simulated.
 const motion=i=>Math.sin(i/13)+Math.cos(i/29)*0.37+(i%7===0?0.21:0);
-function faceTimeline(graph,count){
+function faceTimeline(graph,count,canvas){
   const cache=new Map(),value=v=>edge(v)?out(v[0],v[1]):v;
   function out(id,slot=0){
     const key=id+':'+slot;if(cache.has(key))return cache.get(key);
@@ -31,17 +31,30 @@ function faceTimeline(graph,count){
     if(n.class_type==='LoadImage')r=[{frame:0,identity:'photo',expression:0.4}];
     else if(n.class_type==='VHS_LoadVideo'){
       const start=a.skip_first_frames||0,frames=Math.min(a.frame_load_cap||count,count-start);
-      r=Array.from({length:frames},(_,i)=>({frame:start+i,identity:'video',expression:motion(start+i)}));
+      r=Array.from({length:frames},(_,i)=>({frame:start+i,identity:'video',expression:motion(start+i),
+        canvas,faceBounds:[canvas[0]*(0.3+0.02*Math.sin((start+i)/17)),canvas[1]*0.2,canvas[0]*0.15,canvas[1]*0.12]}));
     }else if(n.class_type==='ImageFromBatch')r=value(a.image).slice(value(a.batch_index),value(a.batch_index)+value(a.length));
     else if(n.class_type==='RepeatImageBatch')r=Array.from({length:value(a.amount)},()=>value(a.image)).flat();
     else if(n.class_type==='ImageBatch')r=[...value(a.image1),...value(a.image2)];
-    else if(n.class_type==='H3FaceTrackCrop')r=value(a.images);
+    else if(n.class_type==='H3FaceTrackCrop'){
+      const frames=value(a.images);
+      r=slot===1?{frames}:frames.map(f=>({...f,canvas:[512,512]}));
+    }
     else if(n.class_type==='LivePortraitCropper')r=slot===1?{appearance:value(a.source_image)[0]}:value(a.source_image);
     else if(n.class_type==='LivePortraitProcess'){
       const driving=value(a.driving_images),photo=value(a.crop_info).appearance;
       assert.equal(driving[0].frame,0,'Every LP call uses the original frame0, including later windows');
       assert.ok(driving.length<=125,'No entire long clip or per-frame source feature bank');
-      r=driving.map(d=>({frame:d.frame,identity:photo.identity,expression:photo.expression+d.expression-driving[0].expression}));
+      r=driving.map(d=>({frame:d.frame,identity:photo.identity,expression:photo.expression+d.expression-driving[0].expression,canvas:[512,512]}));
+    }else if(n.class_type==='H3FaceStitch'){
+      // Interpret the registered stitch contract, not the neural model. A
+      // detached v1 face clip fails the full-frame assertions below.
+      const base=value(a.base_images),faces=value(a.refined_crops),tracked=value(a.transform).frames;
+      assert.equal(faces.length,base.length);assert.equal(tracked.length,base.length);
+      r=base.map((b,i)=>{
+        assert.equal(faces[i].frame,b.frame);assert.equal(tracked[i].frame,b.frame);
+        return {...faces[i],canvas:b.canvas,faceBounds:tracked[i].faceBounds,backgroundFrame:b.frame,frameAligned:true};
+      });
     }else throw Error('Unexpected face timeline node '+n.class_type);
     cache.set(key,r);return r;
   }
@@ -54,13 +67,17 @@ for(const test of fixture.cases){
   assert.equal(sha(baseline),test.sha256,'Legacy payload must remain byte-for-byte identical');
   assert.equal(sha(disabled),test.sha256,'Selecting the previous version must restore the exact baseline');
   const candidateSource={...source,akatzExpression:true},g=build(candidateSource),parts=turbo8TemporalPlan(source).segments;
-  const input=faceTimeline(g,source.totalFrames),plan=turbo8ExecutionPlan(candidateSource);
+  const canvas=[source.canvasWidth,source.canvasHeight];
+  const input=faceTimeline(g,source.totalFrames,canvas),plan=turbo8ExecutionPlan(candidateSource);
   assert.equal(plan.revision,AKATZ_EXPRESSION_REVISION);assert.equal(plan.applicationMaxSeconds,null);
   assert.equal(plan.expressionControl.globalDrivingAnchorFrame,0);
   assert.equal(plan.expressionControl.gpuExecutionQualified,false);
   assert.equal(plan.expressionControl.hardPerFrameFacialControl,false);
+  assert.deepEqual(plan.expressionControl.referenceVideoSize,canvas);
+  assert.equal(plan.expressionControl.framingRestoration.detachedCropReference,false);
   assert.equal(Object.values(g).filter(n=>n.class_type==='LivePortraitCropper').length,1);
   assert.equal(Object.values(g).filter(n=>n.class_type==='LivePortraitProcess').length,parts.length);
+  assert.equal(Object.values(g).filter(n=>n.class_type==='H3FaceStitch').length,parts.length);
   assert.equal(Object.values(g).filter(n=>n.class_type==='SamplerCustomAdvanced').length,parts.length);
   for(const [id,n] of Object.entries(baseline)){
     if(['TextGenerate','StringConcatenate','MiniMaxH3ReferenceToVideo'].includes(n.class_type))continue;
@@ -70,11 +87,22 @@ for(const test of fixture.cases){
     const reference=g[String(s.base+5)];
     assert.deepEqual(reference.inputs['ref_videos.ref_video_1'],baseline[String(s.base+5)].inputs['ref_videos.ref_video_1']);
     assert.deepEqual(reference.inputs['ref_images.ref_image_1'],['31',0]);
+    let restored=reference.inputs['ref_videos.ref_video_2'];
+    while(g[restored[0]].class_type==='ImageBatch')restored=g[restored[0]].inputs.image1;
+    const stitch=g[restored[0]];assert.equal(stitch.class_type,'H3FaceStitch','Never send a detached face crop to H3 ref2');
+    assert.deepEqual(stitch.inputs.base_images,g[String(s.base+3)].inputs.image1,'Restore on the exact unpadded driving window');
+    assert.equal(stitch.inputs.transform[1],1);const tracker=g[stitch.inputs.transform[0]];
+    assert.equal(tracker.class_type,'H3FaceTrackCrop');assert.deepEqual(tracker.inputs.images,stitch.inputs.base_images);
+    assert.equal(stitch.inputs.paste_region,'face_ellipse');assert.equal(stitch.inputs.colour_match,0);
+    assert.equal(stitch.inputs.undetected_frames,'fade_out');
     const face=input(reference.inputs['ref_videos.ref_video_2']);assert.equal(face.length,124);
     for(let j=0;j<face.length;j++){
       const expected=Math.min(s.loadStart+j,s.loadStart+s.inputFrames-1);
       assert.equal(face[j].frame,expected,'Face reference timestamp must match the original video, including overlap/padding');
       assert.equal(face[j].identity,'photo');
+      assert.deepEqual(face[j].canvas,canvas,'Facial guidance must preserve full source canvas, not a 512 square');
+      assert.equal(face[j].backgroundFrame,expected);assert.equal(face[j].frameAligned,true);
+      assert.deepEqual(face[j].faceBounds,input(stitch.inputs.base_images)[Math.min(j,s.inputFrames-1)].faceBounds);
       assert.ok(Math.abs(face[j].expression-(0.4+motion(expected)-motion(0)))<1e-12,'Expression must not reset at a segment boundary');
     }
     assert.deepEqual(face.slice(s.contextFrames,s.contextFrames+s.frames).map(f=>f.frame),
@@ -109,7 +137,15 @@ for(const test of fixture.cases){
     }
   }
   assert.equal(g['490'].inputs.frame_rate,24);assert.ok(g['5108']);
-  assert.ok(!Object.values(g).some(n=>/RIFE|FaceStitch|PerFrameDenoise|Upscale/.test(n.class_type)));
+  assert.ok(!Object.values(g).some(n=>/RIFE|PerFrameDenoise|Upscale/.test(n.class_type)));
+  // The delivered IMAGE path stops at decode; the conditioning stitch must
+  // never be connected after decode, directly to MP4, ZIP or PNG outputs.
+  const seen=new Set(),images=[...Object.values(g['490'].inputs),...Object.values(g['5108'].inputs)].filter(edge);
+  while(images.length){
+    const [id,slot]=images.pop();if(seen.has(id))continue;seen.add(id);
+    const n=g[id];assert.notEqual(n.class_type,'H3FaceStitch','Stitch is conditioning-only, never output refinement');
+    for(const v of Object.values(n.inputs))if(edge(v)&&schemas[g[v[0]].class_type]?.outputs[v[1]]?.type==='IMAGE')images.push(v);
+  }
 }
 assert.equal(parseAkatzExpressionOption('minimaxH3Akatz',undefined),false);
 assert.equal(parseAkatzExpressionOption('minimaxH3Akatz','true'),true);
@@ -164,7 +200,7 @@ try{
   assert.match(js,/fd\.append\('akatzExpression',state\.akatzExpression\?'true':'false'\)/);
   assert.match(source,/if\(akatzExpression\)h3Source\.akatzExpression=true/);
   assert.match(source,/workflow:submittedWorkflow\.name/);
-  console.log('PASS: 60 exact baseline payloads, global frame0 facial anchor across bounded windows, aligned overlap/padding, declared types, editor links, durable selection and HTTP exports. No GPU inference or visual qualification.');
+  console.log('PASS: 60 exact baselines; global frame0, full-frame facial references with matching tracker transforms, no output stitch, aligned overlap/padding, declared types, editor links, durable selection and HTTP exports. No GPU inference or visual qualification.');
 }finally{
   if(server)await new Promise(resolve=>server.close(resolve));
   fs.rmSync(folder,{recursive:true,force:true});
