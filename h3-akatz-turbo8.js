@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import {h3PhotoPlan} from './minimax-h3-motion.js';
 import {extendTurbo8Graph,serializeTurbo8Editor} from './h3-akatz-turbo8-adaptive.js';
-import {withAkatzExpression,akatzExpressionPlan,akatzExpressionEditorSchemas,AKATZ_EXPRESSION_REVISION} from './h3-akatz-expression.js';
+import {withAkatzExpression,akatzExpressionPlan,akatzExpressionEditorSchemas,AKATZ_EXPRESSION_REVISION,AKATZ_EXPRESSION_LEGACY_REVISION} from './h3-akatz-expression.js';
 
 export const TURBO8_LEGACY_REVISION='akatz-native-1080-turbo8-template-r2';
 export const TURBO8_ADAPTIVE_REVISION='akatz-native-1080-turbo8-adaptive-v1';
@@ -206,7 +206,7 @@ export function turbo8ExecutionPlan(source){
     postDecodeResize:false,postRefinement:false,gpuExecutionQualified:false,visualAcceptance:'pending_owner_test'};
 }
 export function turbo8NodeClass(id,plan){
-  return [TURBO8_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_LEGACY_REVISION,AKATZ_EXPRESSION_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
+  return [TURBO8_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_LEGACY_REVISION,AKATZ_EXPRESSION_REVISION,AKATZ_EXPRESSION_LEGACY_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
 }
 
 export function turbo8EditorForFrames({characterLoraFile,turboLoraFile,frames,width=1080,height=1920,akatzExpression=false}){

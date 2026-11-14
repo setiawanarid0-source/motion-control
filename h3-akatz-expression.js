@@ -2,7 +2,8 @@
 // Only conditioning copies are cropped. Native decoded output is untouched.
 import fs from 'node:fs';
 
-export const AKATZ_EXPRESSION_REVISION='akatz-native-1080-turbo8-expression-v1';
+export const AKATZ_EXPRESSION_REVISION='akatz-native-1080-turbo8-expression-v2-framealigned';
+export const AKATZ_EXPRESSION_LEGACY_REVISION='akatz-native-1080-turbo8-expression-v1';
 export const AKATZ_EXPRESSION_FILENAME='VANTA_AKATZ_UJI_MIMIK_RUNNINGHUB.json';
 export const AKATZ_EXPRESSION_SCHEMAS=JSON.parse(fs.readFileSync(
   new URL('./workflows/runninghub-akatz-expression-node-schemas.json',import.meta.url),'utf8')).nodes;
@@ -16,11 +17,12 @@ export function parseAkatzExpressionOption(workflow,value){
   return value==='true';
 }
 
-const facePrompt='The aligned <Video 2> is a close-up facial performance guide already retargeted to the character in <Picture 1>. '+
+const facePrompt='The aligned <Video 2> has the same full-frame composition, subject scale and camera trajectory as <Video 1>; '+
+  'only its facial performance has been retargeted to the character in <Picture 1>. '+
   'At each matching moment use it for eyebrow and eyelid motion, blinks, gaze, cheeks, mouth and lip articulation, '+
   'and expression onset, intensity and release. Preserve the facial identity, facial proportions, hair and skin texture of <Picture 1>. '+
   '<Video 1> remains the reference for body and hand movement, head trajectory, scene timing, camera motion and genuine camera shake. '+
-  'The square crop and background of <Video 2> are guidance only; keep the full-frame composition and the character appearance of <Picture 1>. ';
+  'Keep a single continuous full-frame shot matching <Video 1>, with the character appearance of <Picture 1>. ';
 const identityCaption='Describe only stable visible appearance in the attached photo: facial structure, eye shape and colour, '+
   'eyebrow shape, nose and lip structure, hair colour, style and length, skin tone, exact garments, fabric, accessories, '+
   'and the visible scene and illumination. Omit the current facial expression, smiles or frowns, mouth opening, '+
@@ -63,7 +65,15 @@ export function withAkatzExpression(baseline,source,segments){
       driving_images:driving,lip_zero:false,lip_zero_threshold:0.03,stitching:true,delta_multiplier:1,
       mismatch_method:'constant',relative_motion_mode:'relative',driving_smooth_observation_variance:0.000003,
       expression_friendly:true,expression_friendly_multiplier:1});
-    let performance=add('ImageFromBatch',{image:face,batch_index:1,length:s.inputFrames});
+    const faceCrops=add('ImageFromBatch',{image:face,batch_index:1,length:s.inputFrames});
+    // A detached square face clip is a global H3 video reference, NOT a local
+    // face control. It leaked its close-up composition into the v1 render.
+    // Restore the face into the SAME unpadded driving frames before ref2.
+    // Stitching is only on this conditioning copy, never the decoded output.
+    let performance=add('H3FaceStitch',{base_images:structuredClone(batch.inputs.image1),
+      refined_crops:faceCrops,transform:[tracked[0],1],paste_region:'face_ellipse',
+      mask_dilation:0,feather:8,colour_match:0,blend:1,undetected_frames:'fade_out',
+      feather_scales_with_crop:false});
     if(s.inputFrames<124){
       const last=add('ImageFromBatch',{image:performance,batch_index:s.inputFrames-1,length:1});
       const pad=add('RepeatImageBatch',{image:last,amount:124-s.inputFrames});
@@ -80,13 +90,17 @@ export function withAkatzExpression(baseline,source,segments){
 
 export function akatzExpressionPlan(source,segments){
   if(source.akatzExpression!==true)return null;
-  return {revision:AKATZ_EXPRESSION_REVISION,role:'additional_face_performance_reference',
+  return {revision:AKATZ_EXPRESSION_REVISION,role:'full_frame_face_performance_reference',
     characterSource:'uploaded_edited_first_frame',drivingSource:'original_video_face_crops',
     globalDrivingAnchorFrame:0,relativeMode:'relative',expressionFriendly:true,
     photoFeatureExtractions:1,drivingFeatureCropper:'H3FaceTrackCrop',
     maxDrivingFramesPerCall:125,prefixFramesRemoved:1,temporalExpressionSmoothing:false,
     windowRanges:segments.map(s=>({loadStart:s.loadStart,inputFrames:s.inputFrames,referenceFrames:124})),
-    facialOutputSize:[512,512],facialOutputRole:'conditioning_only',
+    facialCropSize:[512,512],referenceVideoSize:[source.canvasWidth,source.canvasHeight],
+    referenceFraming:'original_full_frame_video',facialOutputRole:'conditioning_only',
+    framingRestoration:{node:'H3FaceStitch',position:'per_frame_tracking_transform',
+      base:'same_unpadded_source_window',region:'face_ellipse',colourMatch:0,
+      undetectedFrames:'fade_out',beforeTailPadding:true,detachedCropReference:false},
     sourceCameraRole:'original_full_frame_video',postOutputRefinement:false,
     semanticConditioning:true,hardPerFrameFacialControl:false,gpuExecutionQualified:false,visualAcceptance:'pending_owner_test'};
 }

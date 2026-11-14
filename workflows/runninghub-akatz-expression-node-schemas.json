@@ -997,6 +997,131 @@
         null
       ],
       "api_node": false
+    },
+    "H3FaceStitch": {
+      "input": {
+        "required": {
+          "base_images": [
+            "IMAGE"
+          ],
+          "refined_crops": [
+            "IMAGE"
+          ],
+          "transform": [
+            "H3FACEXFORM"
+          ],
+          "paste_region": [
+            [
+              "face_only",
+              "face_ellipse",
+              "full_crop"
+            ],
+            {
+              "default": "face_only",
+              "tooltip": "WHAT gets composited back. face_only / face_ellipse paste just the detected face box (FaceDetailer's behaviour - the wider crop exists to give the sampler context, not to be pasted). full_crop pastes the whole crop including hair, shoulders and background, which risks a visible rectangle if H3 alters them."
+            }
+          ],
+          "mask_dilation": [
+            "INT",
+            {
+              "default": 16,
+              "min": 0,
+              "max": 256,
+              "step": 2,
+              "tooltip": "Grow the face box before blurring, in canvas px. Impact Pack dilates the same way so the blur has room and the blend does not eat into the face itself."
+            }
+          ],
+          "feather": [
+            "INT",
+            {
+              "default": 6,
+              "min": 0,
+              "max": 256,
+              "step": 2,
+              "tooltip": "Gaussian blur radius on the paste mask, in SOURCE pixels. Measured against the final frame, not the canvas, so the blend is the same physical width whatever this frame's magnification happens to be.\n\nCanvas-relative feather is a trap: a 75px crop blown up to 512 makes a 40px canvas feather only ~6 source px, while a 720px crop makes it ~56. The blend ends up TIGHTEST exactly where the face is smallest and the composite needs the most help - which reads as a hard edge appearing as a shot zooms out."
+            }
+          ],
+          "colour_match": [
+            "FLOAT",
+            {
+              "default": 1.0,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05,
+              "tooltip": "Match the refined crop's per-channel mean/std to the region it replaces. The crop and the full frame went through independent passes, so without this the face can come back subtly brighter or differently tinted and read as pasted on."
+            }
+          ],
+          "blend": [
+            "FLOAT",
+            {
+              "default": 1.0,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05,
+              "tooltip": "Global opacity of the refined face. Below 1.0 mixes back toward the original - useful to dial back over-sharpening."
+            }
+          ],
+          "undetected_frames": [
+            [
+              "fade_out",
+              "skip",
+              "composite_anyway"
+            ],
+            {
+              "default": "fade_out",
+              "tooltip": "What to do on frames where no FACE was found (turned away / occluded). ALL frames are still sent through H3 either way - that is what keeps it temporally consistent - this only controls whether the result is pasted back.\nfade_out: ramp the composite to zero across the gap (smooth, no pop, recommended).\nskip: hard cut - those frames keep original pixels exactly.\ncomposite_anyway: paste regardless. Risks H3 hallucinating a face onto the back of a head."
+            }
+          ]
+        },
+        "optional": {
+          "feather_scales_with_crop": [
+            "BOOLEAN",
+            {
+              "default": false,
+              "tooltip": "Old behaviour: treat feather as CANVAS pixels, so the blend narrows as the crop shrinks. Leave off."
+            }
+          ],
+          "masks": [
+            "MASK",
+            {
+              "tooltip": "Optional per-frame paste masks in CANVAS space, e.g. from H3 Face Mask (SAM). Overrides paste_region. This is the FaceDetailer bbox+SAM path: the mask follows the actual face so the blend falls on the jaw and hairline instead of an arbitrary rectangle. With a SAM mask use a SMALL feather (4-8); a rectangle needs much more."
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "base_images",
+          "refined_crops",
+          "transform",
+          "paste_region",
+          "mask_dilation",
+          "feather",
+          "colour_match",
+          "blend",
+          "undetected_frames"
+        ],
+        "optional": [
+          "feather_scales_with_crop",
+          "masks"
+        ]
+      },
+      "output": [
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "images"
+      ],
+      "name": "H3FaceStitch",
+      "display_name": "H3 Face Stitch Back",
+      "description": "Composite H3-refined face crops back into the source frames.",
+      "python_module": "custom_nodes.ComfyUI-H3-FaceRefine",
+      "category": "MiniMax H3/Face Refine",
+      "output_node": false,
+      "has_intermediate_output": false
     }
   }
 }
