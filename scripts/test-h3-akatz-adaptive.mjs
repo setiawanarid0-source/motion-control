@@ -6,8 +6,7 @@ import {execFileSync} from 'node:child_process';
 import express from 'express';
 import {h3PhotoPlan,validateH3Probe,probeH3Input} from '../minimax-h3-motion.js';
 import {prepareTurbo8Input} from '../h3-akatz-turbo8-adaptive.js';
-import {turbo8TemporalPlan,turbo8GraphForInputs,turbo8SeedNodeInfo,turbo8EditorForFrames,TURBO8_ASSET,TURBO8_LEGACY_REVISION} from '../h3-akatz-turbo8.js';
-import {withIntegratedRife60,withIntegratedRife60Editor,integratedRifePlan} from '../integrated-rife.js';
+import {turbo8TemporalPlan,turbo8GraphForInputs,turbo8SeedNodeInfo,turbo8EditorForFrames,turbo8ExecutionPlan,TURBO8_ASSET,TURBO8_LEGACY_REVISION,TURBO8_EDITOR_FILENAME} from '../h3-akatz-turbo8.js';
 import {installAkatzEditorDownload} from '../h3-runninghub-export.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
 const models={characterLoraFile:'api-lora-usa/55c5bb53f1104e3cd4fed7fbe5d522d7.safetensors',turboLoraFile:TURBO8_ASSET.publishedUpload.name};
@@ -78,18 +77,18 @@ for(const n of cases)for(const audio of [true,false]){
   if(audio)assert.equal(g['50'].inputs.duration,n/24);else assert.ok(!Object.values(g).some(x=>x.class_type==='VHS_LoadAudioUpload'));
   const frames=timeline(g,n).input(g['490'].inputs.images);
   assert.deepEqual(frames,Array.from({length:n},(_,i)=>i),'No missing, duplicated history, padding, reordered or black-tail timeline frames');
-  const final=withIntegratedRife60(g),out=timeline(final,n),batch=out.input(final['490'].inputs.images);
-  assert.equal(batch.length,Math.floor(n/24*60));assert.equal(final['490'].inputs.frame_rate,60);
-  assert.equal(Object.values(final).filter(x=>x.class_type==='RIFEInterpolation').length,1);
-  const pngs=out.input(final['5108'].inputs['images or video_path']);
+  const out=timeline(g,n),batch=out.input(g['490'].inputs.images);
+  assert.equal(batch.length,n);assert.equal(g['490'].inputs.frame_rate,24);
+  assert.equal(Object.values(g).filter(x=>x.class_type==='RIFEInterpolation').length,0);
+  const pngs=out.input(g['5108'].inputs['images or video_path']);
   assert.deepEqual(pngs,[batch[0],batch[Math.floor((batch.length-1)/2)],batch.at(-1)]);
 }
 for(const n of [0,5,NaN,Infinity,2**53])assert.throws(()=>turbo8TemporalPlan(source(n)));
 const legacy={revision:TURBO8_LEGACY_REVISION,nodeClasses:{760060:'RIFEInterpolation'}};
 assert.equal(h3NodeClass('760060',legacy),'RIFEInterpolation','Old running jobs stay observable');
 
-for(const n of [49,363,720,1464]){
-  const editor=withIntegratedRife60Editor(turbo8EditorForFrames({...models,frames:n}));
+for(const n of [49,363,482,720,1464]){
+  const editor=turbo8EditorForFrames({...models,frames:n});
   const nodes=new Map(editor.nodes.map(x=>[x.id,x])),links=new Map(editor.links.map(x=>[x[0],x]));
   assert.equal(nodes.size,editor.nodes.length);
   for(const l of editor.links){assert.ok(nodes.get(l[1]).outputs[l[2]].links.includes(l[0]));assert.equal(nodes.get(l[3]).inputs[l[4]].link,l[0]);}
@@ -99,7 +98,9 @@ for(const n of [49,363,720,1464]){
     if(node.type==='VHS_LoadVideo'&&node.id!==1000)assert.equal(links.get(node.inputs.find(x=>x.name==='video').link)[1],200);
     if(node.type==='VHS_LoadAudioUpload')assert.equal(links.get(node.inputs.find(x=>x.name==='audio').link)[1],200);
   }
-  assert.equal(editor.extra.vanta_export.preset_frames,n);assert.equal(editor.extra.vanta_export.output_fps,60);
+  assert.equal(editor.extra.vanta_export.preset_frames,n);
+  assert.equal(editor.nodes.filter(x=>x.type==='RIFEInterpolation').length,0);
+  for(const node of editor.nodes.filter(x=>x.type==='VHS_VideoCombine'))assert.equal(node.widgets_values_named.frame_rate,24);
   assert.equal(editor.nodes.filter(x=>x.type==='SamplerCustomAdvanced').length,turbo8TemporalPlan(source(n)).segments.length);
 }
 const probe={streams:[{codec_type:'video',width:96,height:64,duration:61}],format:{duration:61}};
@@ -118,18 +119,23 @@ try{
   const prepared=await prepareTurbo8Input(file,'plus',{path:photo,originalname:'photo.png',mimetype:'image/png',size:fs.statSync(photo).size});
   try{
     assert.equal(prepared.totalFrames,1464);assert.equal(prepared.hasAudio,true);assert.deepEqual(prepared.driverCanvas,[96,64]);
-    assert.equal(integratedRifePlan({frames:prepared.totalFrames,fps:24}).outputFrames,3660);
+    const plan=turbo8ExecutionPlan(prepared);
+    assert.equal(plan.frames,1464);assert.equal(plan.fps,24);
+    assert.equal(plan.interpolation,undefined);
+    assert.ok(!Object.values(plan.nodeClasses).includes('RIFEInterpolation'));
     assert.ok(prepared.release);assert.equal(prepared.sceneCuts.length,0);
   }finally{await prepared.release();}
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
 
 const app=express();
-installAkatzEditorDownload({app,getModelFiles:()=>models,buildWorkflow:(m,req)=>withIntegratedRife60Editor(turbo8EditorForFrames({...m,frames:Number(req.query.frames)||360}))});
+installAkatzEditorDownload({app,getModelFiles:()=>models,buildWorkflow:(m,req)=>turbo8EditorForFrames({...m,frames:Number(req.query.frames)||360}),filename:TURBO8_EDITOR_FILENAME});
 const server=app.listen(0,'127.0.0.1');
 try{
   await new Promise(resolve=>server.on('listening',resolve));
   const r=await fetch('http://127.0.0.1:'+server.address().port+'/api/workflows/minimaxH3Akatz/runninghub?frames=1464');
-  assert.equal(r.status,200);const g=await r.json();assert.equal(g.extra.vanta_export.preset_frames,1464);
-  assert.equal(g.nodes.filter(n=>n.type==='RIFEInterpolation').length,1);
+  assert.equal(r.status,200);assert.ok(r.headers.get('content-disposition').includes(TURBO8_EDITOR_FILENAME));
+  const g=await r.json();assert.equal(g.extra.vanta_export.preset_frames,1464);
+  assert.equal(g.nodes.filter(n=>n.type==='RIFEInterpolation').length,0);
+  for(const node of g.nodes.filter(n=>n.type==='VHS_VideoCombine'))assert.equal(node.widgets_values_named.frame_rate,24);
 }finally{await new Promise(resolve=>server.close(resolve));}
-console.log('PASS: unbounded-duration window planning; ordered complete timelines, raw context/audio, one RIFE and actual-output PNGs; duration-matched editor wiring/HTTP; real 61s media preparation. No GPU inference.');
+console.log('PASS: adaptive Akatz native 24 FPS rollback; ordered complete timelines, raw context/audio, native PNGs and no RIFE; duration-matched editor wiring/HTTP; real 61s media preparation. No GPU inference.');

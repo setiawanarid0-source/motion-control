@@ -1,5 +1,10 @@
 # One-job 60 FPS output
 
+Update, 14 November: the owner requested an Akatz-only rollback. Production
+Akatz now exports native 24 FPS without RIFE, including its editor download,
+while retaining adaptive duration. KOH and MotionFly still use the integration
+below. The original three-workflow integration is documented here as history.
+
 The website selections `current` (KOH 1), `motionflyHD`, and `minimaxH3Akatz`
 (Turbo8) now interpolate their final IMAGE batch with the existing target-FPS
 `RIFEInterpolation` recipe before encoding. The standalone RIFE selection,
