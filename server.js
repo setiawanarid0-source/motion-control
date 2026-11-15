@@ -859,9 +859,11 @@ app.get('/api/accounts/status',(_req,res)=>{
 
 // Read provider balance fields without a create probe or Account Pool mutation.
 // Authentication is inherited from ownerAuth.requireOwner above.
-app.get('/api/runninghub/account-audit',async(_req,res)=>{
+app.get('/api/runninghub/account-audit',async(req,res)=>{
   res.setHeader('Cache-Control','private, no-store');
-  res.json(await auditRunningHubAccounts({accounts:loadGlobalAccounts(),request:rhJson}));
+  const instanceType=req.query.instanceType===undefined?'default':req.query.instanceType;
+  if(!['default','plus'].includes(instanceType))return res.status(400).json({error:'Mode audit tidak valid.'});
+  res.json(await auditRunningHubAccounts({accounts:loadGlobalAccounts(),request:rhJson,instanceType}));
 });
 // Owner-only credential metadata. No token bytes, cookies or provider payloads.
 app.get('/api/runninghub/session-audit',(_req,res)=>{

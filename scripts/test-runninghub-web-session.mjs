@@ -267,6 +267,35 @@ test('workspace audit verifies the cached reference without changing workflows o
   assert.ok(!calls.some(x=>new URL(x.url).pathname==='/task/create'));
 }));
 
+test('read-only audit validates the requested machine and preserves provider billing evidence without creating a task',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:'1001'}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'NEW',balancePoint:30}};
+    if(route==='/task/list')return {code:0,data:{total:0,records:[]}};
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:true}};
+    if(route==='/api/user/task/work/valid'){
+      assert.deepEqual(JSON.parse(config.data.workflowContent),{nodes:[]});
+      return {code:0,msg:'SUCCESS',data:{billingVersion:'NEW',canCreateTask:config.data.instanceType==='default',
+        requiredPoint:'50',balancePoint:30,duration:'NaN',cost:-1,secretPoint:999,accessToken:'fixture-secret'}};
+    }
+    if(route==='/api/workflow/simpleList')return {code:0,data:[]};
+    throw Error('Read-only audit must never save, upload, create or cancel');
+  });
+  const standard=await service.request('/uc/openapi/accountStatus',key,{inspectWorkspace:true});
+  const plus=await service.request('/uc/openapi/accountStatus',key,{inspectWorkspace:true,instanceType:'plus'});
+  assert.equal(standard.data.workspace.runValidation.canCreateTask,true);
+  assert.equal(plus.data.workspace.runValidation.canCreateTask,false);
+  assert.equal(plus.data.workspace.runValidation.instanceType,'plus');
+  assert.equal(plus.data.workspace.contentNodeCount,0,'An empty workspace is not evidence about the actual MotionFly graph');
+  assert.deepEqual(plus.data.workspace.runValidation.numericFields,{requiredPoint:50,balancePoint:30});
+  assert.doesNotMatch(JSON.stringify(plus.data.workspace),/fixture-secret|accessToken|secretPoint/);
+  assert.deepEqual(calls.filter(c=>new URL(c.url).pathname==='/api/user/task/work/valid').map(c=>c.data.instanceType),['default','plus']);
+  await assert.rejects(service.request('/uc/openapi/accountStatus',key,{inspectWorkspace:true,instanceType:'unexpected'}),{code:'RH_WEB_INVALID_AUDIT'});
+  assert.ok(calls.every(c=>['/uc/getUserInfo','/uc/point/summary','/task/list','/api/workflow/getContent','/api/user/task/work/valid','/api/workflow/simpleList'].includes(new URL(c.url).pathname)));
+}));
+
 test('materializes an owned empty draft once using native Save and read-only validation before GPU submission',()=>fixture(async({service,calls,setHandler,decrypt,encrypt})=>{
   const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
   const id='2110000000000000100';let saved=false;
