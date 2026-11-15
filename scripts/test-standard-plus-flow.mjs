@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
+import os from 'node:os';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+import {compileMotionFlyHD} from '../motionfly-hd-workflow.js';
+import {withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS} from '../integrated-rife.js';
+import {withOriginalVideoArchive} from '../runninghub-output.js';
+import {createRunningHubWebSession,isRunningHubWebKey} from '../runninghub-web-session.js';
 import {canSubmitMachineMode,runningHubInstanceType} from '../runninghub-instance.js';
 
 assert.deepEqual(['standard','plus'].filter(canSubmitMachineMode),['standard','plus']);
@@ -13,6 +21,41 @@ const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8
 const app=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const queue=fs.readFileSync(new URL('../generation-queue.js',import.meta.url),'utf8');
+// Execute both real builders and the real web-session transport with a stubbed
+// provider. This compares /task/create, not just the source of the mapping.
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-mode-pair-'));
+try{
+  const clock=Date.UTC(2026,10,15),userId='2110000000000000001',native=[];
+  const access='fixture.'+Buffer.from(JSON.stringify({sub:userId,exp:clock/1000+3600})).toString('base64url')+'.signature';
+  const web=createRunningHubWebSession({dir,encrypt:JSON.stringify,decrypt:JSON.parse,now:()=>clock,http:{request:async config=>{
+    const route=new URL(config.url).pathname;let reply;
+    if(route==='/uc/getUserInfo')reply={code:0,data:{id:userId,totalCoin:1001}};
+    else if(route==='/uc/point/summary')reply={code:0,data:{billingVersion:'NEW',balancePoint:30}};
+    else if(route==='/api/workflow/upload')reply={code:0,data:{id:'2110000000000000100'}};
+    else if(route==='/api/workflow/getContent')reply={code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    else if(route==='/task/create'){native.push(structuredClone(config.data));reply={code:0,data:{taskId:'2110000000000000999',taskStatus:'RUNNING'}};}
+    else throw Error('Unexpected fixture route '+route);
+    return {status:200,data:reply};
+  }}});
+  const {key}=await web.connect({site:'runninghub.ai',access});
+  const graph=compileMotionFlyHD(JSON.parse(fs.readFileSync(new URL('../workflows/motionfly-hd-runninghub.json',import.meta.url),'utf8')));
+  const context={withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS,withOriginalVideoArchive,isRunningHubWebKey,runningHubInstanceType,
+    runningHubWeb:web,workflowGraphs:{motionflyHD:graph},uploadToRunningHub:async(_key,file)=>'uploaded-'+file.originalname,
+    rhJson:(route,credential,body)=>web.request(route,credential,body)};
+  vm.createContext(context);
+  const from=server.indexOf('async function createTask('),to=server.indexOf('const upload = multer(',from);
+  vm.runInContext(server.slice(from,to)+'\nthis.createTask=createTask;',context);
+  for(const mode of ['standard','plus'])await context.createTask({apiKey:key,workflowKey:'motionflyHD',mode,
+    imageFile:{originalname:'reference.png'},videoFile:{originalname:'driver.mp4'}});
+  assert.equal(native.length,2);assert.equal(native[0].instanceType,'default');assert.equal(native[1].instanceType,'plus');
+  const prompts=native.map(payload=>JSON.parse(payload.promptContent));
+  assert.deepEqual(prompts[0].prompt,prompts[1].prompt,'Standard and Plus submit the exact same MotionFly+RIFE graph and overrides');
+  assert.equal(prompts[0].prompt['760060'].class_type,'RIFEInterpolation');
+  const normalize=payload=>{const copy=structuredClone(payload);delete copy.instanceType;delete copy.clientId;
+    copy.promptContent=JSON.parse(copy.promptContent);delete copy.promptContent.client_id;return copy;};
+  assert.deepEqual(normalize(native[0]),normalize(native[1]),'Only instanceType and per-request UUIDs differ in native create');
+  console.log('PASS: real MotionFly native payload mode pair, identical graph hash '+createHash('sha256').update(JSON.stringify(prompts[0].prompt)).digest('hex')+'; provider stub only');
+}finally{fs.rmSync(dir,{recursive:true,force:true});}
 const buttonModes=[...html.matchAll(/class="mode-card(?: selected)?" data-mode="([^"]+)"/g)].map(x=>x[1]);
 assert.deepEqual(buttonModes,['standard','plus'],'Only Standard and Plus buttons, in that order');
 assert.ok(html.includes('Standard</strong><span>24 GB'));

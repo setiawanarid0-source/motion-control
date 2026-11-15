@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {motionFlyBillingWorkflow} from '../runninghub-billing-evidence.js';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -294,6 +295,39 @@ test('read-only audit validates the requested machine and preserves provider bil
   assert.deepEqual(calls.filter(c=>new URL(c.url).pathname==='/api/user/task/work/valid').map(c=>c.data.instanceType),['default','plus']);
   await assert.rejects(service.request('/uc/openapi/accountStatus',key,{inspectWorkspace:true,instanceType:'unexpected'}),{code:'RH_WEB_INVALID_AUDIT'});
   assert.ok(calls.every(c=>['/uc/getUserInfo','/uc/point/summary','/task/list','/api/workflow/getContent','/api/user/task/work/valid','/api/workflow/simpleList'].includes(new URL(c.url).pathname)));
+}));
+
+test('audits the actual MotionFly/RIFE editor and native billing rules without saving or generating',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  const workflowAudit=motionFlyBillingWorkflow();
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:'1001',powerValue:'1001',type:'1',memberInfo:{memberCode:'0011',userId,accessToken:'private'}}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'NEW',balancePoint:30,transitionCoinRemained:1001}};
+    if(route==='/api/product/v2/pricing')return {code:0,data:{currentMember:{memberCode:'0011'},gpuRules:{standard:{minimumPoint:3},plus:{minimumPoint:6}},transitionCoinFirst:true,secretCode:123}};
+    if(route==='/task/list')return {code:0,data:{total:0,records:[]}};
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:true}};
+    if(route==='/api/workflow/simpleList')return {code:0,data:[]};
+    if(route==='/api/user/task/work/valid'){
+      const editor=JSON.parse(config.data.workflowContent);
+      assert.equal(editor.nodes.length,103);assert.equal(editor.nodes.find(n=>n.id===760060).type,'RIFEInterpolation');
+      return {code:0,data:{billingVersion:'NEW',canCreateTask:config.data.instanceType==='default'}};
+    }
+    throw Error('No create, save, upload or cancel may occur in this audit');
+  });
+  for(const instanceType of ['default','plus']){
+    const result=await service.request('/uc/openapi/accountStatus',key,{inspectWorkspace:true,inspectBilling:true,workflowAudit,instanceType});
+    assert.equal(result.data.workspace.contentNodeCount,0);
+    assert.equal(result.data.workspace.validatedNodeCount,103);
+    assert.equal(result.data.workspace.validatedGraphSha256,workflowAudit.graphSha256);
+    assert.equal(result.data.workspace.runValidation.canCreateTask,instanceType==='default');
+    assert.equal(result.data.billingEvidence['profile.memberInfo.memberCode'],'0011');
+    assert.equal(result.data.billingEvidence['pricing.gpuRules.plus.minimumPoint'],6);
+    assert.equal(result.data.billingEvidence['pricing.transitionCoinFirst'],true);
+    assert.doesNotMatch(JSON.stringify(result.data.billingEvidence),/private|userId|secretCode|accessToken/);
+  }
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/product/v2/pricing').length,2);
+  assert.ok(calls.every(c=>['/uc/getUserInfo','/uc/point/summary','/api/product/v2/pricing','/task/list','/api/workflow/getContent','/api/user/task/work/valid','/api/workflow/simpleList'].includes(new URL(c.url).pathname)));
 }));
 
 test('materializes an owned empty draft once using native Save and read-only validation before GPU submission',()=>fixture(async({service,calls,setHandler,decrypt,encrypt})=>{

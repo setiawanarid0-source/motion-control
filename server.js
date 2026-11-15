@@ -9,6 +9,7 @@ import { extractTaskFailure,auditFailedH3Tasks } from './task-failure.js';
 import { canStartNewTask, isTrackableTaskCode, partitionAccountRefresh } from './account-eligibility.js';
 import {canGenerateWithAccount,rankGenerationAccounts} from './runninghub-account-priority.js';
 import {auditRunningHubAccounts} from './runninghub-account-audit.js';
+import {motionFlyBillingWorkflow} from './runninghub-billing-evidence.js';
 import { cameraStatus, readCorrected, pruneOldJobs } from './camera-runtime.js';
 import { referenceAvailability, referenceFile, stageReferences, commitReferences, discardReferences, pruneReferences,
   configureReferenceMedia,resolvedReferenceAvailability,openRemoteReference,migrateReferences } from './history-references.js';
@@ -863,7 +864,10 @@ app.get('/api/runninghub/account-audit',async(req,res)=>{
   res.setHeader('Cache-Control','private, no-store');
   const instanceType=req.query.instanceType===undefined?'default':req.query.instanceType;
   if(!['default','plus'].includes(instanceType))return res.status(400).json({error:'Mode audit tidak valid.'});
-  res.json(await auditRunningHubAccounts({accounts:loadGlobalAccounts(),request:rhJson,instanceType}));
+  if(req.query.workflow!==undefined&&req.query.workflow!=='motionflyHD')return res.status(400).json({error:'Workflow audit tidak valid.'});
+  if(req.query.billing!==undefined&&req.query.billing!=='1')return res.status(400).json({error:'Pilihan audit billing tidak valid.'});
+  const workflowAudit=req.query.workflow==='motionflyHD'?motionFlyBillingWorkflow():null;
+  res.json(await auditRunningHubAccounts({accounts:loadGlobalAccounts(),request:rhJson,instanceType,workflowAudit,includeBilling:req.query.billing==='1'}));
 });
 // Owner-only credential metadata. No token bytes, cookies or provider payloads.
 app.get('/api/runninghub/session-audit',(_req,res)=>{
