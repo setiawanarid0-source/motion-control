@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import FormData from 'form-data';
 import axios from 'axios';
 import {runningHubWebBalance,webBalanceNumber} from './runninghub-web-balance.js';
+import {billingScalars} from './runninghub-billing-evidence.js';
 import {extractTaskFailure} from './task-failure.js';
 import {safeTaskMetrics,nativeTaskExecutionSeconds} from './rife-task-audit.js';
 
@@ -64,7 +65,7 @@ export function parseRunningHubSession(input){
 }
 const METHODS=new Set(['/uc/getUserInfo','/uc/point/summary','/uc/token/refresh','/api/instance/access/auth',
   '/api/workflow/upload','/api/workflow/getContent','/api/workflow/setContent','/api/workflow/simpleList',
-  '/api/user/task/work/valid','/task/create','/task/list','/task/cancel','/task/failedReason',
+  '/api/user/task/work/valid','/api/product/v2/pricing','/task/create','/task/list','/task/cancel','/task/failedReason',
   '/api/output/v2/history']);
 
 export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=()=>Date.now()}){
@@ -350,14 +351,15 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     }).finally(()=>creating.delete(key)));
     return creating.get(key);
   }
-  async function inspectWorkspace(key,{instanceType='default'}={}){
+  async function inspectWorkspace(key,{instanceType='default',workflowAudit=null}={}){
     if(!['default','plus'].includes(instanceType))throw error('Mode audit tidak valid.','RH_WEB_INVALID_AUDIT',true);
     const session=get(key),id=session.workflowId;
     if(!id)return {configured:false};
     const reply=await post(key,'/api/workflow/getContent',{workflowId:id,contentType:'0'});
     const data=Number(reply.code)===0?reply.data:null;
+    const validationContent=workflowAudit?.workflowContent||data?.workflowContent;
     const validation=await post(key,'/api/user/task/work/valid',{taskType:'WORKFLOW',id,taskCode:null,
-      ...(typeof data?.workflowContent==='string'?{workflowContent:data.workflowContent}:{}),instanceType});
+      ...(typeof validationContent==='string'?{workflowContent:validationContent}:{}),instanceType});
     const checked=validation?.data;
     const numericFields={};
     for(const [name,value] of Object.entries(checked||{})){
@@ -376,6 +378,8 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       draft:data?.draft==null?null:[true,1,'1','true'].includes(data.draft),
       workflowState:['string','number','boolean'].includes(typeof data?.workflowState)?data.workflowState:null,
       contentPresent:typeof data?.workflowContent==='string'&&data.workflowContent.length>2,contentNodeCount,
+      ...(workflowAudit?{validatedWorkflow:workflowAudit.name,validatedNodeCount:workflowAudit.nodeCount,
+        validatedGraphSha256:workflowAudit.graphSha256,validationMedia:workflowAudit.media}:{}),
       saved:get(key).workspaceSavedId===id,
       runValidation:{instanceType,code:Number.isFinite(Number(validation.code))?Number(validation.code):null,
         canCreateTask:typeof checked?.canCreateTask==='boolean'?checked.canCreateTask:null,
@@ -386,6 +390,18 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       activeMatch:rows.some(x=>String(x.id||x.workflowId)===String(id)),
       vantaWorkspaces:own.map(x=>({reference:String(x.id||x.workflowId||'').slice(-6),
         cachedMatch:String(x.id||x.workflowId)===String(id)}))};
+  }
+  async function inspectBilling(key){
+    const session=get(key);
+    const [profileReply,summaryReply,pricingReply]=await Promise.all([
+      post(key,'/uc/getUserInfo',{userId:session.userId}),post(key,'/uc/point/summary',{}),post(key,'/api/product/v2/pricing',{})]);
+    const profile=Number(profileReply.code)===0?profileReply.data:null;
+    if(!profile||String(profile.id||profile.userId||'')!==session.userId)throw error('Identitas audit billing tidak cocok.','RH_WEB_IDENTITY_MISMATCH',true);
+    return billingScalars({profileCode:profileReply.code,summaryCode:summaryReply.code,pricingCode:pricingReply.code,
+      profile:{type:profile.type,powerValue:profile.powerValue,instanceState:profile.instanceState,
+        instanceSubscribedType:profile.instanceSubscribedType,memberInfo:profile.memberInfo},
+      pointSummary:Number(summaryReply.code)===0?summaryReply.data:null,
+      pricing:Number(pricingReply.code)===0?pricingReply.data:null});
   }
   async function create(key,payload){
     const graph=typeof payload.workflow==='string'?JSON.parse(payload.workflow):payload.workflow;
@@ -469,7 +485,8 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
   }
   async function request(route,key,body){
     if(route==='/uc/openapi/accountStatus')return {code:0,data:{...await status(key),
-      ...(body?.inspectWorkspace?{workspace:await inspectWorkspace(key,{instanceType:body.instanceType||'default'})}:{})}};
+      ...(body?.inspectWorkspace?{workspace:await inspectWorkspace(key,{instanceType:body.instanceType||'default',workflowAudit:body.workflowAudit||null})}:{}),
+      ...(body?.inspectBilling?{billingEvidence:await inspectBilling(key)}:{})}};
     if(route==='/task/openapi/create')return create(key,body);
     if(route==='/task/openapi/outputs')return outputs(key,body.taskId);
     if(route==='/task/openapi/cancel')return post(key,'/task/cancel',{taskId:String(body.taskId)},{retryAuth:false});

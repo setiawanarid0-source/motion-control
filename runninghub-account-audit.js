@@ -1,5 +1,6 @@
 // Owner-only account diagnosis. This module cannot create, upload, cancel,
 // reroute, retire accounts, or infer API spending rights from a total balance.
+import {billingScalars} from './runninghub-billing-evidence.js';
 const BALANCE_FIELDS=new Set([
   'remainCoins','remainMoney','totalCoins','availableCoins','availableBalance',
   'paidCoins','freeCoins','paidRHCoins','freeRHCoins','remainPaidCoins',
@@ -23,6 +24,9 @@ function workspaceAudit(value){
     draft:typeof value.draft==='boolean'?value.draft:null,
     saved:value.saved===true,
     contentNodeCount:finite(value.contentNodeCount),
+    ...(value.validatedWorkflow==='motionflyHD'?{validatedWorkflow:'motionflyHD',validatedNodeCount:finite(value.validatedNodeCount),
+      validatedGraphSha256:/^[a-f0-9]{64}$/.test(value.validatedGraphSha256||'')?value.validatedGraphSha256:null,
+      validationMedia:value.validationMedia==='placeholder-file-names'?'placeholder-file-names':null}:{}),
     runValidation:{instanceType:['default','plus'].includes(value.runValidation?.instanceType)?value.runValidation.instanceType:null,
       code:finite(value.runValidation?.code),
       canCreateTask:typeof value.runValidation?.canCreateTask==='boolean'?value.runValidation.canCreateTask:null,
@@ -33,12 +37,13 @@ function workspaceAudit(value){
     contentPresent:value.contentPresent===true,activeMatch:value.activeMatch===true,
     vantaWorkspaces:Array.isArray(value.vantaWorkspaces)?value.vantaWorkspaces.slice(0,10).map(x=>({reference:enumValue(x.reference),cachedMatch:x.cachedMatch===true})):[]};
 }
-export async function auditRunningHubAccounts({accounts,request,instanceType='default',now=()=>new Date()}){
+export async function auditRunningHubAccounts({accounts,request,instanceType='default',workflowAudit=null,includeBilling=false,now=()=>new Date()}){
   if(!['default','plus'].includes(instanceType))throw Error('Mode audit tidak valid.');
   const rows=await Promise.all(accounts.map(async account=>{
     const base={accountId:account.id,accountName:account.name};
     try{
-      const reply=await request('/uc/openapi/accountStatus',account.key,{apikey:account.key,inspectWorkspace:true,instanceType},20000);
+      const reply=await request('/uc/openapi/accountStatus',account.key,{apikey:account.key,inspectWorkspace:true,instanceType,
+        ...(workflowAudit?{workflowAudit}:{}),...(includeBilling?{inspectBilling:true}:{})},20000);
       if(!reply||Number(reply.code)!==0||!reply.data||typeof reply.data!=='object')
         return {...base,status:'unavailable'};
       const data=reply.data,balances={};
@@ -50,7 +55,7 @@ export async function auditRunningHubAccounts({accounts,request,instanceType='de
         ...(data.apiType==='WEB_SESSION'?{sessionVerified:data.sessionVerified===true,
           billingSummaryVerified:data.billingSummaryVerified===true,billingConverting:data.billingConverting===true,
           accountReference:enumValue(data.accountReference),workspace:workspaceAudit(data.workspace)}:{}),
-        currency:enumValue(data.currency),balances,
+        currency:enumValue(data.currency),balances,...(includeBilling?{billingEvidence:billingScalars(data.billingEvidence)}:{}),
         responseFields:Object.keys(data).filter(field=>/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(field)&&
           !/key|token|secret|password|authorization/i.test(field)).sort()};
     }catch{return {...base,status:'unavailable'};}
