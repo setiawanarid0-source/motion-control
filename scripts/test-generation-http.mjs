@@ -125,6 +125,14 @@ try{
     assert.equal(result.status,400,'Invalid ControlNet combinations stop before durable queueing');
     const missing=await fetch(url+'/api/generate/jobs/'+requestId,{headers});assert.equal(missing.status,404);
   }
+  for(const [workflow,mask,expressionFlag] of [['current','true','false'],['minimaxH3Akatz','yes','false'],['minimaxH3Akatz','true','true']]){
+    const invalid=form('plus',workflow);invalid.append('akatzSubjectMask',mask);invalid.append('akatzExpression',expressionFlag);
+    const r=await fetch(url+'/api/generate',{method:'POST',headers:{...headers,'X-Vanta-Request-Id':crypto.randomUUID()},body:invalid});
+    assert.equal(r.status,400,'Invalid/conflicting subject-mask choices stop before queueing');
+  }
+  const maskId=crypto.randomUUID(),maskForm=form('plus','minimaxH3Akatz');maskForm.append('akatzSubjectMask','true');
+  const maskResult=await fetch(url+'/api/generate',{method:'POST',headers:{...headers,'X-Vanta-Request-Id':maskId},body:maskForm});
+  assert.equal(maskResult.status,202,'The mask candidate enters the same upload queue');
   const controlId=crypto.randomUUID(),controlForm=form('plus','minimaxH3Akatz');
   controlForm.append('akatzExpression','true');controlForm.append('akatzFaceControl','true');
   const control=await fetch(url+'/api/generate',{
