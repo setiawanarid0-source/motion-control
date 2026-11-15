@@ -7,6 +7,8 @@ import {h3PhotoPlan} from './minimax-h3-motion.js';
 import {extendTurbo8Graph,serializeTurbo8Editor} from './h3-akatz-turbo8-adaptive.js';
 import {withAkatzExpression,akatzExpressionPlan,akatzExpressionEditorSchemas,AKATZ_EXPRESSION_REVISION,AKATZ_EXPRESSION_LEGACY_REVISION} from './h3-akatz-expression.js';
 import {AKATZ_FACE_CONTROL_REVISION} from './h3-akatz-face-control.js';
+import {withAkatzSubjectMask,akatzSubjectMaskPlan,akatzSubjectMaskEditorSchemas,AKATZ_SUBJECT_MASK_REVISION} from './h3-akatz-subject-mask.js';
+const withAkatzVariant=(g,s,segments)=>s.akatzSubjectMask===true?withAkatzSubjectMask(g,s,segments):withAkatzExpression(g,s,segments);
 
 export const TURBO8_LEGACY_REVISION='akatz-native-1080-turbo8-template-r2';
 export const TURBO8_ADAPTIVE_REVISION='akatz-native-1080-turbo8-adaptive-v1';
@@ -107,8 +109,8 @@ export function turbo8GraphForInputs({imageName,videoName,source,characterLoraFi
     throw Error('Referensi atau receipt model Akatz Turbo8 belum valid.');
   const temporal=turbo8TemporalPlan(source);
   if(source.totalFrames>362){
-    const prototype=turbo8GraphForInputs({imageName,videoName,source:{...source,totalFrames:362,akatzExpression:false,akatzFaceControl:false},characterLoraFile,turboLoraFile});
-    return withAkatzExpression(extendTurbo8Graph(prototype,source,temporal),source,temporal.segments);
+    const prototype=turbo8GraphForInputs({imageName,videoName,source:{...source,totalFrames:362,akatzExpression:false,akatzFaceControl:false,akatzSubjectMask:false},characterLoraFile,turboLoraFile});
+    return withAkatzVariant(extendTurbo8Graph(prototype,source,temporal),source,temporal.segments);
   }
   const graph=editorApi();
   graph['30'].inputs.image=imageName;
@@ -179,7 +181,7 @@ export function turbo8GraphForInputs({imageName,videoName,source,characterLoraFi
       throw Error('Kontrol editor belum diselesaikan untuk API.');
     if(!source.hasAudio&&node.class_type==='VHS_LoadAudioUpload')throw Error('Sambungan audio kosong masih aktif.');
   }
-  return withAkatzExpression(result,source,temporal.segments);
+  return withAkatzVariant(result,source,temporal.segments);
 }
 
 export function turbo8SeedNodeInfo(source){
@@ -190,7 +192,7 @@ export function turbo8ExecutionPlan(source){
   const graph=turbo8GraphForInputs({imageName:'inspection.png',videoName:'inspection.mp4',source,
     characterLoraFile:'api-lora-inspection/00000000000000000000000000000000.safetensors',
     turboLoraFile:'api-lora-inspection/11111111111111111111111111111111.safetensors'});
-  return {revision:source.akatzFaceControl===true?AKATZ_FACE_CONTROL_REVISION:source.akatzExpression===true?AKATZ_EXPRESSION_REVISION:TURBO8_REVISION,inferenceProfile:source.inferenceProfile,frames:source.totalFrames,fps:24,
+  return {revision:source.akatzSubjectMask===true?AKATZ_SUBJECT_MASK_REVISION:source.akatzFaceControl===true?AKATZ_FACE_CONTROL_REVISION:source.akatzExpression===true?AKATZ_EXPRESSION_REVISION:TURBO8_REVISION,inferenceProfile:source.inferenceProfile,frames:source.totalFrames,fps:24,
     templateSha256:TURBO8_TEMPLATE_SHA256,sampling:{steps:8,sampler:'er_sde',scheduler:'normal',videoShift:12,audioShift:3,
       character:'Akatz V1.5',turbo:'FL2V Turbo 8-step v1.0 768p',turboSha256:TURBO8_ASSET.sha256},
     canvas:[source.canvasWidth,source.canvasHeight],output:[source.outputWidth,source.outputHeight],
@@ -200,6 +202,7 @@ export function turbo8ExecutionPlan(source){
     continuation:'sampler_av_latent_tail',continuationFrames:5,continuationVaeRoundTrips:0,
     firstFrameGuide:firstFrameGuidePlan(source),
     ...(source.akatzExpression===true?{expressionControl:akatzExpressionPlan(source,p.segments)}:{}),
+    ...(source.akatzSubjectMask===true?{subjectMask:akatzSubjectMaskPlan(source,p.segments)}:{}),
     outputEncoding:{format:'video/h264-mp4',crf:12},frameDiagnostics:{zipNode:'5108',positions:['first','middle','last']},
     nodeClasses:Object.fromEntries(Object.entries(graph).map(([id,n])=>[id,n.class_type])),
     workBudget:{totalSteps:p.segments.length*8,targetSeconds:source.totalFrames<=362?1500:null,
@@ -207,12 +210,12 @@ export function turbo8ExecutionPlan(source){
     postDecodeResize:false,postRefinement:false,gpuExecutionQualified:false,visualAcceptance:'pending_owner_test'};
 }
 export function turbo8NodeClass(id,plan){
-  return [TURBO8_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_LEGACY_REVISION,AKATZ_EXPRESSION_REVISION,AKATZ_EXPRESSION_LEGACY_REVISION,AKATZ_FACE_CONTROL_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
+  return [TURBO8_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_LEGACY_REVISION,AKATZ_EXPRESSION_REVISION,AKATZ_EXPRESSION_LEGACY_REVISION,AKATZ_FACE_CONTROL_REVISION,AKATZ_SUBJECT_MASK_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
 }
 
-export function turbo8EditorForFrames({characterLoraFile,turboLoraFile,frames,width=1080,height=1920,akatzExpression=false,akatzFaceControl=false}){
+export function turbo8EditorForFrames({characterLoraFile,turboLoraFile,frames,width=1080,height=1920,akatzExpression=false,akatzFaceControl=false,akatzSubjectMask=false}){
   const source={...h3PhotoPlan(width,height),fps:24,totalFrames:frames,hasAudio:true,...(akatzExpression===true?{akatzExpression:true}:{}),
-    ...(akatzFaceControl===true?{akatzFaceControl:true}:{})};
+    ...(akatzFaceControl===true?{akatzFaceControl:true}:{}),...(akatzSubjectMask===true?{akatzSubjectMask:true}:{})};
   const models={characterLoraFile,turboLoraFile};
   const api=turbo8GraphForInputs({...models,source,imageName:'UPLOAD_PHOTO.png',videoName:'UPLOAD_VIDEO.mp4'});
   const blueprint=turbo8EditorWorkflow(models),filename=blueprint.nodes.find(n=>n.type==='WidgetToString');
@@ -221,11 +224,16 @@ export function turbo8EditorForFrames({characterLoraFile,turboLoraFile,frames,wi
     if(node.class_type==='VHS_LoadAudioUpload')node.inputs.audio=['200',0];
     if(node.class_type==='VHS_LoadVideo'&&id!=='1000')node.inputs.video=['200',0];
   }
-  const editor=serializeTurbo8Editor(api,blueprint,source,akatzExpression===true?akatzExpressionEditorSchemas():{});
+  const editor=serializeTurbo8Editor(api,blueprint,source,{...(akatzExpression===true?akatzExpressionEditorSchemas():{}),
+    ...(akatzSubjectMask===true?akatzSubjectMaskEditorSchemas():{})});
   editor.extra.vanta_export.first_frame_guide=firstFrameGuidePlan(source);
   if(akatzExpression===true){
     editor.extra.vanta_export.source_revision=akatzFaceControl===true?AKATZ_FACE_CONTROL_REVISION:AKATZ_EXPRESSION_REVISION;
     editor.extra.vanta_export.expression_control=akatzExpressionPlan(source,turbo8TemporalPlan(source).segments);
+  }
+  if(akatzSubjectMask===true){
+    editor.extra.vanta_export.source_revision=AKATZ_SUBJECT_MASK_REVISION;
+    editor.extra.vanta_export.subject_mask=akatzSubjectMaskPlan(source,turbo8TemporalPlan(source).segments);
   }
   return editor;
 }

@@ -52,7 +52,7 @@ const nodeKeys=['#menuBtn','#sidebar','#rifeNotice','#h3Notice','#akatzNotice','
   '#rhWebSessionPanel',
   '#copyRhSessionCode','#selectRhSessionCode','#copyRhBookmarkTestCode','#rhSessionCodeManual','#connectRhWebSession','#rhWebSessionInput'];
 const nodes=new Map(nodeKeys.map(key=>[key,makeElement()]));
-nodes.get('#akatzExpression').value='controlnet';
+nodes.get('#akatzExpression').value='mask';
 nodes.set('#historyFilters',null);
 const requested=[],uploads=[],errors=[],state={workflow:'motionflyHD',mode:'standard',akatzExpression:true};
 const generated=()=>requested.push('generate');
@@ -123,7 +123,9 @@ assert.equal(modes.find(x=>x.dataset.mode==='standard').disabled,true);
 assert.equal(nodes.get('#imageDrop').classList.contains('hidden'),false);
 assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),false);
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true);
-assert.equal(state.akatzFaceControl,true,'New Akatz selection defaults to the ControlNet candidate');
+assert.equal(state.akatzSubjectMask,true,'New Akatz selection defaults to the subject-mask candidate');
+assert.equal(state.akatzFaceControl,false);
+assert.equal(state.akatzExpression,false);
 nodes.get('#akatzExpression').value='baseline';
 nodes.get('#akatzExpression').listener('change')({target:{value:'baseline'}});
 assert.equal(state.akatzExpression,false,'Previous-version choice must disable the candidate');

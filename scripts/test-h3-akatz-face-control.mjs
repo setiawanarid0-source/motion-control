@@ -167,7 +167,7 @@ for(const frames of [6,49,124,125,244,363,463,1464,2401]){
   assert.equal(editor.extra.vanta_export.source_revision,AKATZ_FACE_CONTROL_REVISION);
   for(const l of editor.links){assert.ok(nodes.get(l[1]).outputs[l[2]].links.includes(l[0]));assert.equal(nodes.get(l[3]).inputs[l[4]].link,l[0]);}
 }
-assert.deepEqual(parseAkatzOptions('minimaxH3Akatz'),{akatzExpression:false,akatzFaceControl:false});
+assert.deepEqual(parseAkatzOptions('minimaxH3Akatz'),{akatzExpression:false,akatzFaceControl:false,akatzSubjectMask:false});
 for(const options of [{akatzFaceControl:'true'},{akatzExpression:'false',akatzFaceControl:'true'},
   {akatzExpression:'true',akatzFaceControl:'yes'},{akatzExpression:'true',akatzFaceControl:['true']}])
   assert.throws(()=>parseAkatzOptions('minimaxH3Akatz',options));
@@ -194,7 +194,7 @@ try{
 // Execute actual client handlers. Restored browser form values must override
 // stale in-memory defaults for BOTH Generate and Download.
 const js=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
-assert.match(html,/<option value="controlnet" selected>ControlNet wajah/);
+assert.match(html,/<option value="controlnet">ControlNet wajah/);
 const helper=js.slice(js.indexOf('function readAkatzMode(){'),js.indexOf("$('#akatzExpression')?.addEventListener"));
 const generate=js.slice(js.indexOf('async function generate(){'),js.indexOf('\nfunction showTask('));
 const download=js.slice(js.indexOf("document.querySelector('.akatz-editor-download')"),js.indexOf('\nfunction initDropzone('));

@@ -1,6 +1,7 @@
 // Experimental face-performance conditioning, inside the existing H3 job.
 // Only conditioning copies are cropped. Native decoded output is untouched.
 import fs from 'node:fs';
+import {parseAkatzSubjectMaskOption} from './h3-akatz-subject-mask.js';
 import {withAkatzFaceControl,akatzFaceControlPlan,parseAkatzFaceControlOption,AKATZ_FACE_CONTROL_SCHEMAS} from './h3-akatz-face-control.js';
 
 export const AKATZ_EXPRESSION_REVISION='akatz-native-1080-turbo8-expression-v2-framealigned';
@@ -21,7 +22,8 @@ export function parseAkatzExpressionOption(workflow,value){
 export function parseAkatzOptions(workflow,options={}){
   const akatzExpression=parseAkatzExpressionOption(workflow,options.akatzExpression);
   const akatzFaceControl=parseAkatzFaceControlOption(workflow,options.akatzFaceControl,akatzExpression);
-  return {akatzExpression,akatzFaceControl};
+  const akatzSubjectMask=parseAkatzSubjectMaskOption(workflow,options.akatzSubjectMask,akatzExpression,akatzFaceControl);
+  return {akatzExpression,akatzFaceControl,akatzSubjectMask};
 }
 
 const facePrompt='The aligned <Video 2> has the same full-frame composition, subject scale and camera trajectory as <Video 1>; '+

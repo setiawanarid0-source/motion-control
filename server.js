@@ -44,6 +44,7 @@ import {installH3ContextInspection,selectContextInspectionTask,assertH3MotionCon
 import {installExpressionInspection} from './h3-expression-inspect.js';
 import {parseAkatzOptions,AKATZ_EXPRESSION_FILENAME} from './h3-akatz-expression.js';
 import {AKATZ_FACE_CONTROL_FILENAME} from './h3-akatz-face-control.js';
+import {AKATZ_SUBJECT_MASK_FILENAME} from './h3-akatz-subject-mask.js';
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,prepareAkatzInput,akatzGraphForInputs,akatzExecutionPlan,akatzSeedNodeInfo} from './h3-akatz-motion.js';
 import * as akatzV3 from './h3-akatz-v3-motion.js';
 import {installAkatzEditorDownload} from './h3-runninghub-export.js';
@@ -731,7 +732,7 @@ installAkatzEditorDownload({app,getModelFiles:()=>({
   ...parseAkatzOptions('minimaxH3Akatz',req.query)}),
   filename:req=>{
     const options=parseAkatzOptions('minimaxH3Akatz',req.query);
-    return options.akatzFaceControl?AKATZ_FACE_CONTROL_FILENAME:options.akatzExpression?AKATZ_EXPRESSION_FILENAME:TURBO8_EDITOR_FILENAME;
+    return options.akatzSubjectMask?AKATZ_SUBJECT_MASK_FILENAME:options.akatzFaceControl?AKATZ_FACE_CONTROL_FILENAME:options.akatzExpression?AKATZ_EXPRESSION_FILENAME:TURBO8_EDITOR_FILENAME;
   }});
 installFrameDiagnostics({app,registry:taskRegistry,getAccount:taskAccount,request:axios.get,validUrl:validProviderUrl,
   getOutputs:async(taskId,account)=>{
@@ -886,6 +887,7 @@ async function handleGeneration(req,res){
     // Legacy queued jobs have no flag and retain the previous graph.
     const akatzExpression=workflowKey==='minimaxH3Akatz'&&req.body?.akatzExpression==='true';
     const akatzFaceControl=akatzExpression&&req.body?.akatzFaceControl==='true';
+    const akatzSubjectMask=workflowKey==='minimaxH3Akatz'&&req.body?.akatzSubjectMask==='true';
     const videoOnly=workflowKey==='rife60';
     if ((!videoOnly&&!imageFile) || !videoFile) throw new Error('Media input wajib diisi.');
     if (imageFile?.size > IMAGE_MAX) throw new Error('Reference Image maksimal 20 MB.');
@@ -905,6 +907,7 @@ async function handleGeneration(req,res){
           inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
       if(akatzExpression)h3Source.akatzExpression=true;
       if(akatzFaceControl)h3Source.akatzFaceControl=true;
+      if(akatzSubjectMask)h3Source.akatzSubjectMask=true;
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
       console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
@@ -950,7 +953,8 @@ async function handleGeneration(req,res){
     let lastError = null;
     let rejectedAtCapacity=0;
     let rejectedByBilling=0;
-    const submittedWorkflow=h3Source?.akatzExpression===true?
+    const submittedWorkflow=h3Source?.akatzSubjectMask===true?
+      {...workflowMeta[workflowKey],name:workflowMeta[workflowKey].name+' · Mask subjek'}:h3Source?.akatzExpression===true?
       {...workflowMeta[workflowKey],name:workflowMeta[workflowKey].name+(h3Source.akatzFaceControl===true?' · ControlNet wajah':' · Uji mimik')}:workflowMeta[workflowKey];
     for (const account of candidates) {
       try {

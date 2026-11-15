@@ -166,6 +166,19 @@ try{
     assert.equal(candidate['6'].inputs.file_name,'api-lora-usa/'+'5'.repeat(32)+'.safetensors');
     assert.ok(candidate['5108']);
   }
+  for(const frames of [49,463,2401]){
+    const before=created.length;
+    await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey:'minimaxH3Akatz',mode:'plus',
+      imageFile:{...media,mimetype:'image/png'},videoFile:media,
+      h3Source:{...source,totalFrames:frames,inferenceProfile:AKATZ_PROFILE,akatzSubjectMask:true}});
+    assert.equal(created.length,before+1,'Subject mask remains exactly one provider task');
+    const candidate=created.at(-1),windows=Object.values(candidate).filter(n=>n.class_type==='SamplerCustomAdvanced');
+    assert.equal(Object.values(candidate).filter(n=>n.class_type==='SAM3_VideoTrack').length,windows.length);
+    assert.ok(windows.every(n=>candidate[n.inputs.latent_image[0]].class_type==='LTXVConcatAVLatent'));
+    assert.ok(!Object.values(candidate).some(n=>/LivePortrait|FunControlNet|RIFE/.test(n.class_type)));
+    assert.equal(candidate['490'].inputs.frame_rate,24);assert.ok(candidate['5108']);
+    assert.equal(candidate['7'].inputs.file_name,'api-lora-usa/'+'3'.repeat(32)+'.safetensors');
+  }
   const missing=createH3AppearanceModel({dir,asset:{...FFP_ASSET,name:'missing-pinned-model'},
     request:async()=>{throw Error('No API key fallback');},http:{get:async()=>{throw Error('No speculative download');}}});
   await assert.rejects(missing.ensure(key),error=>error.code==='H3_MODEL_PREPARATION_FAILED');
