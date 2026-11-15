@@ -1,7 +1,9 @@
 // Spatial editing inside native H3 sampling. No decoded output is composited.
 import fs from 'node:fs';
 
-export const AKATZ_SUBJECT_MASK_REVISION='akatz-native-1080-turbo8-subject-mask-v1';
+export const AKATZ_SUBJECT_MASK_LEGACY_REVISION='akatz-native-1080-turbo8-subject-mask-v1';
+export const AKATZ_SUBJECT_MASK_REVISION='akatz-native-1080-turbo8-subject-mask-memory-v2';
+export const AKATZ_SUBJECT_MASK_REVISIONS=Object.freeze([AKATZ_SUBJECT_MASK_REVISION,AKATZ_SUBJECT_MASK_LEGACY_REVISION]);
 export const AKATZ_SUBJECT_MASK_FILENAME='VANTA_AKATZ_MASK_SUBJEK_RUNNINGHUB.json';
 export const AKATZ_SUBJECT_MASK_CHECKPOINT='sam3.1_multiplex_fp16.safetensors';
 export const AKATZ_SUBJECT_MASK_SCHEMAS=JSON.parse(fs.readFileSync(
@@ -29,17 +31,26 @@ export function withAkatzSubjectMask(baseline,source,segments){
     while(graph[String(next)]||reserved.has(String(next)))next++;
     const id=String(next++);graph[id]={class_type,inputs};return [id,0];
   };
+  if(graph['8']?.class_type!=='MiniMaxH3SigmaShift'||graph['9']?.class_type!=='ModelAttentionBackend')
+    throw Error('Rantai model mask subjek tidak sesuai basis Akatz.');
+  // Partition dense heads and independent FFN rows, retaining the existing
+  // model/LoRAs, Kitchen backend, references, sigma schedule and all tokens.
+  // These reduce transient memory; a speedup on the worker is not guaranteed.
+  const attention=add('MiniMaxLowVRAMAttention',{model:['8',0],head_chunks:4});
+  const model=add('MiniMaxChunkFeedForward',{model:attention,chunks:2,seq_threshold:4096});
   // This is the same SAM checkpoint already used by MotionFly, not its video
   // model. The H3 model, LoRAs, prompt, reference paths and sampler stay intact.
   const sam=add('CheckpointLoaderSimple',{ckpt_name:AKATZ_SUBJECT_MASK_CHECKPOINT});
   const subject=add('CLIPTextEncode',{clip:[sam[0],1],text:'person'});
   for(const s of segments){
-    const ref=graph[String(s.base+5)],sampler=graph[String(s.base+11)];
+    const ref=graph[String(s.base+5)],sampler=graph[String(s.base+11)],guider=graph[String(s.base+10)];
     if(ref?.class_type!=='MiniMaxH3ReferenceToVideo'||ref.inputs.length!==124||
       sampler?.class_type!=='SamplerCustomAdvanced'||
       JSON.stringify(sampler.inputs.latent_image)!==JSON.stringify([String(s.base+5),1])||
+      guider?.class_type!=='CFGGuider'||JSON.stringify(guider.inputs.model)!==JSON.stringify(['8',0])||
       !edge(ref.inputs['ref_videos.ref_video_1']))
       throw Error('Sambungan window mask subjek tidak sesuai basis.');
+    guider.inputs.model=model;
     // The base can append one redundant tail frame to a full window. Native
     // reference encoding trims it internally; source VAE/masks must do so too.
     const frames=add('ImageFromBatch',{image:structuredClone(ref.inputs['ref_videos.ref_video_1']),batch_index:0,length:124});
@@ -54,11 +65,13 @@ export function withAkatzSubjectMask(baseline,source,segments){
     // Do not silently turn a completely missed subject into an unchanged
     // source plate. A close-up may legitimately occupy the entire canvas.
     const checked=add('SAM3_ValidateMask',{mask,min_ratio:0.001,max_ratio:1});
-    const expanded=add('GrowMask',{mask:checked,expand:64,tapered_corners:true});
     // auto reads the actual H3 VAE's 1,4,4,4,4 cycle, token drop and 2x2
     // DiT cells. A pixel-frame batch must not be interpolated across time.
-    const reduced=add('MVEx_MaskToLatentSpace',{masks:expanded,compression:'auto',vae:['3',0],
-      spatial_method:'max',temporal_method:'max',grow_spatial:0,grow_temporal:0,grow_temp_mode:'both'});
+    // Its cross dilation is identical to native GrowMask64 tapered for finite
+    // masks. Fuse it here so MVEx tries the accelerator and releases its pixel
+    // workspace after reduction. Upstream falls back to CPU on GPU failure.
+    const reduced=add('MVEx_MaskToLatentSpace',{masks:checked,compression:'auto',vae:['3',0],
+      spatial_method:'max',temporal_method:'max',grow_spatial:64,grow_temporal:0,grow_temp_mode:'both'});
     const encoded=add('VAEEncode',{pixels:canvas,vae:['3',0]});
     const masked=add('LTXVSetVideoLatentNoiseMasks',{samples:encoded,masks:reduced});
     // These are generic AV packing operators, explicitly supporting H3.
@@ -77,6 +90,11 @@ export function akatzSubjectMaskPlan(source,segments){
     samCheckpoint:AKATZ_SUBJECT_MASK_CHECKPOINT,trackingScope:'per_window',maxObjects:1,
     detectionThreshold:0.5,detectInterval:1,emptyMaskPolicy:'reject_window_mean_below_0.001',
     expansionPixels:64,compression:'H3_VAE_auto',temporalReduction:'max',spatialReduction:'max',
+    maskExpansion:{operator:'MVEx_grow_spatial',footprint:'cross',iterations:64,
+      devicePolicy:'upstream_accelerator_with_cpu_fallback',cpuOperatorEquality:'passed',gpuTimingMeasured:false},
+    samplingMemory:{attention:'dense_all_tokens',headChunks:4,feedForwardChunks:2,sequenceThreshold:4096,
+      existingAttentionBackendPreserved:true,approximateStepReuse:false,sparseAttention:false,
+      workerExecutionQualified:false,speedupMeasured:false},
     videoMaskShape:'B,1,T,H/16,W/16',audioSource:'native_H3_target_audio_latent',
     audioDenoiseMask:'ones',sourceCanvas:[source.canvasWidth,source.canvasHeight],
     sourceCanvasFit:'conditioning_only_aspect_preserving_pad',

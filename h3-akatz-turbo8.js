@@ -7,7 +7,7 @@ import {h3PhotoPlan} from './minimax-h3-motion.js';
 import {extendTurbo8Graph,serializeTurbo8Editor} from './h3-akatz-turbo8-adaptive.js';
 import {withAkatzExpression,akatzExpressionPlan,akatzExpressionEditorSchemas,AKATZ_EXPRESSION_REVISION,AKATZ_EXPRESSION_LEGACY_REVISION} from './h3-akatz-expression.js';
 import {AKATZ_FACE_CONTROL_REVISION} from './h3-akatz-face-control.js';
-import {withAkatzSubjectMask,akatzSubjectMaskPlan,akatzSubjectMaskEditorSchemas,AKATZ_SUBJECT_MASK_REVISION} from './h3-akatz-subject-mask.js';
+import {withAkatzSubjectMask,akatzSubjectMaskPlan,akatzSubjectMaskEditorSchemas,AKATZ_SUBJECT_MASK_REVISION,AKATZ_SUBJECT_MASK_REVISIONS} from './h3-akatz-subject-mask.js';
 const withAkatzVariant=(g,s,segments)=>s.akatzSubjectMask===true?withAkatzSubjectMask(g,s,segments):withAkatzExpression(g,s,segments);
 
 export const TURBO8_LEGACY_REVISION='akatz-native-1080-turbo8-template-r2';
@@ -210,7 +210,7 @@ export function turbo8ExecutionPlan(source){
     postDecodeResize:false,postRefinement:false,gpuExecutionQualified:false,visualAcceptance:'pending_owner_test'};
 }
 export function turbo8NodeClass(id,plan){
-  return [TURBO8_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_LEGACY_REVISION,AKATZ_EXPRESSION_REVISION,AKATZ_EXPRESSION_LEGACY_REVISION,AKATZ_FACE_CONTROL_REVISION,AKATZ_SUBJECT_MASK_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
+  return [TURBO8_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_LEGACY_REVISION,AKATZ_EXPRESSION_REVISION,AKATZ_EXPRESSION_LEGACY_REVISION,AKATZ_FACE_CONTROL_REVISION,...AKATZ_SUBJECT_MASK_REVISIONS].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
 }
 
 export function turbo8EditorForFrames({characterLoraFile,turboLoraFile,frames,width=1080,height=1920,akatzExpression=false,akatzFaceControl=false,akatzSubjectMask=false}){

@@ -8,7 +8,7 @@ import express from 'express';
 import {h3PhotoPlan} from '../minimax-h3-motion.js';
 import {turbo8GraphForInputs,turbo8TemporalPlan,turbo8ExecutionPlan,turbo8EditorForFrames,TURBO8_ASSET,TURBO8_EDITOR_FILENAME} from '../h3-akatz-turbo8.js';
 import {parseAkatzOptions} from '../h3-akatz-expression.js';
-import {AKATZ_SUBJECT_MASK_REVISION,AKATZ_SUBJECT_MASK_FILENAME,AKATZ_SUBJECT_MASK_SCHEMAS,akatzSubjectMaskEditorSchemas} from '../h3-akatz-subject-mask.js';
+import {AKATZ_SUBJECT_MASK_REVISION,AKATZ_SUBJECT_MASK_LEGACY_REVISION,AKATZ_SUBJECT_MASK_FILENAME,AKATZ_SUBJECT_MASK_SCHEMAS,akatzSubjectMaskEditorSchemas} from '../h3-akatz-subject-mask.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
 import {installAkatzEditorDownload} from '../h3-runninghub-export.js';
 import {createGenerationQueue} from '../generation-queue.js';
@@ -52,12 +52,23 @@ for(const audio of [false,true])for(const [width,height] of [[1080,1920],[1920,1
   assert.equal(plan.revision,AKATZ_SUBJECT_MASK_REVISION);assert.equal(plan.applicationMaxSeconds,null);
   assert.equal(plan.samplerCount,p.segments.length);assert.equal(plan.subjectMask.postOutputRefinement,false);
   assert.equal(plan.subjectMask.hardPerFrameFacialControl,false);
+  assert.equal(plan.subjectMask.maskExpansion.gpuTimingMeasured,false);
+  assert.equal(plan.subjectMask.samplingMemory.speedupMeasured,false);
+  assert.equal(plan.subjectMask.samplingMemory.sparseAttention,false);
   assert.ok(!plan.expressionControl);
+  assert.ok(!Object.values(g).some(n=>n.class_type==='GrowMask'),'No slow per-frame SciPy expansion');
+  const ff=Object.entries(g).filter(([id,n])=>n.class_type==='MiniMaxChunkFeedForward');
+  assert.equal(ff.length,1,'All windows share one patched model');
+  const [ffId,ffNode]=ff[0];assert.equal(ffNode.inputs.chunks,2);assert.equal(ffNode.inputs.seq_threshold,4096);
+  const memory=g[ffNode.inputs.model[0]];assert.equal(memory.class_type,'MiniMaxLowVRAMAttention');
+  assert.equal(memory.inputs.head_chunks,4);assert.deepEqual(memory.inputs.model,['8',0]);
+  assert.deepEqual(g['8'],original['8']);assert.deepEqual(g['9'],original['9']);
   assert.equal(Object.values(g).filter(n=>n.class_type==='SAM3_VideoTrack').length,p.segments.length);
   assert.equal(Object.values(g).filter(n=>n.class_type==='LTXVConcatAVLatent').length,p.segments.length);
   assert.ok(!Object.values(g).some(n=>/LivePortrait|Canny|FunControlNet|RIFE|H3Relay/.test(n.class_type)));
   for(const s of p.segments){
     const sampler=g[s.base+11],ref=g[s.base+5];
+    assert.deepEqual(g[s.base+10].inputs.model,[ffId,0]);
     assert.deepEqual(ref,original[s.base+5],'Keep photo and raw RGB video reference paths intact');
     const av=g[sampler.inputs.latent_image[0]];
     assert.equal(av.class_type,'LTXVConcatAVLatent');assert.equal(av.inputs.audio_latent[1],1);
@@ -72,8 +83,8 @@ for(const audio of [false,true])for(const [width,height] of [[1080,1920],[1920,1
     assert.equal(reduced.inputs.compression,'auto','Dynamic combo API selection is a flat key');
     assert.deepEqual(reduced.inputs.vae,encoded.inputs.vae);assert.equal(reduced.inputs.temporal_method,'max');
     assert.equal(reduced.inputs.spatial_method,'max');assert.equal(reduced.inputs.grow_temporal,0);
-    const grow=g[reduced.inputs.masks[0]];assert.equal(grow.class_type,'GrowMask');assert.equal(grow.inputs.expand,64);
-    const checked=g[grow.inputs.mask[0]];assert.equal(checked.class_type,'SAM3_ValidateMask');
+    assert.equal(reduced.inputs.grow_spatial,64);
+    const checked=g[reduced.inputs.masks[0]];assert.equal(checked.class_type,'SAM3_ValidateMask');
     assert.equal(checked.inputs.max_ratio,1,'Full-canvas close-ups must be permitted');assert.ok(checked.inputs.min_ratio>0);
     const masks=g[checked.inputs.mask[0]],track=g[masks.inputs.track_data[0]];
     assert.equal(track.class_type,'SAM3_VideoTrack');assert.equal(track.inputs.max_objects,1);
@@ -83,12 +94,13 @@ for(const audio of [false,true])for(const [width,height] of [[1080,1920],[1920,1
     assert.deepEqual(actual.slice(0,s.inputFrames),Array.from({length:s.inputFrames},(_,i)=>s.loadStart+i));
     assert.ok(actual.slice(s.inputFrames).every(f=>f===s.loadStart+s.inputFrames-1),'Only the final source frame is repeated for padding');
   }
-  // Exactly the sampler latent_image changes on pre-existing nodes. This
+  // Only sampler latent_image and guider model change on pre-existing nodes. This
   // guards native output/audio/archive, raw history, first-frame guides, model,
   // prompt, seed and scheduler against accidental candidate-specific changes.
   for(const [id,node] of Object.entries(original)){
     const expected=structuredClone(g[id]);assert.ok(expected);
     if(node.class_type==='SamplerCustomAdvanced')expected.inputs.latent_image=node.inputs.latent_image;
+    if(node.class_type==='CFGGuider')expected.inputs.model=node.inputs.model;
     assert.deepEqual(expected,node,'Unrelated baseline node changed: '+id);
   }
   for(const [id,n] of Object.entries(g)){
@@ -113,6 +125,8 @@ for(const audio of [false,true])for(const [width,height] of [[1080,1920],[1920,1
   }
   assert.equal(g['490'].inputs.frame_rate,24);
 }
+assert.equal(h3NodeClass('10049',{revision:AKATZ_SUBJECT_MASK_LEGACY_REVISION,nodeClasses:{10049:'GrowMask'}}),'GrowMask',
+  'Historical v1 trace plans retain their original node mapping');
 
 for(const frames of [6,124,125,244,363,463,1464,2401]){
   const editor=turbo8EditorForFrames({...models,frames,akatzSubjectMask:true}),nodes=new Map(editor.nodes.map(n=>[n.id,n]));

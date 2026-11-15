@@ -271,7 +271,7 @@ function updateGenerate(){
 function workflowName(){
   if(state.workflow==='motionflyHD')return 'MotionFly · 1080 HD + ZIP';
   if(state.workflow==='minimaxH3AkatzV3')return 'MiniMax H3 · Akatz v3 · 1080p';
-  if(state.workflow==='minimaxH3Akatz')return 'MiniMax H3 · Akatz V1.5 Native · 1080p'+(state.akatzSubjectMask?' · Mask subjek':state.akatzFaceControl?' · ControlNet wajah':state.akatzExpression?' · Uji mimik':' · Versi dasar');
+  if(state.workflow==='minimaxH3Akatz')return 'MiniMax H3 · Akatz V1.5 Native · 1080p'+(state.akatzSubjectMask?' · Mask subjek v2':state.akatzFaceControl?' · ControlNet wajah':state.akatzExpression?' · Uji mimik':' · Versi dasar');
   if(state.workflow==='minimaxH3')return 'MiniMax H3 · Motion Control · 1080p';
   if(state.workflow==='rife60')return 'RIFE Adaptive · hingga 60 FPS';
   return 'Current Workflow';
@@ -1161,7 +1161,7 @@ function readAkatzMode(){
   state.akatzExpression=state.akatzFaceControl||mode==='expression';
   const status=$('#akatzExpressionStatus');
   if(status)status.textContent=state.akatzSubjectMask?
-    'Mask subjek masih percobaan dan belum lolos uji waktu. Versi dasar Akatz tersedia untuk pembanding.':state.akatzFaceControl?
+    'Mask subjek v2 masih percobaan. Waktu proses dan hasil video belum terverifikasi. Versi dasar Akatz tetap tersedia.':state.akatzFaceControl?
     'ControlNet wajah aktif. Ekspresi video menjadi panduan untuk wajah karakter foto. Hasil visual menunggu tes Anda.':
     state.akatzExpression?'Uji mimik sebelumnya aktif. Hasil visual mengikuti versi sebelum ControlNet.':
     'Versi dasar Akatz aktif.';
