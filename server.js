@@ -954,7 +954,7 @@ async function handleGeneration(req,res){
     let rejectedAtCapacity=0;
     let rejectedByBilling=0;
     const submittedWorkflow=h3Source?.akatzSubjectMask===true?
-      {...workflowMeta[workflowKey],name:workflowMeta[workflowKey].name+' · Mask subjek'}:h3Source?.akatzExpression===true?
+      {...workflowMeta[workflowKey],name:workflowMeta[workflowKey].name+' · Mask subjek v2'}:h3Source?.akatzExpression===true?
       {...workflowMeta[workflowKey],name:workflowMeta[workflowKey].name+(h3Source.akatzFaceControl===true?' · ControlNet wajah':' · Uji mimik')}:workflowMeta[workflowKey];
     for (const account of candidates) {
       try {

@@ -1,6 +1,6 @@
 {
   "source": "https://www.runninghub.ai/object_info",
-  "checkedAt": "2026-11-15T08:10:33.693973+00:00",
+  "checkedAt": "2026-11-15T11:25:24.357878+00:00",
   "registrySha256": "a757eb0242c738d0ca75c9509dd903765edc1782f10b95e564a52d461680e511",
   "nodes": {
     "CheckpointLoaderSimple": {
@@ -928,6 +928,111 @@
         null,
         null
       ],
+      "api_node": false
+    },
+    "MiniMaxLowVRAMAttention": {
+      "input": {
+        "required": {
+          "model": [
+            "MODEL",
+            {}
+          ],
+          "head_chunks": [
+            "INT",
+            {
+              "tooltip": "Number of head groups to split the attention call into. Kernel-internal transients scale down with this; heads are independent so the result is unchanged.",
+              "default": 4,
+              "min": 1,
+              "max": 56,
+              "step": 1
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "model",
+          "head_chunks"
+        ]
+      },
+      "output": [
+        "MODEL"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "model"
+      ],
+      "name": "MiniMaxLowVRAMAttention",
+      "display_name": "MiniMax H3 Low VRAM Attention",
+      "description": "Reduces peak VRAM of the MiniMax H3 attention without changing the math. Splits the attention call into head groups so the kernel's internal transients (int8 q/k copies, fp32 accumulator) shrink by the chunk count while the fused qkv buffer is alive, and frees the qkv buffer / normed block input as soon as they're consumed. Output is identical to the unpatched model.",
+      "python_module": "custom_nodes.ComfyUI-KJNodes",
+      "category": "KJNodes/experimental",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "experimental": true,
+      "api_node": false
+    },
+    "MiniMaxChunkFeedForward": {
+      "input": {
+        "required": {
+          "model": [
+            "MODEL",
+            {}
+          ],
+          "chunks": [
+            "INT",
+            {
+              "tooltip": "Number of chunks to split the feedforward tokens into. More chunks = lower peak VRAM, slightly more overhead.",
+              "default": 2,
+              "min": 1,
+              "max": 64,
+              "step": 1
+            }
+          ],
+          "seq_threshold": [
+            "INT",
+            {
+              "tooltip": "Only chunk when the packed token count exceeds this (skips tiny sequences).",
+              "default": 4096,
+              "min": 256,
+              "max": 262144,
+              "step": 256
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "model",
+          "chunks",
+          "seq_threshold"
+        ]
+      },
+      "output": [
+        "MODEL"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "model"
+      ],
+      "name": "MiniMaxChunkFeedForward",
+      "display_name": "MiniMax H3 ChunkFeedForward",
+      "description": "Chunks the MiniMax H3 feedforward (SwiGLU) over the packed token dim to reduce peak VRAM usage. Each chunk still goes through ComfyUI's fused INT8 kernel when the model is quantized, and since activations are quantized per-token the output matches the unchunked model.",
+      "python_module": "custom_nodes.ComfyUI-KJNodes",
+      "category": "KJNodes/experimental",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "experimental": true,
       "api_node": false
     }
   }
