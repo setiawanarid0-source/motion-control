@@ -74,6 +74,12 @@ try{
   modelRestart.resume();
   assert.equal(modelRestart.owned(other,device).stage,'queued','Model setup remains unpaid and restartable');
   assert.equal(modelRestart.owned(paid,device).stage,'uncertain','Model setup must not change paid-submission recovery');
+  modelRestart.update(other,{stage:'error',failureStage:'submitting',failureCode:'RUNNINGHUB_INSUFFICIENT_BALANCE',
+    error:'Kredit komputasi tidak mencukupi. Task belum dibuat.'});
+  const balanceRestart=createGenerationQueue({dir:folder});balanceRestart.resume();
+  assert.equal(balanceRestart.owned(other,device).stage,'error','A definite credit refusal stays terminal after restart');
+  assert.equal(balanceRestart.owned(other,device).failureCode,'RUNNINGHUB_INSUFFICIENT_BALANCE',
+    'The browser must receive the persisted credit rejection rather than an unknown acknowledgement');
   assert.ok(!JSON.stringify(queue.latest(device)).includes(folder),'Do not expose storage paths');
   console.log('PASS: durable async preflight queue, repeat-ID idempotence, restart safety, and client isolation');
 }finally{fs.rmSync(folder,{recursive:true,force:true});}

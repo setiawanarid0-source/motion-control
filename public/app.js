@@ -294,16 +294,19 @@ function displaySubmissionFailure(data,{restored=false}={}){
   const rejectedGraph=/prompt_outputs_failed_validation|RUNNINGHUB_WORKFLOW_VALIDATION/i.test(msg);
   const capacityFull=/TASK_QUEUE_MAXED/i.test(String(data.error||''));
   const paidBalanceRequired=data?.failureCode==='RUNNINGHUB_PAID_BALANCE_REQUIRED';
+  const insufficientBalance=data?.failureCode==='RUNNINGHUB_INSUFFICIENT_BALANCE';
   const missingWorkflow=data?.failureCode==='RH_WEB_WORKSPACE_NOT_FOUND';
   $('#taskSection').classList.remove('hidden');
   $('#taskStatus').textContent=ambiguous?'Status penerimaan belum pasti':
     missingWorkflow?'Workflow tidak ditemukan':
+    insufficientBalance?'Kredit akun tidak mencukupi':
     paidBalanceRequired?'Pengiriman ditolak RunningHub':
     capacityFull?'Antrean akun penuh':
     rejectedGraph?'Workflow ditolak RunningHub':
     providerStage?'Pengiriman gagal':'Persiapan belum berhasil';
   $('#taskEstimate').textContent=ambiguous?
     'Jangan kirim ulang sebelum memeriksa History':
+    insufficientBalance?'Task belum dibuat oleh RunningHub':
     providerStage||rejectedGraph?'Belum ada task ID dari RunningHub':
     'Gagal sebelum pengiriman task';
   $('#taskId').textContent='Belum ada task ID';
