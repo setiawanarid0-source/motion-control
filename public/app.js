@@ -5,7 +5,7 @@ const state = {
   registeredTaskIds: new Set(), submission:null, submissionTimer:null, submissionPolling:false,
   akatzExpression:false,
   akatzFaceControl:false,
-  akatzSubjectMask:true,
+  akatzSubjectMask:false,
 };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -1161,7 +1161,7 @@ function readAkatzMode(){
   state.akatzExpression=state.akatzFaceControl||mode==='expression';
   const status=$('#akatzExpressionStatus');
   if(status)status.textContent=state.akatzSubjectMask?
-    'Mask subjek aktif. Foto menjadi acuan karakter; video menjadi acuan ekspresi, gerak dan kamera. Hasil visual menunggu tes Anda.':state.akatzFaceControl?
+    'Mask subjek masih percobaan dan belum lolos uji waktu. Versi dasar Akatz tersedia untuk pembanding.':state.akatzFaceControl?
     'ControlNet wajah aktif. Ekspresi video menjadi panduan untuk wajah karakter foto. Hasil visual menunggu tes Anda.':
     state.akatzExpression?'Uji mimik sebelumnya aktif. Hasil visual mengikuti versi sebelum ControlNet.':
     'Versi dasar Akatz aktif.';

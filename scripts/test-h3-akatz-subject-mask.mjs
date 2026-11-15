@@ -147,7 +147,8 @@ try{
 // Run the actual form handlers to catch restored-browser choices disagreeing
 // with stale state. Generate and Download must carry the same selected mode.
 const js=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
-assert.match(html,/<option value="mask" selected>Mask subjek/);
+assert.match(html,/<option value="baseline" selected>Versi dasar Akatz/);
+assert.match(html,/<option value="mask">Mask subjek/);
 const helper=js.slice(js.indexOf('function readAkatzMode(){'),js.indexOf("$('#akatzExpression')?.addEventListener"));
 const generate=js.slice(js.indexOf('async function generate(){'),js.indexOf('\nfunction showTask('));
 const download=js.slice(js.indexOf("document.querySelector('.akatz-editor-download')"),js.indexOf('\nfunction initDropzone('));

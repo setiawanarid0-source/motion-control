@@ -135,13 +135,13 @@
             <div id="akatzNotice" class="diagnostic-notice hidden" role="note"><strong>Akatz V1.5 Native · Turbo8</strong>
               <label class="field-label" for="akatzExpression">VERSI WORKFLOW</label>
               <select id="akatzExpression" aria-describedby="akatzExpressionStatus">
-                <option value="mask" selected>Mask subjek · uji</option>
+                <option value="mask">Mask subjek · uji waktu</option>
                 <option value="controlnet">ControlNet wajah sebelumnya</option>
                 <option value="expression">Uji mimik sebelumnya</option>
-                <option value="baseline">Versi dasar Akatz</option>
+                <option value="baseline" selected>Versi dasar Akatz</option>
               </select>
-              <p id="akatzExpressionStatus" role="status">Mask subjek aktif. Foto menjadi acuan karakter; video menjadi acuan ekspresi, gerak dan kamera. Hasil visual menunggu tes Anda.</p>
-              <p>Unggah satu foto dan satu video minimal 0,25 detik. Gunakan Plus. Hasil native 1080p mengikuti rasio foto, 24 FPS, dengan audio sumber; tanpa upscale, downscale atau refinement hasil.</p><p>Durasi mengikuti video secara otomatis. Hasil menyediakan video native dan ZIP tiga frame PNG awal, tengah, dan akhir. Batas upload, memori dan waktu proses RunningHub tetap berlaku.</p><p><a class="akatz-editor-download" href="/api/workflows/minimaxH3Akatz/runninghub?akatzSubjectMask=true" download="VANTA_AKATZ_MASK_SUBJEK_RUNNINGHUB.json">Unduh workflow yang dipilih + ZIP</a></p></div>
+              <p id="akatzExpressionStatus" role="status">Versi dasar Akatz aktif.</p>
+              <p>Unggah satu foto dan satu video minimal 0,25 detik. Gunakan Plus. Hasil native 1080p mengikuti rasio foto, 24 FPS, dengan audio sumber; tanpa upscale, downscale atau refinement hasil.</p><p>Durasi mengikuti video secara otomatis. Hasil menyediakan video native dan ZIP tiga frame PNG awal, tengah, dan akhir. Batas upload, memori dan waktu proses RunningHub tetap berlaku.</p><p><a class="akatz-editor-download" href="/api/workflows/minimaxH3Akatz/runninghub?akatzSubjectMask=false" download="VANTA_AKATZ_TURBO8_TIGA_FRAME_ZIP_R2_RUNNINGHUB.json">Unduh workflow yang dipilih + ZIP</a></p></div>
             <label class="field-label">RUNNINGHUB MACHINE</label>
             <div class="mode-grid">
               <button class="mode-card selected" data-mode="standard" type="button">
@@ -373,7 +373,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/auth.js?v=20261026-global-login" defer></script>
   <script src="/rh-session.js?v=20261113-bookmark-flow" defer></script>
-  <script src="/app.js?v=20261115-akatz-subject-mask" defer></script>
+  <script src="/app.js?v=20261115-akatz-base-default" defer></script>
   <script src="/kie-ui.js?v=20261113-seedream55-gpt26" defer></script>
   <script src="/history-gallery.js?v=20261113-akatz-turbo8" defer></script>
 </body>
