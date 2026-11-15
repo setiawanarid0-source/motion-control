@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 import {providerExecutionSeconds,taskTimingReport,auditCompletedH3Timings} from '../runninghub-task-timing.js';
 import {createTaskRegistry} from '../task-registry.js';
 const output=(...times)=>({code:0,data:times.map(taskCostTime=>({taskCostTime}))});
@@ -16,6 +17,21 @@ assert.equal(summary.observedTotalSeconds,1312);
 assert.equal(summary.unassignedSeconds,312);
 assert.ok(!('queueSeconds' in summary),'Queue time cannot be inferred from aggregate runtime');
 assert.equal(taskTimingReport(task,1400).unassignedSeconds,null,'Never invent negative queue/allocation time');
+// A backgrounded browser can stamp a local runtime at its next poll, after
+// the server has already finished the task. History sync retains that local
+// field, so terminal timestamps must take priority in the shared gallery clock.
+const app=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const clockStart=app.indexOf('function historyElapsed('),clockEnd=app.indexOf('\nfunction historyStatusLabel(',clockStart);
+assert.ok(clockStart>=0&&clockEnd>clockStart);
+class FixedDate extends Date{static now(){return Date.parse('2026-11-15T13:11:35.634Z');}}
+const elapsed=vm.runInNewContext(app.slice(clockStart,clockEnd)+';historyElapsed',{Date:FixedDate});
+const terminal={startedAt:'2026-11-15T12:15:38.634Z',finishedAt:'2026-11-15T12:56:31.543Z',runtimeMs:3357000};
+for(const status of ['failed','success'])
+  assert.equal(elapsed({...terminal,status}),2452909,'Server terminal time wins over stale local 55:57');
+assert.equal(elapsed({status:'failed',runtimeMs:3357000}),3357000,'Legacy records without timestamps retain their duration');
+assert.equal(elapsed({status:'failed',startedAt:terminal.startedAt,runtimeMs:6000}),6000,'Missing end time keeps the legacy fallback');
+assert.equal(elapsed({status:'failed',startedAt:terminal.startedAt}),null);
+assert.equal(elapsed({...terminal,status:'running',runtimeMs:null}),3357000,'Active tasks keep the live clock');
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-timing-registry-'));
 try{
   const reg=createTaskRegistry({dir,encrypt:JSON.stringify,decrypt:JSON.parse});

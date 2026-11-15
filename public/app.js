@@ -749,15 +749,17 @@ function updateHistory(taskId,patch){
 }
 function isActiveHistoryStatus(status){return ['uploading','queued','running','processing','waiting_output','finalizing','check_error','unavailable'].includes(String(status||'').toLowerCase())}
 function historyElapsed(item){
+  const start=Date.parse(item.startedAt||'');
+  const status=String(item.status||'').toLowerCase();
+  if(['success','failed'].includes(status)&&Number.isFinite(start)){
+    const finished=Date.parse(item.finishedAt||'');
+    // Server synchronization supplies the terminal timestamps. A suspended
+    // browser can retain a later local runtimeMs; it must not override them.
+    if(Number.isFinite(finished))return Math.max(0,finished-start);
+  }
   if(item.runtimeMs!=null&&Number.isFinite(Number(item.runtimeMs)))
     return Math.max(0,Number(item.runtimeMs));
-  const start=Date.parse(item.startedAt||'');
   if(!Number.isFinite(start))return null;
-  const status=String(item.status||'').toLowerCase();
-  if(['success','failed'].includes(status)){
-    const finished=Date.parse(item.finishedAt||'');
-    return Number.isFinite(finished)?Math.max(0,finished-start):null;
-  }
   if(['running','processing','waiting_output','finalizing','check_error','unavailable'].includes(status))
     return Math.max(0,Date.now()-start);
   return null;
@@ -1161,7 +1163,7 @@ function readAkatzMode(){
   state.akatzExpression=state.akatzFaceControl||mode==='expression';
   const status=$('#akatzExpressionStatus');
   if(status)status.textContent=state.akatzSubjectMask?
-    'Mask subjek v2 masih percobaan. Waktu proses dan hasil video belum terverifikasi. Versi dasar Akatz tetap tersedia.':state.akatzFaceControl?
+    'Mask subjek v2 gagal pada uji waktu terakhir. Versi dasar Akatz tetap tersedia.':state.akatzFaceControl?
     'ControlNet wajah aktif. Ekspresi video menjadi panduan untuk wajah karakter foto. Hasil visual menunggu tes Anda.':
     state.akatzExpression?'Uji mimik sebelumnya aktif. Hasil visual mengikuti versi sebelum ControlNet.':
     'Versi dasar Akatz aktif.';
