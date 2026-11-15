@@ -350,14 +350,22 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     }).finally(()=>creating.delete(key)));
     return creating.get(key);
   }
-  async function inspectWorkspace(key){
+  async function inspectWorkspace(key,{instanceType='default'}={}){
+    if(!['default','plus'].includes(instanceType))throw error('Mode audit tidak valid.','RH_WEB_INVALID_AUDIT',true);
     const session=get(key),id=session.workflowId;
     if(!id)return {configured:false};
     const reply=await post(key,'/api/workflow/getContent',{workflowId:id,contentType:'0'});
     const data=Number(reply.code)===0?reply.data:null;
     const validation=await post(key,'/api/user/task/work/valid',{taskType:'WORKFLOW',id,taskCode:null,
-      ...(typeof data?.workflowContent==='string'?{workflowContent:data.workflowContent}:{}),instanceType:'default'});
+      ...(typeof data?.workflowContent==='string'?{workflowContent:data.workflowContent}:{}),instanceType});
     const checked=validation?.data;
+    const numericFields={};
+    for(const [name,value] of Object.entries(checked||{})){
+      if(!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name)||!/coin|point|amount|cost|duration|limit|balance|price|reserve/i.test(name)||/key|token|secret|password|authorization/i.test(name))continue;
+      const number=webBalanceNumber(value);if(number!==null)numericFields[name]=number;
+    }
+    let contentNodeCount=null;
+    try{const content=JSON.parse(data?.workflowContent);if(Array.isArray(content?.nodes))contentNodeCount=content.nodes.length;}catch{}
     const list=await post(key,'/api/workflow/simpleList',{draft:false});
     const rows=Number(list.code)===0?recordList(list.data):[];
     const own=rows.filter(x=>x.workflowName==='VANTA Studio');
@@ -367,11 +375,13 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       ownerMatches:data?.userId==null?null:String(data.userId)===session.userId,
       draft:data?.draft==null?null:[true,1,'1','true'].includes(data.draft),
       workflowState:['string','number','boolean'].includes(typeof data?.workflowState)?data.workflowState:null,
-      contentPresent:typeof data?.workflowContent==='string'&&data.workflowContent.length>2,
+      contentPresent:typeof data?.workflowContent==='string'&&data.workflowContent.length>2,contentNodeCount,
       saved:get(key).workspaceSavedId===id,
-      runValidation:{code:Number.isFinite(Number(validation.code))?Number(validation.code):null,
+      runValidation:{instanceType,code:Number.isFinite(Number(validation.code))?Number(validation.code):null,
         canCreateTask:typeof checked?.canCreateTask==='boolean'?checked.canCreateTask:null,
-        billingVersion:typeof checked?.billingVersion==='string'?checked.billingVersion:null},
+        billingVersion:['OLD','NEW'].includes(checked?.billingVersion)?checked.billingVersion:null,
+        providerMessage:typeof validation?.msg==='string'&&/^[A-Z][A-Z0-9_]{0,119}$/.test(validation.msg)?validation.msg:null,
+        responseFields:checked&&typeof checked==='object'?Object.keys(checked).filter(x=>/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(x)&&!/key|token|secret|password|authorization/i.test(x)):[],numericFields},
       activeListCode:Number.isFinite(Number(list.code))?Number(list.code):null,
       activeMatch:rows.some(x=>String(x.id||x.workflowId)===String(id)),
       vantaWorkspaces:own.map(x=>({reference:String(x.id||x.workflowId||'').slice(-6),
@@ -459,7 +469,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
   }
   async function request(route,key,body){
     if(route==='/uc/openapi/accountStatus')return {code:0,data:{...await status(key),
-      ...(body?.inspectWorkspace?{workspace:await inspectWorkspace(key)}:{})}};
+      ...(body?.inspectWorkspace?{workspace:await inspectWorkspace(key,{instanceType:body.instanceType||'default'})}:{})}};
     if(route==='/task/openapi/create')return create(key,body);
     if(route==='/task/openapi/outputs')return outputs(key,body.taskId);
     if(route==='/task/openapi/cancel')return post(key,'/task/cancel',{taskId:String(body.taskId)},{retryAuth:false});
