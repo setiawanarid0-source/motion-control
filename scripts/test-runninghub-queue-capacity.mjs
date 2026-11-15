@@ -9,6 +9,7 @@ import {
   mayTryNextAccountAfterCreate
 } from '../runninghub-capacity.js';
 import {rankGenerationAccounts} from '../runninghub-account-priority.js';
+import {compileMotionFlyHD,MOTIONFLY_HD_NAME} from '../motionfly-hd-workflow.js';
 import {graphValidationError,isDefinitelyRejectedGraph} from '../runninghub-graph-validation.js';
 import {rifeGraphForSourceFps,rifeBatchSize,RIFE_TARGET_FPS} from '../rife-video.js';
 
@@ -105,6 +106,22 @@ for(const reply of [{code:500,msg:'NOT_ENOUGH_BALANCE',taskId:'21091263667319849
     e=>e.code!=='RUNNINGHUB_INSUFFICIENT_BALANCE',
     'A response containing a task ID cannot be declared unaccepted');
 }
+const powerRefusal='TASK_CREATE_FAILED_BY_NOT_ENOUGH_POWER_VALUE';
+for(const reply of [{code:480,msg:powerRefusal},{code:'480',message:powerRefusal},
+  {code:500,data:{message:' '+powerRefusal+' '}},{code:500,data:{error:powerRefusal}}]){
+  responses.push(reply);
+  await assert.rejects(context.createTask({...args,apiKey:'power-refusal-fixture'}),
+    e=>e.code==='RUNNINGHUB_INSUFFICIENT_BALANCE'&&e.definitelyRejected===true&&
+      Number.isFinite(e.providerCode)&&/Task belum dibuat/.test(e.message));
+}
+for(const reply of [{code:0,msg:powerRefusal},{msg:powerRefusal},{code:'bad',msg:powerRefusal},
+  {code:500,msg:powerRefusal,taskId:'2109126366731984999'},
+  {code:500,msg:powerRefusal,data:{taskId:'2109126366731984999'}},
+  {code:500,msg:powerRefusal+'_OTHER'},{code:500,msg:'Not enough GPU memory'}]){
+  responses.push(reply);
+  await assert.rejects(context.createTask({...args,apiKey:'ambiguous-fixture'}),
+    e=>e.code!=='RUNNINGHUB_INSUFFICIENT_BALANCE','Do not guess a credit rejection from an ambiguous response');
+}
 
 // Run the actual account loop and durable worker with mocked provider refusals.
 const paidMessage='Insufficient paid RH coins. Consumer API keys can only spend paid RH coins; free RH coins are not accepted.';
@@ -193,6 +210,38 @@ ui.data={stage:'uncertain',error:'Acknowledgement lost'};
 vm.runInContext('displaySubmissionFailure(data);',ui);
 assert.equal(fields.get('#taskStatus').textContent,'Status penerimaan belum pasti',
   'Real acknowledgement loss must retain its duplicate-submission warning');
+
+// Reproduce the owner's MotionFly request through the real create/worker/UI
+// boundary, with provider replies stubbed so no task or credits are used.
+const motionGraph=compileMotionFlyHD(JSON.parse(fs.readFileSync(new URL('../workflows/motionfly-hd-runninghub.json',import.meta.url),'utf8')));
+context.workflowGraphs.motionflyHD=motionGraph;worker.workflowGraphs.motionflyHD=motionGraph;
+worker.workflowMeta.motionflyHD={name:MOTIONFLY_HD_NAME,outputKind:'video'};
+const priorCreate=worker.createTask;
+worker.createTask=async options=>{attempts++;return context.createTask(options);};
+let creditFailure;
+for(const accountId of ['one','auto']){
+  attempts=0;saved={stage:'queued'};responses.push({code:480,msg:powerRefusal});
+  const priorRequests=requests.length;
+  await worker.run({jobId:'motionfly-credit-fixture',deviceId:'fixture-device',
+    body:{workflow:'motionflyHD',mode:'plus',accountId},
+    image:{mimetype:'image/jpeg',originalname:'photo.jpg',size:1},
+    video:{mimetype:'video/mp4',originalname:'driver.mp4',size:1}},
+    (stage,_message,details)=>{saved.stage=stage;if(details?.account)saved.submissionAccount=details.account;});
+  assert.equal(attempts,1,'A credit refusal must not silently move to another account');
+  assert.equal(requests.length-priorRequests,1,'Exactly one create attempt for the rejected request');
+  assert.equal(saved.stage,'error');assert.equal(saved.failureStage,'submitting');
+  assert.equal(saved.failureCode,'RUNNINGHUB_INSUFFICIENT_BALANCE');
+  assert.equal(saved.submissionAccount.name,'Account 01');
+  assert.match(saved.error,/Kredit komputasi.*tidak mencukupi/);
+  const expected=JSON.stringify(withOriginalVideoArchive(withIntegratedRife60(motionGraph)));
+  assert.equal(requests.at(-1).payload.workflow,expected,'Credit handling must preserve the MotionFly+RIFE graph');
+  creditFailure={...saved};
+}
+worker.createTask=priorCreate;
+ui.data=creditFailure;vm.runInContext('displaySubmissionFailure(data);',ui);
+assert.equal(fields.get('#taskStatus').textContent,'Kredit akun tidak mencukupi');
+assert.equal(fields.get('#taskEstimate').textContent,'Task belum dibuat oleh RunningHub');
+assert.match(fields.get('#taskFailureDetail').textContent,/Kredit komputasi.*tidak mencukupi/);
 
 // Actual RIFE create + account loop + durable worker: only explicit, taskless
 // refusals may move an Automatic request to another account. No live APIs.

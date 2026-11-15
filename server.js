@@ -593,9 +593,13 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
       error.code='RUNNINGHUB_PAID_BALANCE_REQUIRED';error.definitelyRejected=true;
       error.providerCode=Number(data.code);throw error;
     }
-    if(!data?.data?.taskId&&!data?.taskId&&data?.msg==='NOT_ENOUGH_BALANCE'){
-      const error=new Error('RunningHub menolak task karena saldo akun tidak mencukupi. Task belum dibuat.');
-      error.code='RUNNINGHUB_INSUFFICIENT_BALANCE';throw error;
+    const balanceRefusals=new Set(['NOT_ENOUGH_BALANCE','TASK_CREATE_FAILED_BY_NOT_ENOUGH_POWER_VALUE']);
+    if(data&&typeof data==='object'&&['number','string'].includes(typeof data.code)&&
+      Number.isFinite(Number(data.code))&&Number(data.code)!==0&&!data?.data?.taskId&&!data?.taskId&&
+      messages.some(message=>typeof message==='string'&&balanceRefusals.has(message.trim()))){
+      const error=new Error('Kredit komputasi akun ini tidak mencukupi menurut RunningHub. Task belum dibuat. Pilih akun lain dengan saldo mencukupi.');
+      error.code='RUNNINGHUB_INSUFFICIENT_BALANCE';error.definitelyRejected=true;
+      error.providerCode=Number(data.code);throw error;
     }
     // A structured provider rejection with TASK_QUEUE_MAXED and no taskId
     // confirms that THIS attempted create did not enter RunningHub's queue.
@@ -1081,7 +1085,7 @@ async function handleGeneration(req,res){
   } catch (error) {
     cleanup();
     res.status(400).json({ error: error.message || 'Generate gagal.',
-      ...(['RUNNINGHUB_PAID_BALANCE_REQUIRED','RH_WEB_WORKSPACE_NOT_FOUND'].includes(error.code)?{failureCode:error.code}:{}) });
+      ...(['RUNNINGHUB_INSUFFICIENT_BALANCE','RUNNINGHUB_PAID_BALANCE_REQUIRED','RH_WEB_WORKSPACE_NOT_FOUND'].includes(error.code)?{failureCode:error.code}:{}) });
   }
 }
 
