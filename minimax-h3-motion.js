@@ -156,7 +156,7 @@ export function h3Segments(totalFrames,sceneCuts=[],continuationFrames=1,windowF
 }
 
 export async function prepareH3Input(file,mode,imageFile,{
-  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor','guide-dmad4-ffp-focus'].includes(inferenceProfile),diagnosticOutputs=false,nativeDriver=false,
+  inferenceProfile=H3_DEFAULT_PROFILE,identityFocus=['guide-sol-focus','guide-dmad4-focus','guide-dmad4-motion-anchor','guide-dmad4-ffp-focus'].includes(inferenceProfile),diagnosticOutputs=false,nativeDriver=false,alignDriverToPhoto=false,
   maxSeconds=H3_MAX_SECONDS,maxGuideBytes=100*1024*1024,detectScenes=true
 }={}){
   const source=await probeH3Input(file,mode,{maxSeconds});
@@ -171,9 +171,10 @@ export async function prepareH3Input(file,mode,imageFile,{
     // Akatz keeps the driver's displayed pixel dimensions and only pads to grid.
     // Existing H3 profiles contain/pad the driver to the photo canvas instead.
     // Neither path scales the original photo or decoded output here.
-    const driverWidth=nativeDriver?Math.ceil(source.sourceWidth/32)*32:plan.canvasWidth;
-    const driverHeight=nativeDriver?Math.ceil(source.sourceHeight/32)*32:plan.canvasHeight;
-    const filter=nativeDriver
+    const keepDriverCanvas=nativeDriver&&!alignDriverToPhoto;
+    const driverWidth=keepDriverCanvas?Math.ceil(source.sourceWidth/32)*32:plan.canvasWidth;
+    const driverHeight=keepDriverCanvas?Math.ceil(source.sourceHeight/32)*32:plan.canvasHeight;
+    const filter=keepDriverCanvas
       ?`setpts=PTS-STARTPTS,fps=24,setsar=1,pad=${driverWidth}:${driverHeight}:(ow-iw)/2:(oh-ih)/2:color=black`
       :`setpts=PTS-STARTPTS,fps=24,`+
         `scale=${plan.outputWidth}:${plan.outputHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,`+

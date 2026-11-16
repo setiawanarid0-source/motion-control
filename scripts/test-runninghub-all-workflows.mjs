@@ -11,6 +11,7 @@ import {h3PhotoPlan,h3GraphForInputs,H3_DEFAULT_PROFILE} from '../minimax-h3-mot
 import {AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO_ASSET,akatzGraphForInputs,akatzSeedNodeInfo} from '../h3-akatz-motion.js';
 import * as akatzV3 from '../h3-akatz-v3-motion.js';
 import {TURBO8_ASSET,turbo8GraphForInputs,turbo8SeedNodeInfo,turbo8TemporalPlan} from '../h3-akatz-turbo8.js';
+import {remakeGraphForInputs,REMAKE_RECIPE} from '../h3-akatz-remake.js';
 import {rifeGraphForSourceFps,RIFE_TARGET_FPS} from '../rife-video.js';
 import {runningHubInstanceType} from '../runninghub-instance.js';
 import {compileMotionFlyHD} from '../motionfly-hd-workflow.js';
@@ -76,7 +77,7 @@ try{
   const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
   const begin=server.indexOf('async function createTask('),end=server.indexOf('const upload = multer(',begin);
   const context={withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS,isRunningHubWebKey,runningHubWeb,workflowGraphs,h3GraphForInputs,akatzGraphForInputs,akatzV3,akatzSeedNodeInfo,withOriginalVideoArchive,
-    turbo8GraphForInputs,turbo8SeedNodeInfo,h3AkatzTurbo8Model,
+    turbo8GraphForInputs,turbo8SeedNodeInfo,h3AkatzTurbo8Model,remakeGraphForInputs,
     AKATZ_PROFILE,AKATZ_WINDOW_FRAMES,RIFE_TARGET_FPS,rifeGraphForSourceFps,runningHubInstanceType,h3AppearanceModel,h3CharacterModel,h3AkatzModels,
     DATA_DIR:dir,assertH3MotionContextSchema:async()=>{},
     uploadToRunningHub:(credential,file)=>runningHubWeb.upload(credential,file),
@@ -177,6 +178,25 @@ try{
   const missing=createH3AppearanceModel({dir,asset:{...FFP_ASSET,name:'missing-pinned-model'},
     request:async()=>{throw Error('No API key fallback');},http:{get:async()=>{throw Error('No speculative download');}}});
   await assert.rejects(missing.ensure(key),error=>error.code==='H3_MODEL_PREPARATION_FAILED');
+  const oldModels=context.h3AkatzModels,oldTurbo=context.h3AkatzTurbo8Model;
+  const unused={ensure:async()=>{throw Error('Source recipe must not prepare old CharacterSwap/Turbo receipts');}};
+  context.h3AkatzModels={character:unused,turbo:unused};context.h3AkatzTurbo8Model=unused;
+  for(const mode of ['standard','plus'])for(const frames of [49,482]){
+    const before=created.length;
+    await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey:'minimaxH3Akatz',mode,
+      imageFile:{...media,mimetype:'image/png'},videoFile:media,
+      h3Source:{...source,totalFrames:frames,inferenceProfile:AKATZ_PROFILE,akatzRecipe:'remake',driverCanvas:[source.canvasWidth,source.canvasHeight]}});
+    assert.equal(created.length,before+1,'Source Remake uses exactly one native provider submission');
+    const graph=created.at(-1);
+    assert.equal(nativeCalls.at(-1).instanceType,mode==='standard'?'default':'plus');
+    assert.equal(graph['1'].inputs.unet_name,REMAKE_RECIPE.model);
+    assert.equal(graph['7'].class_type,'LoraLoaderBypassModelOnly');
+    assert.deepEqual(graph['41'].inputs.sigmas.split(',').map(Number),REMAKE_RECIPE.sigmas);
+    assert.equal(Object.values(graph).filter(n=>n.class_type==='SamplerCustomAdvanced').length,frames===49?1:5);
+    assert.ok(!Object.values(graph).some(n=>n.class_type==='RHLoraLoader'||n.class_type==='RIFEInterpolation'));
+    assert.ok(Object.values(graph).filter(n=>n.class_type==='RemakeNoise').every(n=>typeof n.inputs.seed==='number'));
+  }
+  context.h3AkatzModels=oldModels;context.h3AkatzTurbo8Model=oldTurbo;
   const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
   for(const name of Object.keys(workflowGraphs))assert.ok(html.includes('data-workflow="'+name+'"'));
   assert.equal(createHash('sha256').update(fs.readFileSync(new URL('../h3-akatz-v3-motion.js',import.meta.url))).digest('hex'),

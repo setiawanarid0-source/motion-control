@@ -8,7 +8,29 @@
       "workflows/motionfly-hd-runninghub.json",
       "integrated-rife.js:withIntegratedRife60Editor"
     ],
-    "note": "Port/layout snapshot only; does not certify worker/model availability. RIFE batch_size/use_fp16 retain the existing extended editor contract. Native COMFY_MATCHTYPE_V3 ports with allowed_types=* are represented as wildcard editor ports."
+    "note": "Port/layout snapshot only; does not certify worker/model availability. RIFE batch_size/use_fp16 retain the existing extended editor contract. Native COMFY_MATCHTYPE_V3 ports with allowed_types=* are represented as wildcard editor ports.",
+    "akatzRemakeSource": {
+      "repository": "akatz-labs/h3-character-swap-tool",
+      "commit": "65e798fa778b58ee4abc77251b58ec35c086db89",
+      "registryDate": "2026-11-16",
+      "registrySha256": "6478fe0e40b55d70685846763b9ef359fc22bf012e2184ad7defdbfb924c6299",
+      "addedClasses": [
+        "SDVN Lora Download",
+        "easy anythingIndexSwitch",
+        "LoraLoaderBypassModelOnly",
+        "RemakeKeyframeUntil",
+        "ManualSigmas",
+        "PrimitiveInt",
+        "RemakeConditioning",
+        "LatentCut",
+        "LatentAdd",
+        "LatentConcat",
+        "SolidMask",
+        "MaskToImage",
+        "RemakeNoise",
+        "BasicGuider"
+      ]
+    }
   },
   "nodes": {
     "BasicScheduler": {
@@ -4337,6 +4359,626 @@
       "defaults": {
         "value": 0
       },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "SDVN Lora Download": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "clip",
+          "type": "CLIP"
+        },
+        {
+          "name": "Download_url",
+          "type": "STRING",
+          "widget": {
+            "name": "Download_url"
+          }
+        },
+        {
+          "name": "Lora_url_name",
+          "type": "STRING",
+          "widget": {
+            "name": "Lora_url_name"
+          }
+        },
+        {
+          "name": "strength_model",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength_model"
+          }
+        },
+        {
+          "name": "strength_clip",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength_clip"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL"
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP"
+        }
+      ],
+      "widgetOrder": [
+        "Download_url",
+        "Lora_url_name",
+        "strength_model",
+        "strength_clip"
+      ],
+      "defaults": {
+        "Download_url": "",
+        "Lora_url_name": "model.safetensors",
+        "strength_model": 1.0,
+        "strength_clip": 1.0
+      },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "easy anythingIndexSwitch": {
+      "inputs": [
+        {
+          "name": "index",
+          "type": "INT",
+          "widget": {
+            "name": "index"
+          }
+        },
+        {
+          "name": "value0",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value1",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value2",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value3",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value4",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value5",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value6",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value7",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value8",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value9",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value10",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value11",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value12",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value13",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value14",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value15",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value16",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value17",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value18",
+          "type": "*",
+          "shape": 7
+        },
+        {
+          "name": "value19",
+          "type": "*",
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "value",
+          "type": "*"
+        }
+      ],
+      "widgetOrder": [
+        "index"
+      ],
+      "defaults": {
+        "index": 0
+      },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "LoraLoaderBypassModelOnly": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "lora_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "lora_name"
+          }
+        },
+        {
+          "name": "strength_model",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength_model"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL"
+        }
+      ],
+      "widgetOrder": [
+        "lora_name",
+        "strength_model"
+      ],
+      "defaults": {
+        "lora_name": null,
+        "strength_model": 1.0
+      },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "RemakeKeyframeUntil": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "keyframe_until",
+          "type": "FLOAT",
+          "widget": {
+            "name": "keyframe_until"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL"
+        }
+      ],
+      "widgetOrder": [
+        "keyframe_until"
+      ],
+      "defaults": {
+        "keyframe_until": 0.9
+      },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "ManualSigmas": {
+      "inputs": [
+        {
+          "name": "sigmas",
+          "type": "STRING",
+          "widget": {
+            "name": "sigmas"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS"
+        }
+      ],
+      "widgetOrder": [
+        "sigmas"
+      ],
+      "defaults": {
+        "sigmas": "1, 0.5"
+      },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "PrimitiveInt": {
+      "inputs": [
+        {
+          "name": "value",
+          "type": "INT",
+          "widget": {
+            "name": "value"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT"
+        }
+      ],
+      "widgetOrder": [
+        "value"
+      ],
+      "defaults": {
+        "value": null
+      },
+      "controls": {
+        "value": "fixed"
+      },
+      "objectWidgets": false
+    },
+    "RemakeConditioning": {
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP"
+        },
+        {
+          "name": "vae",
+          "type": "VAE"
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE"
+        },
+        {
+          "name": "source",
+          "type": "IMAGE"
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "ref_1",
+          "type": "IMAGE"
+        },
+        {
+          "name": "pins",
+          "type": "STRING",
+          "widget": {
+            "name": "pins"
+          }
+        },
+        {
+          "name": "frames",
+          "type": "INT",
+          "widget": {
+            "name": "frames"
+          }
+        },
+        {
+          "name": "short_edge",
+          "type": "INT",
+          "widget": {
+            "name": "short_edge"
+          }
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "shape": 7
+        },
+        {
+          "name": "ref_2",
+          "type": "IMAGE",
+          "shape": 7
+        },
+        {
+          "name": "ref_3",
+          "type": "IMAGE",
+          "shape": 7
+        },
+        {
+          "name": "ref_4",
+          "type": "IMAGE",
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "latent",
+          "type": "LATENT"
+        }
+      ],
+      "widgetOrder": [
+        "prompt",
+        "pins",
+        "frames",
+        "short_edge"
+      ],
+      "defaults": {
+        "prompt": null,
+        "pins": "",
+        "frames": 124,
+        "short_edge": 480
+      },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "LatentCut": {
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT"
+        },
+        {
+          "name": "dim",
+          "type": "COMBO",
+          "widget": {
+            "name": "dim"
+          }
+        },
+        {
+          "name": "index",
+          "type": "INT",
+          "widget": {
+            "name": "index"
+          }
+        },
+        {
+          "name": "amount",
+          "type": "INT",
+          "widget": {
+            "name": "amount"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgetOrder": [
+        "dim",
+        "index",
+        "amount"
+      ],
+      "defaults": {
+        "dim": null,
+        "index": 0,
+        "amount": 1
+      },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "LatentAdd": {
+      "inputs": [
+        {
+          "name": "samples1",
+          "type": "LATENT"
+        },
+        {
+          "name": "samples2",
+          "type": "LATENT"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgetOrder": [],
+      "defaults": {},
+      "controls": {},
+      "objectWidgets": false
+    },
+    "LatentConcat": {
+      "inputs": [
+        {
+          "name": "samples1",
+          "type": "LATENT"
+        },
+        {
+          "name": "samples2",
+          "type": "LATENT"
+        },
+        {
+          "name": "dim",
+          "type": "COMBO",
+          "widget": {
+            "name": "dim"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgetOrder": [
+        "dim"
+      ],
+      "defaults": {
+        "dim": null
+      },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "SolidMask": {
+      "inputs": [
+        {
+          "name": "value",
+          "type": "FLOAT",
+          "widget": {
+            "name": "value"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK"
+        }
+      ],
+      "widgetOrder": [
+        "value",
+        "width",
+        "height"
+      ],
+      "defaults": {
+        "value": 1.0,
+        "width": 512,
+        "height": 512
+      },
+      "controls": {},
+      "objectWidgets": false
+    },
+    "MaskToImage": {
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        }
+      ],
+      "widgetOrder": [],
+      "defaults": {},
+      "controls": {},
+      "objectWidgets": false
+    },
+    "RemakeNoise": {
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE"
+        }
+      ],
+      "widgetOrder": [
+        "seed"
+      ],
+      "defaults": {
+        "seed": 0
+      },
+      "controls": {
+        "seed": "fixed"
+      },
+      "objectWidgets": false
+    },
+    "BasicGuider": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER"
+        }
+      ],
+      "widgetOrder": [],
+      "defaults": {},
       "controls": {},
       "objectWidgets": false
     }
