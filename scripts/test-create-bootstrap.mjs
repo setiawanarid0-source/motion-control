@@ -46,15 +46,13 @@ for(const key of workflow.map(x=>x.dataset.workflow)){
 }
 for(const key of ['r15','koh1AntiObject','r4Lab'])assert.ok(!html.includes('data-workflow="'+key+'"'),'Retired R4 card must be removed');
 const nodeKeys=['#menuBtn','#sidebar','#rifeNotice','#h3Notice','#akatzNotice','#mediaRequirements',
-  '#akatzExpression','#akatzExpressionStatus',
   '#imageDrop','#referenceImage','#videoDrop',
   '#videoReference','#generateBtn','#refreshAccounts','#motionGalleryRefresh',
   '#rhWebSessionPanel',
   '#copyRhSessionCode','#selectRhSessionCode','#copyRhBookmarkTestCode','#rhSessionCodeManual','#connectRhWebSession','#rhWebSessionInput'];
 const nodes=new Map(nodeKeys.map(key=>[key,makeElement()]));
-nodes.get('#akatzExpression').value='baseline';
 nodes.set('#historyFilters',null);
-const requested=[],uploads=[],errors=[],state={workflow:'motionflyHD',mode:'standard',akatzExpression:true};
+const requested=[],uploads=[],errors=[],state={workflow:'motionflyHD',mode:'standard'};
 const generated=()=>requested.push('generate');
 const refreshed=()=>requested.push('refresh');
 const documentQueries={
@@ -123,24 +121,8 @@ assert.equal(modes.find(x=>x.dataset.mode==='standard').disabled,false);
 assert.equal(nodes.get('#imageDrop').classList.contains('hidden'),false);
 assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),false);
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true);
-assert.equal(state.akatzSubjectMask,false,'New Akatz selection defaults to the base version after the mask runtime failure');
-assert.equal(state.akatzFaceControl,false);
-assert.equal(state.akatzExpression,false);
-nodes.get('#akatzExpression').value='baseline';
-nodes.get('#akatzExpression').listener('change')({target:{value:'baseline'}});
-assert.equal(state.akatzExpression,false,'Previous-version choice must disable the candidate');
-assert.equal(state.akatzFaceControl,false);
-assert.match(nodes.get('#akatzExpressionStatus').textContent,/Versi dasar Akatz aktif/);
-nodes.get('#akatzExpression').value='expression';
-nodes.get('#akatzExpression').listener('change')({target:{value:'expression'}});
-assert.equal(state.akatzExpression,true,'The expression candidate must be selectable again');
-assert.equal(state.akatzFaceControl,false,'Previous expression version must not acquire a ControlNet patch');
-assert.match(nodes.get('#akatzExpressionStatus').textContent,/Uji mimik sebelumnya aktif/);
-nodes.get('#akatzExpression').value='controlnet';
-nodes.get('#akatzExpression').listener('change')();
-assert.equal(state.akatzFaceControl,true);
-assert.equal(state.akatzExpression,true);
-assert.match(nodes.get('#akatzExpressionStatus').textContent,/ControlNet wajah aktif/);
+assert.ok(!html.includes('id="akatzExpression"'),'Retired experimental selector is removed');
+assert.equal(state.akatzSubjectMask,undefined);assert.equal(state.akatzFaceControl,undefined);assert.equal(state.akatzExpression,undefined);
 workflow.find(x=>x.dataset.workflow==='motionflyHD').onclick();
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true,'H3 help must not leak into old workflows');
 assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),true,'Akatz help is scoped to its own option');

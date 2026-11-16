@@ -2,6 +2,7 @@ import {withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS} from '../integrated-rife
 import {withOriginalVideoArchive} from '../runninghub-output.js';
 import assert from 'node:assert/strict';
 import {isRunningHubWebKey} from '../runninghub-web-session.js';
+import {parseAkatzOptions} from '../h3-akatz-options.js';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {
@@ -163,7 +164,7 @@ const handlerEnd=server.indexOf('generationQueue.setExecutor(runQueuedGeneration
 let attempts=0,saved,refusal,discarded=0;
 const registered=[];
 let pool=[{id:'one',name:'Account 01',key:'rhweb:'+'1'.repeat(64)},{id:'two',name:'Account 02',key:'rhweb:'+'2'.repeat(64)}];
-const worker={...context,rifeBatchSize,IMAGE_MAX:20e6,VIDEO_MAX:100e6,MIN_POOL_CREDITS:100,LOCKED_WORKFLOW_ID:'fixture-workflow',
+const worker={...context,parseAkatzOptions,rifeBatchSize,IMAGE_MAX:20e6,VIDEO_MAX:100e6,MIN_POOL_CREDITS:100,LOCKED_WORKFLOW_ID:'fixture-workflow',
   isRunningHubWebKey,
   workflowGraphs:{current:{},rife60:context.workflowGraphs.rife60},
   workflowMeta:{current:{name:'Current'},rife60:{name:'RIFE',outputKind:'video'}},
