@@ -84,6 +84,13 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
     headers.Cookie=response.headers.get('set-cookie').split(';')[0];
     response=await post('/api/auth/change-password',{oldPassword:password,newPassword:'changed-fixture-owner-password'});
     assert.equal(response.status,200);headers.Cookie=response.headers.get('set-cookie').split(';')[0];
+    for(const flag of ['akatzSubjectMask','akatzExpression','akatzFaceControl']){
+      const retired=await post('/api/generate',{workflow:'minimaxH3Akatz',[flag]:'true'});
+      assert.equal(retired.status,410,'Retired browser submissions stop before staging or provider work');
+      assert.equal((await retired.json()).code,'AKATZ_VARIANT_RETIRED');
+      const download=await fetch(base+'/api/workflows/minimaxH3Akatz/runninghub?'+flag+'=true',{headers});
+      assert.equal(download.status,410,'Retired exports stop even when model receipts do not exist');
+    }
     assert.equal((await post('/api/accounts',{apiKey:legacy})).status,410);
     response=await fetch(base+'/api/session',{headers:{...headers,Cookie:headers.Cookie+'; vanta_session_v2='+encrypt({accounts:[{id:'resurrect',key:legacy}]})}});
     assert.deepEqual((await response.json()).accounts,[]);

@@ -103,41 +103,15 @@ try{
   }
   const latest=await fetch(url+'/api/generate/jobs',{headers});
   assert.ok((await latest.json()).jobs.some(x=>x.jobId===jobId));
-  for(const [workflow,value] of [['current','true'],['minimaxH3Akatz','yes']]){
-    const invalid=form('plus',workflow);invalid.append('akatzExpression',value);
-    const result=await fetch(url+'/api/generate',{
-      method:'POST',headers:{...headers,'X-Vanta-Request-Id':crypto.randomUUID()},body:invalid});
-    assert.equal(result.status,400,'Invalid or cross-workflow expression options must stop before queueing');
+  for(const flag of ['akatzExpression','akatzFaceControl','akatzSubjectMask'])for(const workflow of ['current','minimaxH3Akatz']){
+    const requestId=crypto.randomUUID(),retired=form('plus',workflow);retired.append(flag,'true');
+    const response=await fetch(url+'/api/generate',{method:'POST',headers:{...headers,'X-Vanta-Request-Id':requestId},body:retired});
+    assert.equal(response.status,410,'Retired variants stop before durable queueing');
+    assert.equal((await response.json()).code,'AKATZ_VARIANT_RETIRED');
+    assert.equal((await fetch(url+'/api/generate/jobs/'+requestId,{headers})).status,404,'No retired job may be staged');
+    const invalid=form('plus',workflow);invalid.append(flag,'yes');
+    assert.equal((await fetch(url+'/api/generate',{method:'POST',headers:{...headers,'X-Vanta-Request-Id':crypto.randomUUID()},body:invalid})).status,400);
   }
-  const expressionId=crypto.randomUUID(),expressionForm=form('plus','minimaxH3Akatz');
-  expressionForm.append('akatzExpression','true');
-  const expression=await fetch(url+'/api/generate',{
-    method:'POST',headers:{...headers,'X-Vanta-Request-Id':expressionId},body:expressionForm});
-  assert.equal(expression.status,202,'A valid selected candidate enters the same durable upload queue');
-  for(const [workflow,expressionFlag,controlFlag] of [
-    ['minimaxH3Akatz',undefined,'true'],['minimaxH3Akatz','false','true'],
-    ['minimaxH3Akatz','true','yes'],['current','false','true']]){
-    const invalid=form('plus',workflow),requestId=crypto.randomUUID();
-    if(expressionFlag!==undefined)invalid.append('akatzExpression',expressionFlag);
-    invalid.append('akatzFaceControl',controlFlag);
-    const result=await fetch(url+'/api/generate',{
-      method:'POST',headers:{...headers,'X-Vanta-Request-Id':requestId},body:invalid});
-    assert.equal(result.status,400,'Invalid ControlNet combinations stop before durable queueing');
-    const missing=await fetch(url+'/api/generate/jobs/'+requestId,{headers});assert.equal(missing.status,404);
-  }
-  for(const [workflow,mask,expressionFlag] of [['current','true','false'],['minimaxH3Akatz','yes','false'],['minimaxH3Akatz','true','true']]){
-    const invalid=form('plus',workflow);invalid.append('akatzSubjectMask',mask);invalid.append('akatzExpression',expressionFlag);
-    const r=await fetch(url+'/api/generate',{method:'POST',headers:{...headers,'X-Vanta-Request-Id':crypto.randomUUID()},body:invalid});
-    assert.equal(r.status,400,'Invalid/conflicting subject-mask choices stop before queueing');
-  }
-  const maskId=crypto.randomUUID(),maskForm=form('plus','minimaxH3Akatz');maskForm.append('akatzSubjectMask','true');
-  const maskResult=await fetch(url+'/api/generate',{method:'POST',headers:{...headers,'X-Vanta-Request-Id':maskId},body:maskForm});
-  assert.equal(maskResult.status,202,'The mask candidate enters the same upload queue');
-  const controlId=crypto.randomUUID(),controlForm=form('plus','minimaxH3Akatz');
-  controlForm.append('akatzExpression','true');controlForm.append('akatzFaceControl','true');
-  const control=await fetch(url+'/api/generate',{
-    method:'POST',headers:{...headers,'X-Vanta-Request-Id':controlId},body:controlForm});
-  assert.equal(control.status,202,'ControlNet uses the same upload endpoint and durable queue');
   // Only Standard and Plus are offered/accepted for NEW requests.
   const plusId=crypto.randomUUID();
   const plusResponse=await fetch(url+'/api/generate',{
