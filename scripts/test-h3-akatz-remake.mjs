@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import express from 'express';
 import {h3PhotoPlan} from '../minimax-h3-motion.js';
-import {REMAKE_REVISION,REMAKE_LEGACY_REVISION,REMAKE_WORKER_FRAMES,REMAKE_COMMIT,REMAKE_RECIPE,prepareRemakeInput,remakeTemporalPlan,remakeGraphForInputs,remakeExecutionPlan,remakeEditorForFrames,REMAKE_EDITOR_FILENAME} from '../h3-akatz-remake.js';
+import {REMAKE_REVISION,REMAKE_PREVIOUS_REVISION,REMAKE_LEGACY_REVISION,REMAKE_WORKER_FRAMES,REMAKE_COMMIT,REMAKE_RECIPE,prepareRemakeInput,remakeTemporalPlan,remakeGraphForInputs,remakeExecutionPlan,remakeEditorForFrames,remakePresentation,REMAKE_EDITOR_FILENAME} from '../h3-akatz-remake.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
 import {parseAkatzOptions} from '../h3-akatz-options.js';
 import {installAkatzEditorDownload} from '../h3-runninghub-export.js';
@@ -21,11 +21,26 @@ const schema=JSON.parse(fs.readFileSync(new URL('../workflows/runninghub-akatz-r
 // Reproduce the first real worker exception. The upstream source used in CPU
 // proofs lacked this range guard; the deployed RunningHub worker enforces it.
 const workerFailure=JSON.parse(fs.readFileSync(new URL('./fixtures/h3-remake-worker-frame-failure.json',import.meta.url)));
+const resolutionFailure=JSON.parse(fs.readFileSync(new URL('./fixtures/h3-remake-worker-resolution-failure.json',import.meta.url)));
 const frameSchema=schema.RemakeConditioning.input.required.frames[1];
 assert.deepEqual(REMAKE_WORKER_FRAMES,{min:frameSchema.min,max:frameSchema.max,step:frameSchema.step,offset:5});
 assert.equal(REMAKE_LEGACY_REVISION,workerFailure.revision);
 assert.equal(h3NodeClass('10405',{revision:workerFailure.revision,nodeClasses:{10405:'RemakeConditioning'}}),'RemakeConditioning',
   'Old failed tasks must remain diagnosable after a recipe revision');
+assert.equal(REMAKE_PREVIOUS_REVISION,resolutionFailure.revision);
+assert.equal(h3NodeClass('10405',{revision:resolutionFailure.revision,nodeClasses:{10405:'RemakeConditioning'}}),'RemakeConditioning');
+const shortEdgeSchema=schema.RemakeConditioning.input.required.short_edge[1];
+function cappedWorker(edge){
+  if(edge<shortEdgeSchema.min||edge>shortEdgeSchema.max||(edge-shortEdgeSchema.min)%shortEdgeSchema.step)
+    throw new Error(resolutionFailure.failure.message);
+}
+assert.throws(()=>cappedWorker(resolutionFailure.shortEdge),/between 480 and 736/);
+assert.equal(schema.MiniMaxH3RefModApply.input.required.conditioning[1].template.allowed_types.includes('CONDITIONING'),true);
+assert.equal(remakePresentation(90).split('subject_definitions:')[0],'<Video 1>: <0.2 seconds><1.2 seconds><2.2 seconds><3.2 seconds><Picture 1>: ');
+for(const [width,height,refWidth,refHeight] of [[1280,1024,1344,1088],[1024,1280,1088,1344]]){
+  const tied=remakeGraphForInputs({imageName:'photo.png',videoName:'video.mp4',source:{...h3PhotoPlan(width,height),totalFrames:90,fps:24,hasAudio:false}});
+  assert.deepEqual([tied['32'].inputs.width,tied['32'].inputs.height],[refWidth,refHeight],'Reference canvas follows Python ties-to-even rounding');
+}
 function workerFrames(n){
   if((n-5)%17||n<frameSchema.min||n>frameSchema.max)throw new Error(workerFailure.failure.message);
 }
@@ -41,7 +56,8 @@ const repairedGraph=remakeGraphForInputs({imageName:'photo.png',videoName:'video
 assert.equal(repairedGraph['10404'].inputs.value,90);
 assert.equal(repairedGraph['10402'].inputs.amount,51);
 assert.equal(repairedGraph['10401'].inputs.batch_index,38);
-assert.deepEqual(repairedGraph['10405'].inputs.source,['10403',0]);
+assert.deepEqual(repairedGraph['10414'].inputs['refs_video.ref_video_1'],['10403',0]);
+assert.ok(!Object.values(repairedGraph).some(n=>n.class_type==='RemakeConditioning'),'Known failing 736-capped helper is not submitted');
 assert.equal(repairedGraph['10411'].inputs.batch_index,18);
 assert.equal(repairedGraph['10411'].inputs.length,21);
 // Sweep every short input and continuation remainder, including exact window
@@ -83,9 +99,21 @@ for(const hasAudio of [true,false]){
     assert.equal(s.loadStart,s.start-s.history);assert.equal(s.inputFrames,s.delivered+s.history);
     assert.equal(s.inputFrames+s.paddedTail,s.modelFrames);
     const b=s.base,cond=g[b+5],trim=g[b+11];
-    assert.equal(cond.class_type,'RemakeConditioning');assert.equal(cond.inputs.pins,'');
-    assert.deepEqual(cond.inputs.ref_1,['30',0]);assert.deepEqual(cond.inputs.short_edge,['42',0]);
-    assert.deepEqual(cond.inputs.frames,[String(b+4),0]);assert.equal(g[b+4].inputs.value,s.modelFrames);
+    assert.equal(cond.class_type,'MiniMaxH3RefModApply');assert.equal(cond.inputs.retention,1);
+    assert.deepEqual(cond.inputs.mods,['33',0]);assert.deepEqual(cond.inputs.conditioning,[String(b+15),0]);
+    assert.deepEqual(g[b+15].inputs.mods,[String(b+14),0]);
+    for(const ref of [g['33'],g[b+14]]){
+      assert.equal(ref.class_type,'MiniMaxH3RefModExtract');assert.equal(ref.inputs.mode,'Full Reference');
+      assert.equal(ref.inputs.save,false);assert.equal(ref.inputs.max_tokens,0);assert.equal(ref.inputs.identity,0);
+      assert.equal(ref.inputs.multiplier,1);assert.equal(ref.inputs.motion_only,false);assert.deepEqual(ref.inputs.ref_resolution,['42',0]);
+    }
+    assert.equal(g[b+14].inputs.latent_frames,s.modelFrames);
+    assert.deepEqual(g[b+17].inputs.length,[String(b+4),0]);assert.equal(g[b+4].inputs.value,s.modelFrames);
+    assert.deepEqual([g[b+17].inputs.width,g[b+17].inputs.height],[source.canvasWidth,source.canvasHeight]);
+    assert.equal(g[b+12].inputs.text,remakePresentation(s.modelFrames));
+    assert.equal(g[b+18].inputs.value,0);assert.equal(g[b+54].inputs.sample_rate,32000);
+    assert.equal(g[b+58].inputs.dim,'x');assert.equal(g[b+58].inputs.amount,Math.round(s.modelFrames/24*40));
+    assert.deepEqual(g[b+19].inputs.audio_latent,[String(b+59),0]);
     assert.equal(trim.inputs.batch_index,s.history);assert.equal(trim.inputs.length,s.delivered);
     if(s.history){
       assert.equal(s.history,18);assert.equal(g[b+20].inputs.batch_index,plan.segments[i-1].delivered-18);
@@ -95,13 +123,29 @@ for(const hasAudio of [true,false]){
       assert.equal(g[b+34].inputs.amount,5);assert.equal(g[b+35].inputs.value,1);
       assert.equal(g[b+45].inputs.frame_idx,17);assert.deepEqual(g[b+43].inputs.audio_latent,[String(b+27),1]);
     }else assert.equal(g[b+45],undefined,'The character is an appearance reference; no automatic frame-zero guide');
-    assert.equal(Boolean(cond.inputs.audio),hasAudio);
+    assert.equal(g[b+50]!==undefined,hasAudio);assert.equal(g[b+51]!==undefined,hasAudio);
   }
   const seen=new Set(),visiting=new Set();
   function visit(id){
     if(seen.has(id))return;assert.ok(!visiting.has(id),'acyclic dependency graph');visiting.add(id);
     const n=g[id],d=schema[n.class_type];assert.ok(d,'Class declared in fresh RunningHub registry: '+n.class_type);
     for(const key of Object.keys(d.input.required||{}))assert.ok(Object.hasOwn(n.inputs,key),id+'.'+key);
+    // Check actual linked primitive values too. The v2 short-edge regression
+    // previously escaped because only the editor's port types were checked.
+    for(const [key,value] of Object.entries(n.inputs)){
+      const spec=d.input.required?.[key]||d.input.optional?.[key];
+      if(!spec)continue;
+      const v=edge(value)&&g[value[0]].class_type==='PrimitiveInt'?g[value[0]].inputs.value:value;
+      if(edge(v))continue;
+      const limits=spec[1]||{};
+      if(typeof v==='number'){
+        if(limits.min!==undefined)assert.ok(v>=limits.min,id+'.'+key+' minimum');
+        if(limits.max!==undefined)assert.ok(v<=limits.max,id+'.'+key+' maximum');
+      }
+      const runtimeFile=['image','video','audio','unet_name','clip_name','vae_name','lora_name'].includes(key);
+      if(!runtimeFile&&Array.isArray(spec[0])&&spec[0].length)assert.ok(spec[0].includes(v),id+'.'+key+' choice');
+      if(!runtimeFile&&spec[0]==='COMBO'&&limits.options?.length)assert.ok(limits.options.includes(v),id+'.'+key+' choice');
+    }
     for(const [key,v] of Object.entries(n.inputs))if(edge(v)){
       const src=g[v[0]];assert.ok(src,id+'.'+key);assert.ok(v[1]<schema[src.class_type].output.length);
       visit(v[0]);
@@ -110,7 +154,7 @@ for(const hasAudio of [true,false]){
   }
   for(const id of ['490','493','496','5108'])visit(id);
   assert.equal(seen.size,Object.keys(g).length,'Every generated node is used');
-  assert.ok(!Object.values(g).some(n=>/RHLoraLoader|SAM3|ControlNet|LivePortrait|RIFE|MiniMaxH3ReferenceToVideo|RandomNoise|CFGGuider/.test(n.class_type)));
+  assert.ok(!Object.values(g).some(n=>/RHLoraLoader|SAM3|ControlNet|LivePortrait|RIFE|MiniMaxH3ReferenceToVideo|RemakeConditioning|RandomNoise|CFGGuider/.test(n.class_type)));
   assert.equal(g['490'].inputs.frame_rate,24);assert.equal(g['490'].inputs.trim_to_audio,false);
   assert.equal(Boolean(g['490'].inputs.audio),hasAudio);assert.equal(g['50']!==undefined,hasAudio);
   assert.deepEqual(g['5104'].inputs.image,g['490'].inputs.images);assert.equal(g['5104'].inputs.batch_index,Math.floor((frames-1)/2));
@@ -131,6 +175,8 @@ for(const hasAudio of [true,false]){
   assert.equal(diagnostics.revision,REMAKE_REVISION);assert.equal(diagnostics.applicationMaxSeconds,null);
   assert.deepEqual(diagnostics.workerFrameRange,REMAKE_WORKER_FRAMES);
   assert.equal(diagnostics.workBudget.providerHardLimitSeconds,null);assert.equal(diagnostics.gpuExecutionQualified,false);
+  assert.equal(diagnostics.conditioningAdapter,'native_1080_full_reference_composition');
+  assert.equal(diagnostics.textPresentation,'text_only_joint_tokenization');assert.equal(diagnostics.referenceLatentDtype,'float16');
   for(const [id,n] of Object.entries(g))assert.equal(h3NodeClass(id,diagnostics),n.class_type);
   cases++;
 }
