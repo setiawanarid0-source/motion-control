@@ -89,7 +89,7 @@ export function validateH3Probe(probe,mode='plus',{maxSeconds=H3_MAX_SECONDS}={}
     (maxSeconds!==null&&duration>maxSeconds+.001))
     throw Error(maxSeconds===null?'Durasi video H3 tidak valid (minimal 0,25 detik).':
       'H3 menerima video 0,25–60 detik. Video tidak dipotong otomatis.');
-  if(mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus. Resolusi tidak diturunkan otomatis.');
+  if(!['standard','plus'].includes(mode))throw Error('Pilih machine Standard atau Plus untuk H3.');
   return {...displayedSize(v),duration,totalFrames:Math.round(duration*H3_FPS),fps:H3_FPS,
     hasAudio:probe.streams.some(s=>s.codec_type==='audio')};
 }

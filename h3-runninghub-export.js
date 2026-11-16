@@ -86,7 +86,7 @@ export function akatzEditorWorkflow({characterLoraFile,turboLoraFile}){
     'Tunggu editor RunningHub selesai memuat semua ekstensi sebelum mengimpor file ini.\n\n'+
     '1. Upload foto pada node 30 dan video pada node 1000.\n'+
     '2. Salin nama file video yang tampil pada node 1000 ke node 200. Node 200 benar-benar terhubung ke semua slice video berikutnya dan semua slice audio.\n'+
-    '3. Gunakan Plus, lalu jalankan workflow.\n'+
+    '3. Pilih Standard atau Plus, lalu jalankan workflow.\n'+
     '4. Unduh VANTA_AKATZ_V8_ZIP…zip pada Daftar Tugas, lalu ekstrak MP4. Preview MP4 ada pada node 493; node 490 tetap menyimpan cadangan dengan preview disembunyikan.\n\n'+
     'ZIP mengambil file terakhir dari Video Combine, termasuk audio bila ada. Jalur ZIP hanya membungkus MP4; tidak menambah encode video, resize atau refinement. Opsi PNG milik cabang gambar pada Zip Compress, bukan format video.\n\n'+
     'Resep v8 tetap: raw AV history 5 frame, bukan v7 / 22 frame. Untuk 360 frame, keluaran terbagi 124 + 119 + 68 + 49. Model, prompt, sampling, 24 FPS, CRF 12 dan audio sumber tetap. Perbaikan tekstur detik 14–15 belum lolos uji visual.\n\n'+

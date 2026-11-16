@@ -205,9 +205,10 @@ await assert.rejects(context.createTask(task),/Schema proof missing/);
 assert.equal(uploaded,beforeUploads,'Missing raw-latent proof must stop before media uploads');
 assert.equal(submitted,1,'Missing raw-latent proof cannot submit a paid task');
 context.assertH3MotionContextSchema=passedGate;
-await assert.rejects(context.createTask({...task,mode:'standard'}),/Plus/);assert.equal(submitted,1);
+await context.createTask({...task,mode:'standard'});assert.equal(submitted,2);
+assert.equal(payload.instanceType,'default','Akatz Standard reaches the selected native machine');
 context.h3AkatzTurbo8Model.ensure=async()=>{throw Error('Model setup incomplete');};
-await assert.rejects(context.createTask(task),e=>e.code==='H3_MODEL_PREPARATION_FAILED'&&/Model setup incomplete/.test(e.message));assert.equal(submitted,1,
+await assert.rejects(context.createTask(task),e=>e.code==='H3_MODEL_PREPARATION_FAILED'&&/Model setup incomplete/.test(e.message));assert.equal(submitted,2,
   'Failed model setup cannot submit a paid task');
 
 // Provider contract regression: RH resets literal seed widgets, and its API

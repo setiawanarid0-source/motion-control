@@ -1186,12 +1186,7 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $('#h3Notice').classList.toggle('hidden',state.workflow!=='minimaxH3');
   $('#akatzNotice').classList.toggle('hidden',state.workflow!=='minimaxH3Akatz');
   if(state.workflow==='minimaxH3Akatz')readAkatzMode();
-  const h3=['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(state.workflow);
-  $$('.mode-card').forEach(x=>{x.disabled=h3&&x.dataset.mode!=='plus';});
-  if(h3){
-    state.mode='plus';
-    $$('.mode-card').forEach(x=>x.classList.toggle('selected',x.dataset.mode==='plus'));
-  }
+  $$('.mode-card').forEach(x=>{x.disabled=false;});
   updateEstimates();updateGenerate();
   if(state.workflow==='rife60')restoreRecentRifeFailure();
 });

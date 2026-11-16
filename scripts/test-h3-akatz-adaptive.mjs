@@ -118,7 +118,7 @@ for(const n of [49,363,482,720,1464]){
 const probe={streams:[{codec_type:'video',width:96,height:64,duration:61}],format:{duration:61}};
 assert.throws(()=>validateH3Probe(probe,'plus'),/60/,'Other H3 profiles retain their current limit');
 assert.equal(validateH3Probe(probe,'plus',{maxSeconds:null}).totalFrames,1464);
-assert.throws(()=>validateH3Probe(probe,'standard',{maxSeconds:null}),/Plus/);
+assert.deepEqual(validateH3Probe(probe,'standard',{maxSeconds:null}),validateH3Probe(probe,'plus',{maxSeconds:null}));
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-adaptive-duration-'));
 try{
   const video=path.join(dir,'long.mp4'),photo=path.join(dir,'photo.png');

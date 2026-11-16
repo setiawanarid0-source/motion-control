@@ -177,7 +177,10 @@ try{
   assert.ok(!workflows.workflows.some(w=>['r15','koh1AntiObject','r4Lab'].includes(w.id)));
   assert.ok(workflows.workflows.some(w=>w.id==='minimaxH3'&&w.outputKind==='video'));
   const h3Info=workflows.workflows.find(w=>w.id==='minimaxH3');
-  assert.equal(h3Info.requiredMode,'plus');
+  for(const workflow of workflows.workflows){
+    assert.equal(workflow.requiredMode,undefined,'No workflow is locked to one machine');
+    assert.deepEqual(workflow.supportedModes,['standard','plus']);
+  }
   assert.ok(h3Info.name.includes('Motion Control'));
   assert.ok(!workflows.workflows.some(w=>w.id==='minimaxH3Review'));
   const retiredPage=await fetch(url+'/h3-review.html',{headers});

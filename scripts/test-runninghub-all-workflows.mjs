@@ -18,7 +18,7 @@ import {withOriginalVideoArchive} from '../runninghub-output.js';
 
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-all-token-'));
 try{
-  const calls=[],created=[];
+  const calls=[],created=[],nativeCalls=[];let validated=null,saved=null;
   const access='eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(JSON.stringify({sub:'2110000000000000001',exp:Date.now()/1000+3600})).toString('base64url')+'.fixture-signature';
   const http={request:async config=>{
     calls.push(config);const route=new URL(config.url).pathname;
@@ -27,14 +27,31 @@ try{
     if(route==='/uc/getUserInfo')return {status:200,data:{code:0,data:{id:'2110000000000000001',totalCoin:'600'}}};
     if(route==='/api/workflow/upload')return {status:200,data:{code:0,data:{workflowId:'2110000000000000100'}}};
     if(route==='/api/workflow/getContent')return {status:200,data:{code:0,data:{userId:'2110000000000000001',workflowContent:'{"nodes":[]}',draft:true}}};
-    if(route==='/api/workflow/setContent')return {status:200,data:{code:0,data:null}};
-    if(route==='/api/user/task/work/valid')return {status:200,data:{code:0,data:{billingVersion:'NEW',canCreateTask:true}}};
+    if(route==='/api/workflow/setContent'){saved=structuredClone(config.data);return {status:200,data:{code:0,data:null}};}
+    if(route==='/api/user/task/work/valid'){validated=structuredClone(config.data);return {status:200,data:{code:0,data:{billingVersion:'NEW',canCreateTask:true}}};}
     if(route==='/upload/image'){
       await new Promise((resolve,reject)=>{config.data.on('end',resolve);config.data.on('error',reject);config.data.resume();});
       return {status:200,data:{name:'input-'+calls.length+'.bin'}};
     }
     if(route==='/task/create'){
-      const prompt=JSON.parse(config.data.promptContent);created.push(prompt.prompt);
+      const prompt=JSON.parse(config.data.promptContent);created.push(prompt.prompt);nativeCalls.push(structuredClone(config.data));
+      assert.equal(saved.promptContent,config.data.promptContent,'Native Save and create use the same executable prompt');
+      assert.equal(saved.workflowContent,validated.workflowContent,'Native validation and Save use the actual editor');
+      assert.equal(validated.instanceType,config.data.instanceType,'Validation must use the selected machine');
+      const editor=JSON.parse(saved.workflowContent),byId=new Map(editor.nodes.map(n=>[String(n.id),n]));
+      assert.deepEqual(prompt.extra_data.extra_pnginfo.workflow,editor);
+      assert.equal(editor.nodes.length,Object.keys(prompt.prompt).length,'No empty or placeholder billing graph');
+      for(const [id,node] of Object.entries(prompt.prompt)){
+        const ui=byId.get(id);assert.equal(ui.type,node.class_type);
+        for(const [field,value] of Object.entries(node.inputs)){
+          if(Array.isArray(value)&&value.length===2&&typeof value[0]==='string'&&Number.isInteger(value[1])){
+            const slot=ui.inputs.findIndex(p=>p.name===field),input=ui.inputs[slot];
+            const link=editor.links.find(l=>l[0]===input.link);
+            assert.deepEqual(link.slice(1,5),[Number(value[0]),value[1],Number(id),slot],id+'.'+field);
+            assert.ok(byId.get(value[0]).outputs[value[1]].links.includes(link[0]));
+          }else assert.deepEqual(ui.widgets_values_named[field],value,id+'.'+field);
+        }
+      }
       assert.ok(!JSON.stringify(config.data).includes(access));assert.equal(config.data.apiKey,undefined);
       return {status:200,data:{code:0,data:{taskId:'2110000000000000'+String(created.length).padStart(3,'0')}}};
     }
@@ -67,17 +84,29 @@ try{
   const filePath=path.join(dir,'source.bin');fs.writeFileSync(filePath,'fixture-original-media');
   const media={path:filePath,originalname:'source.bin',mimetype:'video/mp4',size:22};
   const source={...h3PhotoPlan(1143,2048),fps:24,totalFrames:49,hasAudio:true,sceneCuts:[],driverCanvas:[736,1280],file:media};
-  const submitted={};
-  for(const workflowKey of Object.keys(workflowGraphs)){
+  const submitted={},pairs={};
+  for(const workflowKey of Object.keys(workflowGraphs))for(const mode of ['standard','plus']){
     const h3Source=workflowKey==='minimaxH3'?{...source,inferenceProfile:H3_DEFAULT_PROFILE}:
       workflowKey.startsWith('minimaxH3Akatz')?{...source,inferenceProfile:AKATZ_PROFILE}:undefined;
-    const result=await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey,mode:'plus',
+    const result=await context.createTask({apiKey:key,workflowId:'unused-api-template',workflowKey,mode,
       imageFile:{...media,mimetype:'image/png'},videoFile:media,sourceFps:30,
       rifeSource:workflowKey==='rife60'?{width:1920,height:1080}:undefined,h3Source});
     assert.match(result.taskId,/^\d{19}$/);assert.ok(result.submittedAt);
+    assert.equal(nativeCalls.at(-1).instanceType,mode==='standard'?'default':'plus');
+    (pairs[workflowKey]||={})[mode]=created.at(-1);
     submitted[workflowKey]=created.at(-1);
   }
-  assert.equal(created.length,6,'Every active workflow selection must reach the token task transport');
+  assert.equal(created.length,12,'All six active workflows must reach native create on both machines');
+  const normalize=graph=>JSON.parse(JSON.stringify(graph).replace(/input-\d+\.bin/g,'input-fixture.bin'));
+  for(const [name,pair] of Object.entries(pairs)){
+    const standard=normalize(pair.standard),plus=normalize(pair.plus);
+    if(name==='rife60'){
+      assert.equal(standard['2'].inputs.batch_size,2,'Standard preserves the existing low-memory standalone RIFE batch');
+      assert.equal(plus['2'].inputs.batch_size,8,'Plus preserves the existing adaptive RIFE batch');
+      plus['2'].inputs.batch_size=standard['2'].inputs.batch_size;
+    }
+    assert.deepEqual(standard,plus,name+' recipe, links and output must be preserved between machines');
+  }
   assert.deepEqual([...INTEGRATED_RIFE_WORKFLOWS],['current','motionflyHD'],'Only KOH and MotionFly retain automatic RIFE');
   for(const [name,graph] of Object.entries(submitted)){
     const nodes=Object.values(graph).filter(n=>n.class_type==='RIFEInterpolation');
@@ -186,5 +215,5 @@ try{
   for(const name of Object.keys(workflowGraphs))assert.ok(html.includes('data-workflow="'+name+'"'));
   assert.equal(createHash('sha256').update(fs.readFileSync(new URL('../h3-akatz-v3-motion.js',import.meta.url))).digest('hex'),
     '91b41ceb399a8ed159b154f18b4305dab043c30eae9fcb9fa77f3b9745a6b40f','The historical v3 source must be preserved');
-  console.log('PASS: all 6 real workflow builders submit via access token, including MotionFly HD and H3/Akatz v3; model receipts reused; v3 source preserved. No live inference.');
+  console.log('PASS: all 12 workflow/machine pairs use native validation, Save and exactly one token submission, including MotionFly HD and H3/Akatz v3; model receipts reused; v3 source preserved. No live inference.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}

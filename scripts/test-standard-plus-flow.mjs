@@ -21,6 +21,29 @@ const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8
 const app=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
 const queue=fs.readFileSync(new URL('../generation-queue.js',import.meta.url),'utf8');
+// Execute the real UI click handlers. Switching any workflow must preserve the
+// chosen machine; both buttons remain usable, including all three H3 entries.
+const element=dataset=>({dataset,disabled:false,style:{},textContent:'',
+  classList:{add(){},remove(){},toggle(){}},querySelector(){return {textContent:''};}});
+const workflowCards=[...html.matchAll(/data-workflow="([^"]+)"/g)].map(match=>element({workflow:match[1]}));
+const modeCards=['standard','plus'].map(mode=>element({mode}));
+const ui={state:{mode:'standard'},
+  $$:selector=>selector==='.workflow-card'?workflowCards:modeCards,$:()=>element({}),
+  readAkatzMode(){},updateEstimates(){},updateGenerate(){},restoreRecentRifeFailure(){}};
+vm.createContext(ui);
+vm.runInContext(app.slice(app.indexOf("$$('.workflow-card').forEach(b=>b.onclick="),app.indexOf("initDropzone($('#imageDrop')")),ui);
+assert.equal(workflowCards.length,6);
+for(const selected of modeCards){
+  selected.onclick();
+  for(const card of workflowCards){
+    card.onclick();
+    assert.equal(ui.state.mode,selected.dataset.mode,card.dataset.workflow+' preserves '+selected.dataset.mode);
+    assert.ok(modeCards.every(button=>!button.disabled),card.dataset.workflow+' enables both machines');
+    for(const mode of modeCards){mode.onclick();assert.equal(ui.state.mode,mode.dataset.mode);}
+    selected.onclick();
+  }
+}
+console.log('PASS: real UI handlers expose both modes on all six workflows and preserve the user selection');
 // Execute both real builders and the real web-session transport with a stubbed
 // provider. This compares /task/create, not just the source of the mapping.
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-mode-pair-'));
@@ -33,6 +56,8 @@ try{
     else if(route==='/uc/point/summary')reply={code:0,data:{billingVersion:'NEW',balancePoint:30}};
     else if(route==='/api/workflow/upload')reply={code:0,data:{id:'2110000000000000100'}};
     else if(route==='/api/workflow/getContent')reply={code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    else if(route==='/api/user/task/work/valid')reply={code:0,data:{billingVersion:'NEW',canCreateTask:true}};
+    else if(route==='/api/workflow/setContent')reply={code:0,data:null};
     else if(route==='/task/create'){native.push(structuredClone(config.data));reply={code:0,data:{taskId:'2110000000000000999',taskStatus:'RUNNING'}};}
     else throw Error('Unexpected fixture route '+route);
     return {status:200,data:reply};
