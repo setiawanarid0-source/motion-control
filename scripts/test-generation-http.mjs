@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import {spawn} from 'node:child_process';
+import {createGenerationQueue} from '../generation-queue.js';
 
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vanta-upload-http-'));
 const port=await new Promise((resolve,reject)=>{
@@ -112,6 +113,16 @@ try{
     const invalid=form('plus',workflow);invalid.append(flag,'yes');
     assert.equal((await fetch(url+'/api/generate',{method:'POST',headers:{...headers,'X-Vanta-Request-Id':crypto.randomUUID()},body:invalid})).status,400);
   }
+  for(const mode of ['standard','plus']){
+    const id=crypto.randomUUID(),sourceForm=form(mode,'minimaxH3Akatz');sourceForm.append('akatzRecipe','remake');
+    const response=await fetch(url+'/api/generate',{method:'POST',headers:{...headers,'X-Vanta-Request-Id':id},body:sourceForm});
+    assert.equal(response.status,202,'Source recipe enters the real durable HTTP path on both machines');
+    const persisted=createGenerationQueue({dir}).read(id);
+    assert.equal(persisted.body.akatzRecipe,'remake');assert.equal(persisted.body.mode,mode);
+  }
+  const invalidRecipeId=crypto.randomUUID(),invalidRecipe=form('plus','minimaxH3Akatz');invalidRecipe.append('akatzRecipe','mask-v3');
+  assert.equal((await fetch(url+'/api/generate',{method:'POST',headers:{...headers,'X-Vanta-Request-Id':invalidRecipeId},body:invalidRecipe})).status,400);
+  assert.equal((await fetch(url+'/api/generate/jobs/'+invalidRecipeId,{headers})).status,404);
   // Only Standard and Plus are offered/accepted for NEW requests.
   const plusId=crypto.randomUUID();
   const plusResponse=await fetch(url+'/api/generate',{

@@ -275,10 +275,11 @@ function updateGenerate(){
   if(!state.submission)$('#generateBtn').querySelector('span:first-child').textContent=
     state.workflow==='rife60'?'Interpolasi 60 FPS':'Generate motion';
 }
+function readAkatzRecipe(){return $('#akatzRecipeSelect')?.value==='turbo8'?'turbo8':'remake';}
 function workflowName(){
   if(state.workflow==='motionflyHD')return 'MotionFly · 1080 HD + ZIP';
   if(state.workflow==='minimaxH3AkatzV3')return 'MiniMax H3 · Akatz v3 · 1080p';
-  if(state.workflow==='minimaxH3Akatz')return 'MiniMax H3 · Akatz V1.5 Native · 1080p · Versi dasar';
+  if(state.workflow==='minimaxH3Akatz')return readAkatzRecipe()==='remake'?'MiniMax H3 · Akatz · Viggle Remake · 1080p':'MiniMax H3 · Akatz V1.5 Native · 1080p · Versi dasar';
   if(state.workflow==='minimaxH3')return 'MiniMax H3 · Motion Control · 1080p';
   if(state.workflow==='rife60')return 'RIFE Adaptive · hingga 60 FPS';
   return 'Current Workflow';
@@ -515,6 +516,7 @@ async function generate(){
   if(state.workflow!=='rife60')fd.append('referenceImage',state.image);
   fd.append('videoReference',state.video);
   fd.append('workflow',state.workflow);
+  if(state.workflow==='minimaxH3Akatz')fd.append('akatzRecipe',readAkatzRecipe());
   fd.append('mode',state.mode);
   fd.append('accountId',$('#accountSelect').value||'auto');
   // Stop the old single-task Live panel poll before showing a new upload.
@@ -1137,6 +1139,7 @@ document.querySelector('.akatz-editor-download')?.addEventListener('click',async
   link.setAttribute('aria-busy','true');let url;
   try{
     const endpoint=new URL(link.href,location.href);
+    endpoint.searchParams.set('akatzRecipe',readAkatzRecipe());
     if(Number.isFinite(state.videoDuration)&&state.videoDuration>0){
       endpoint.searchParams.set('frames',String(Math.max(6,Math.round(state.videoDuration*24))));
       const photo=$('#imagePreview')?.querySelector('img');
@@ -1147,7 +1150,7 @@ document.querySelector('.akatz-editor-download')?.addEventListener('click',async
     const workflow=await response.json();
     if(!Array.isArray(workflow.nodes)||!Array.isArray(workflow.links))throw Error('File workflow belum valid.');
     url=URL.createObjectURL(new Blob([JSON.stringify(workflow,null,2)+'\n'],{type:'application/json'}));
-    const save=document.createElement('a');save.href=url;save.download='VANTA_AKATZ_TURBO8_TIGA_FRAME_ZIP_R2_RUNNINGHUB.json';
+    const save=document.createElement('a');save.href=url;save.download=readAkatzRecipe()==='remake'?'VANTA_AKATZ_SOURCE_VIGGLE_REMAKE_6STEP_RUNNINGHUB.json':'VANTA_AKATZ_TURBO8_TIGA_FRAME_ZIP_R2_RUNNINGHUB.json';
     document.body.append(save);save.click();save.remove();toast('Workflow diunduh.');
   }catch(error){toast(error.message||'Unduhan workflow gagal.',true);}
   finally{link.removeAttribute('aria-busy');if(url)setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -1171,6 +1174,10 @@ $$('.workflow-card').forEach(b=>b.onclick=()=>{
   $$('.mode-card').forEach(x=>{x.disabled=false;});
   updateEstimates();updateGenerate();
   if(state.workflow==='rife60')restoreRecentRifeFailure();
+});
+$('#akatzRecipeSelect')?.addEventListener('change',()=>{
+  $('#akatzRecipeStatus').textContent=readAkatzRecipe()==='remake'?'Resep repo Akatz aktif · 6 langkah. Hasil visual menunggu tes.':'Versi dasar Turbo8 aktif · 8 langkah.';
+  updateGenerate();
 });
 $$('.mode-card').forEach(b=>b.onclick=()=>{
   if(b.disabled)return;

@@ -184,7 +184,8 @@ export function createGenerationQueue({dir,now=()=>Date.now(),maxConcurrent=1,me
           accountId:String(body.accountId||'auto'),
           ...(body.akatzExpression==null?{}:{akatzExpression:String(body.akatzExpression)}),
           ...(body.akatzFaceControl==null?{}:{akatzFaceControl:String(body.akatzFaceControl)}),
-          ...(body.akatzSubjectMask==null?{}:{akatzSubjectMask:String(body.akatzSubjectMask)})
+          ...(body.akatzSubjectMask==null?{}:{akatzSubjectMask:String(body.akatzSubjectMask)}),
+          ...(body.akatzRecipe==null?{}:{akatzRecipe:String(body.akatzRecipe)})
         },image:storedImage||(image?.path?{path:imageDest,originalname:String(image.originalname||'reference.jpg'),
           mimetype:image.mimetype,size:image.size}:null),
         video:storedVideo||{path:videoDest,originalname:String(video.originalname||'driving.mp4'),

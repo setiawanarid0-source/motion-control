@@ -48,6 +48,7 @@ import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_WINDOW_FRAMES,AKATZ_ASSET,AKATZ_TURBO
 import * as akatzV3 from './h3-akatz-v3-motion.js';
 import {installAkatzEditorDownload} from './h3-runninghub-export.js';
 import {TURBO8_REVISION,TURBO8_ASSET,TURBO8_EDITOR_FILENAME,turbo8GraphForInputs,turbo8ExecutionPlan,turbo8SeedNodeInfo,turbo8EditorWorkflow,turbo8EditorForFrames} from './h3-akatz-turbo8.js';
+import {REMAKE_REVISION,REMAKE_EDITOR_FILENAME,prepareRemakeInput,remakeGraphForInputs,remakeExecutionPlan,remakeEditorForFrames} from './h3-akatz-remake.js';
 import {installFrameDiagnostics} from './h3-frame-diagnostics.js';
 import {createOutputArchiveClassifier} from './output-archive-roles.js';
 import {createRunningHubWebSession,isRunningHubWebKey,RH_AUTO_RENEW_INTERVAL_MS} from './runninghub-web-session.js';
@@ -94,10 +95,10 @@ const workflowMeta = {
     outputKind:'video',experimental:true
   },
   minimaxH3Akatz: {
-    id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz V1.5 Native · 1080p',
-    subtitle:'Turbo8 · 1080p · 24 FPS · Standard / Plus · durasi adaptif',
-    detail:'Gunakan frame pertama video yang sudah diedit menjadi karakter Anda sebagai foto referensi. Foto menjadi acuan tampilan dan frame awal; video memandu gerak dan kamera. Durasi adaptif tanpa batas maksimal 15 detik, dengan audio sumber, MP4 24 FPS dan ZIP tiga frame PNG. Output native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
-    revision:TURBO8_REVISION,frameDiagnostics:true,
+    id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz · 1080p',
+    subtitle:'Repo Akatz · 6 langkah · 1080p · 24 FPS · Standard / Plus · durasi adaptif',
+    detail:'Resep sumber Akatz: H3 FL2VA + Viggle Remake, enam langkah. Foto frame pertama yang diedit menjadi acuan karakter; video memandu gerak, mimik dan kamera. Durasi adaptif, audio sumber, video native dan ZIP tiga frame PNG. Versi dasar Turbo8 tetap tersedia sebagai pembanding. Hasil visual resep baru belum dikonfirmasi.',
+    revision:REMAKE_REVISION,frameDiagnostics:true,
     outputKind:'video',experimental:true
   },
   minimaxH3: {
@@ -510,17 +511,21 @@ async function uploadToRunningHub(apiKey, file) {
 async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, videoFile, sourceFps, rifeSource, h3Source, onBeforeSubmit, onModelPreparation }) {
   const h3=['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(workflowKey);
   const isAkatz=workflowKey==='minimaxH3Akatz'||workflowKey==='minimaxH3AkatzV3';
+  const isRemake=workflowKey==='minimaxH3Akatz'&&h3Source?.akatzRecipe==='remake';
   let selectedGraph=workflowKey==='rife60'?rifeGraphForSourceFps(workflowGraphs.rife60,sourceFps,
     {mode,width:rifeSource?.width,height:rifeSource?.height}):workflowGraphs[workflowKey];
   if(h3&&!h3Source?.file)
     throw Error('Metadata video sumber H3 belum tervalidasi.');
-  if(workflowKey==='minimaxH3Akatz'&&h3Source.totalFrames>AKATZ_WINDOW_FRAMES)
+  if(workflowKey==='minimaxH3Akatz'&&!isRemake&&h3Source.totalFrames>AKATZ_WINDOW_FRAMES)
     await assertH3MotionContextSchema(DATA_DIR);
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey,
     h3?(h3Source.referenceFile||imageFile):imageFile);
   const videoName = await uploadToRunningHub(apiKey, h3?h3Source.file:videoFile);
   if(isAkatz){
     if(h3Source.inferenceProfile!==AKATZ_PROFILE)throw Error('Profil Akatz belum tervalidasi.');
+    if(isRemake){
+      selectedGraph=remakeGraphForInputs({imageName,videoName,source:h3Source});
+    }else{
     onModelPreparation?.();
     const states={character:{phase:'checking_cache'},accelerator:{phase:'checking_cache'}};
     const progress=component=>state=>{
@@ -538,6 +543,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
       failure.code='H3_MODEL_PREPARATION_FAILED';throw failure;}
     const build=workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzGraphForInputs:turbo8GraphForInputs;
     selectedGraph=build({imageName,videoName,source:h3Source,characterLoraFile,turboLoraFile});
+    }
   }else if(workflowKey==='minimaxH3'){
     if(['guide-dmad4-ffp','guide-dmad4-ffp-focus'].includes(h3Source.inferenceProfile))
       h3Source.appearanceLoraFile=await h3AppearanceModel.ensure(apiKey);
@@ -553,7 +559,7 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     // Akatz preserves each planned seed through a STRING expression override
     // and an INT graph link; direct noise_seed overrides became strings.
     // The other existing H3 profiles retain their current submission contract.
-    nodeInfoList: workflowKey==='minimaxH3Akatz' ? turbo8SeedNodeInfo(h3Source) : h3 ? [] : [
+    nodeInfoList: workflowKey==='minimaxH3Akatz'&&!isRemake ? turbo8SeedNodeInfo(h3Source) : h3 ? [] : [
       ...(workflowKey==='rife60'
         ? [{ nodeId: '1', fieldName: 'video', fieldValue: videoName },
            { nodeId: '2', fieldName: 'source_fps', fieldValue: sourceFps },
@@ -735,10 +741,12 @@ app.get('/api/workflows', (req, res) => {
 installAkatzEditorDownload({app,getModelFiles:()=>({
   characterLoraFile:h3AkatzModels.character.cachedFile(),
   turboLoraFile:h3AkatzTurbo8Model.cachedFile()
-}),buildWorkflow:(models,req)=>turbo8EditorForFrames({...models,frames:req.query.frames?Number(req.query.frames):360,
+}),buildWorkflow:(models,req)=>(req.query.akatzRecipe==='remake'?remakeEditorForFrames:turbo8EditorForFrames)({...models,frames:req.query.frames?Number(req.query.frames):360,
   width:Number(req.query.width)||1080,height:Number(req.query.height)||1920,
   ...parseAkatzOptions('minimaxH3Akatz',req.query)}),
-  filename:TURBO8_EDITOR_FILENAME,validateRequest:req=>parseAkatzOptions('minimaxH3Akatz',req.query)});
+  filename:req=>req.query.akatzRecipe==='remake'?REMAKE_EDITOR_FILENAME:TURBO8_EDITOR_FILENAME,
+  requiresUploadedModels:req=>req.query.akatzRecipe!=='remake',
+  validateRequest:req=>parseAkatzOptions('minimaxH3Akatz',req.query)});
 installFrameDiagnostics({app,registry:taskRegistry,getAccount:taskAccount,request:axios.get,validUrl:validProviderUrl,
   getOutputs:async(taskId,account)=>{
     const data=await rhJson('/task/openapi/outputs',account.key,{apiKey:account.key,taskId},30000);
@@ -903,7 +911,7 @@ async function handleGeneration(req,res){
     const workflowKey = String(req.body?.workflow || 'motionflyHD');
     // The public upload boundary validates this option before durable queueing.
     // Legacy queued jobs have no flag and retain the previous graph.
-    parseAkatzOptions(workflowKey,req.body);
+    const akatzOptions=parseAkatzOptions(workflowKey,req.body);
     const videoOnly=workflowKey==='rife60';
     if ((!videoOnly&&!imageFile) || !videoFile) throw new Error('Media input wajib diisi.');
     if (imageFile?.size > IMAGE_MAX) throw new Error('Reference Image maksimal 20 MB.');
@@ -918,12 +926,13 @@ async function handleGeneration(req,res){
     if(['minimaxH3','minimaxH3Akatz','minimaxH3AkatzV3'].includes(workflowKey)){
       req.progress?.('analyzing');
       h3Source=workflowKey==='minimaxH3AkatzV3'?await akatzV3.prepareAkatzInput(videoFile,mode,imageFile):
-        workflowKey==='minimaxH3Akatz'?await prepareTurbo8Input(videoFile,mode,imageFile):
+        workflowKey==='minimaxH3Akatz'?await (akatzOptions.akatzRecipe==='remake'?prepareRemakeInput:prepareTurbo8Input)(videoFile,mode,imageFile):
         await prepareH3Input(videoFile,mode,imageFile,{
           inferenceProfile:req.h3BenchmarkProfile||H3_DEFAULT_PROFILE,diagnosticOutputs:Boolean(req.h3BenchmarkProfile)});
+      if(workflowKey==='minimaxH3Akatz')h3Source.akatzRecipe=akatzOptions.akatzRecipe||'turbo8';
       if(req.h3SafeFaceFocus)h3Source.referenceFace=req.h3SafeFaceFocus;
       if(req.h3SafeConditioning)h3Source.sparseConditioningMode=req.h3SafeConditioning;
-      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)));
+      console.info('H3 media plan',JSON.stringify(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?(h3Source.akatzRecipe==='remake'?remakeExecutionPlan(h3Source):turbo8ExecutionPlan(h3Source)):h3ExecutionPlan(h3Source)));
     }
     if(videoOnly){
       req.progress?.('analyzing');
@@ -966,7 +975,8 @@ async function handleGeneration(req,res){
     let lastError = null;
     let rejectedAtCapacity=0;
     let rejectedByBilling=0;
-    const submittedWorkflow=workflowMeta[workflowKey];
+    const submittedWorkflow=workflowKey==='minimaxH3Akatz'?{...workflowMeta[workflowKey],
+      name:h3Source.akatzRecipe==='remake'?'MiniMax H3 · Akatz · Viggle Remake · 1080p':'MiniMax H3 · Akatz V1.5 Native · 1080p · Versi dasar'}:workflowMeta[workflowKey];
     for (const account of candidates) {
       try {
         req.progress?.('uploading_inputs');
@@ -996,7 +1006,7 @@ async function handleGeneration(req,res){
             resultArchiveExpected:task.resultArchiveExpected,
             video:videoFile.originalname,submittedAt:task.submittedAt,
             status:task.taskStatus==='RUNNING'?'running':'queued',
-            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?turbo8ExecutionPlan(h3Source):h3ExecutionPlan(h3Source)):
+            inputDiagnostics:h3Source?(workflowKey==='minimaxH3AkatzV3'?akatzV3.akatzExecutionPlan(h3Source):workflowKey==='minimaxH3Akatz'?(h3Source.akatzRecipe==='remake'?remakeExecutionPlan(h3Source):turbo8ExecutionPlan(h3Source)):h3ExecutionPlan(h3Source)):
               videoOnly?{revision:'rife-target-fps-v1',width:rifeSource.width,height:rifeSource.height,
                 sourceFps:rifeSource.sourceFps,targetFps:RIFE_TARGET_FPS,
                 durationSeconds:rifeSource.durationSeconds,adaptive:rifeSource.adaptive,

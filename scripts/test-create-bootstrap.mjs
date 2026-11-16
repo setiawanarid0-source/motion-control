@@ -12,7 +12,7 @@ const end=app.indexOf('\nbindHistoryActions();',start);
 const helperStart=app.indexOf('function initDropzone(');
 assert.ok(start>0&&end>start&&helperStart>0&&helperStart<start,
   'Real Create-page click bootstrap and initDropzone must exist');
-const executable=app.slice(helperStart,end);
+const executable=app.slice(app.indexOf('function readAkatzRecipe('),app.indexOf('\nfunction workflowName('))+app.slice(helperStart,end);
 
 function makeElement(dataset={}){
   const active=new Set();
@@ -48,7 +48,7 @@ for(const key of ['r15','koh1AntiObject','r4Lab'])assert.ok(!html.includes('data
 const nodeKeys=['#menuBtn','#sidebar','#rifeNotice','#h3Notice','#akatzNotice','#mediaRequirements',
   '#imageDrop','#referenceImage','#videoDrop',
   '#videoReference','#generateBtn','#refreshAccounts','#motionGalleryRefresh',
-  '#rhWebSessionPanel',
+  '#rhWebSessionPanel','#akatzRecipeSelect','#akatzRecipeStatus',
   '#copyRhSessionCode','#selectRhSessionCode','#copyRhBookmarkTestCode','#rhSessionCodeManual','#connectRhWebSession','#rhWebSessionInput'];
 const nodes=new Map(nodeKeys.map(key=>[key,makeElement()]));
 nodes.set('#historyFilters',null);
@@ -121,6 +121,13 @@ assert.equal(modes.find(x=>x.dataset.mode==='standard').disabled,false);
 assert.equal(nodes.get('#imageDrop').classList.contains('hidden'),false);
 assert.equal(nodes.get('#akatzNotice').classList.contains('hidden'),false);
 assert.equal(nodes.get('#h3Notice').classList.contains('hidden'),true);
+assert.match(html,/<option value="remake" selected>/,'New source recipe is the visible default');
+nodes.get('#akatzRecipeSelect').value='turbo8';
+nodes.get('#akatzRecipeSelect').listener('change')();
+assert.match(nodes.get('#akatzRecipeStatus').textContent,/Versi dasar Turbo8/);
+nodes.get('#akatzRecipeSelect').value='remake';
+nodes.get('#akatzRecipeSelect').listener('change')();
+assert.match(nodes.get('#akatzRecipeStatus').textContent,/repo Akatz aktif/);
 assert.ok(!html.includes('id="akatzExpression"'),'Retired experimental selector is removed');
 assert.equal(state.akatzSubjectMask,undefined);assert.equal(state.akatzFaceControl,undefined);assert.equal(state.akatzExpression,undefined);
 workflow.find(x=>x.dataset.workflow==='motionflyHD').onclick();

@@ -24,7 +24,7 @@ const queue=fs.readFileSync(new URL('../generation-queue.js',import.meta.url),'u
 // Execute the real UI click handlers. Switching any workflow must preserve the
 // chosen machine; both buttons remain usable, including all three H3 entries.
 const element=dataset=>({dataset,disabled:false,style:{},textContent:'',
-  classList:{add(){},remove(){},toggle(){}},querySelector(){return {textContent:''};}});
+  classList:{add(){},remove(){},toggle(){}},querySelector(){return {textContent:''};},addEventListener(){}});
 const workflowCards=[...html.matchAll(/data-workflow="([^"]+)"/g)].map(match=>element({workflow:match[1]}));
 const modeCards=['standard','plus'].map(mode=>element({mode}));
 const ui={state:{mode:'standard'},

@@ -19,5 +19,8 @@ export function parseAkatzOptions(_workflow,options={}){
       throw Object.assign(new Error('Pilihan workflow Akatz tidak valid.'),{statusCode:400,definitelyRejected:true});
   }
   assertAkatzBaseline(options);
-  return {akatzExpression:false,akatzFaceControl:false,akatzSubjectMask:false};
+  if(options.akatzRecipe!=null&&!['turbo8','remake'].includes(options.akatzRecipe))
+    throw Object.assign(new Error('Resep Akatz tidak valid.'),{statusCode:400,definitelyRejected:true});
+  return {akatzExpression:false,akatzFaceControl:false,akatzSubjectMask:false,
+    ...(options.akatzRecipe?{akatzRecipe:options.akatzRecipe}:{})};
 }

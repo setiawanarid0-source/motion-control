@@ -110,24 +110,27 @@ assert.ok(serverSource.indexOf('installAkatzEditorDownload({app,')>serverSource.
 const appSource=fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const begin=appSource.indexOf("document.querySelector('.akatz-editor-download')"),end=appSource.indexOf('\nfunction initDropzone(',begin);
 assert.ok(begin>0&&end>begin);
-let handler,saved=0,failed=false;const notices=[],urls=[],attributes=new Map();
+let handler,saved=0,failed=false,recipe='remake';const notices=[],urls=[],downloaded=[],attributes=new Map();
 const link={href:'/api/workflows/minimaxH3Akatz/runninghub',download:AKATZ_EDITOR_FILENAME,
   addEventListener:(name,fn)=>{assert.equal(name,'click');handler=fn;},
   getAttribute:key=>attributes.get(key),setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:key=>attributes.delete(key)};
 class DownloadURL extends URL {static createObjectURL(){return '/blob/fixture';} static revokeObjectURL(){}}
-const client={state:{videoDuration:0},location:{href:'https://vanta.test/'},$ : ()=>({querySelector:()=>({naturalWidth:1080,naturalHeight:1920})}),document:{querySelector:()=>link,body:{append:()=>{}},createElement:()=>({click(){saved++;},remove(){}})},
+const client={state:{videoDuration:0},location:{href:'https://vanta.test/'},$ : selector=>selector==='#akatzRecipeSelect'?{value:recipe}:({querySelector:()=>({naturalWidth:1080,naturalHeight:1920})}),document:{querySelector:()=>link,body:{append:()=>{}},createElement:()=>({click(){saved++;downloaded.push(this.download);},remove(){}})},
   fetch:async url=>{urls.push(url);return failed?{ok:false,json:async()=>({error:'Receipt belum tersedia'})}:{ok:true,json:async()=>workflow};},
   URL:DownloadURL,Blob,
   setTimeout:fn=>fn(),toast:(text,error)=>notices.push({text,error})};
-vm.runInNewContext(appSource.slice(begin,end),client);
+vm.runInNewContext(appSource.slice(appSource.indexOf('function readAkatzRecipe('),appSource.indexOf('\nfunction workflowName('))+appSource.slice(begin,end),client);
 await handler({preventDefault(){},currentTarget:link});assert.equal(saved,1);
 assert.equal(attributes.has('aria-busy'),false);
+assert.equal(new URL(urls.at(-1)).searchParams.get('akatzRecipe'),'remake');assert.match(downloaded.at(-1),/VIGGLE_REMAKE_6STEP/);
 client.state.videoDuration=61;
 await handler({preventDefault(){},currentTarget:link});assert.equal(saved,2);
 const selected=new URL(urls.at(-1));assert.equal(selected.searchParams.get('frames'),'1464');
 assert.equal(selected.searchParams.get('width'),'1080');assert.equal(selected.searchParams.get('height'),'1920');
+recipe='turbo8';await handler({preventDefault(){},currentTarget:link});assert.equal(saved,3);
+assert.equal(new URL(urls.at(-1)).searchParams.get('akatzRecipe'),'turbo8');assert.match(downloaded.at(-1),/TURBO8/);
 failed=true;await handler({preventDefault(){},currentTarget:link});
-assert.equal(saved,2,'A rejected download must never save provider/error JSON as a workflow');
+assert.equal(saved,3,'A rejected download must never save provider/error JSON as a workflow');
 assert.ok(notices.at(-1).error);assert.match(notices.at(-1).text,/Receipt/);
 assert.ok(urls.every(url=>new URL(url).origin==='https://vanta.test'&&new URL(url).pathname==='/api/workflows/minimaxH3Akatz/runninghub'),'Download cannot submit inference');
 console.log('PASS: editor round-trip preserves all v8 inference inputs; 11 typed filename links; final MP4 ZIP/audio/backup; authenticated mount; read-only receipt and HTTP export; no provider calls or GPU render');
