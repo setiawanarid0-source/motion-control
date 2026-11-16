@@ -32,6 +32,28 @@ assert.equal(extractTaskFailure({code:0,data:{taskStatus:'FAILED',taskResultDesc
 const updates=[],reports=[];
 const task={taskId:'2113333333333333333',status:'failed',workflow:'MiniMax H3 · Motion Control · 1080p'};
 const akatz={...task,taskId:'2117568678426140673',workflow:'MiniMax H3 · Akatz V1.5 Native · 1080p'};
+// Regression: Remake and other renamed H3 recipes were skipped entirely,
+// leaving only the generic FAILED message despite available provider details.
+const h3Families=[task.workflow,akatz.workflow,'MiniMax H3 · Akatz v3 · 1080p',
+  'MiniMax H3 · Akatz · 1080p','MiniMax H3 · Akatz · Viggle Remake · 1080p',
+  'MiniMax H3 · Akatz · Turbo8 · 1080p'];
+const familyTasks=h3Families.map((workflow,index)=>({...task,
+  taskId:String(2110000000000000100n+BigInt(index)),workflow,finishedAt:'2026-11-01T01:02:03Z'}));
+const familyReads=[],familyUpdates=[];
+assert.equal(await auditFailedH3Tasks({tasks:[...familyTasks,
+  {...task,taskId:'2110000000000000200',status:'success'},
+  {...task,taskId:'2110000000000000201',status:'running'},
+  {...task,taskId:'2110000000000000202',workflow:'RIFE · ≤60 → 60 FPS'},
+  {...task,taskId:'2110000000000000203',workflow:'MotionFly HD'},
+  {...task,taskId:'2110000000000000204',workflow:'MiniMax H30 · Other'},
+  {...task,taskId:'2110000000000000205',workflow:''}],limit:20,
+  query:async item=>{familyReads.push(item.taskId);return sample;},
+  update:(id,patch)=>familyUpdates.push({id,patch})}),h3Families.length);
+assert.deepEqual(familyReads,familyTasks.map(item=>item.taskId));
+assert.ok(familyUpdates.every(({patch})=>patch.status==='failed'&&patch.failureAuditCheckedAt&&!('finishedAt' in patch)));
+assert.equal(await auditFailedH3Tasks({tasks:familyTasks.map(item=>({...item,
+  ...familyUpdates.find(entry=>entry.id===item.taskId).patch})),limit:20,
+  query:async()=>{throw Error('Renamed recipes must not be audited repeatedly');},update:()=>{}}),0);
 assert.equal(await auditFailedH3Tasks({tasks:[task,{...task,taskId:'2114444444444444444'}],
   query:async()=>({code:805,data:{failedReason:{exception_type:'TimeoutError',exception_message:'time limit exceeded',current_inputs:'secret'}}}),
   update:async(id,patch)=>updates.push({id,patch}),log:x=>reports.push(x)}),1);

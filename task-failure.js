@@ -73,7 +73,8 @@ function technicalSignals(failure,record){
 // Once-only terminal metadata lookup; no new render, retry or cancellation.
 export async function auditFailedH3Tasks({tasks,query,queryV2,update,log=()=>{},now=()=>new Date().toISOString(),limit=1}){
   const candidates=tasks.filter(t=>t.status==='failed'&&
-    /^MiniMax H3 · (?:Motion Control|Akatz V1\.5 Native)(?: ·|$)/.test(String(t.workflow))&&
+    // Recipe labels change; all H3 families need the same terminal audit.
+    /^MiniMax H3 · \S/.test(String(t.workflow))&&
     (!t.failureAuditCheckedAt||queryV2&&t.failureCategory==='unclassified'&&
       (!t.failureV2CheckedAt||t.failureAuditVersion!==H3_FAILURE_AUDIT_VERSION))).slice(0,limit);
   for(const task of candidates){
