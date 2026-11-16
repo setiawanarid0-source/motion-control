@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import express from 'express';
 import {h3PhotoPlan} from '../minimax-h3-motion.js';
-import {REMAKE_REVISION,REMAKE_COMMIT,REMAKE_RECIPE,prepareRemakeInput,remakeTemporalPlan,remakeGraphForInputs,remakeExecutionPlan,remakeEditorForFrames,REMAKE_EDITOR_FILENAME} from '../h3-akatz-remake.js';
+import {REMAKE_REVISION,REMAKE_LEGACY_REVISION,REMAKE_WORKER_FRAMES,REMAKE_COMMIT,REMAKE_RECIPE,prepareRemakeInput,remakeTemporalPlan,remakeGraphForInputs,remakeExecutionPlan,remakeEditorForFrames,REMAKE_EDITOR_FILENAME} from '../h3-akatz-remake.js';
 import {h3NodeClass} from '../runninghub-execution-trace.js';
 import {parseAkatzOptions} from '../h3-akatz-options.js';
 import {installAkatzEditorDownload} from '../h3-runninghub-export.js';
@@ -18,6 +18,48 @@ assert.equal(REMAKE_RECIPE.loraSha256,pinned.lora_sha256);assert.equal(REMAKE_RE
 assert.equal(REMAKE_RECIPE.sampler,pinned.sampler);assert.deepEqual(REMAKE_RECIPE.sigmas,pinned.sigmas);
 assert.equal(REMAKE_RECIPE.keyframeUntil,pinned.keyframe_until);assert.equal(REMAKE_RECIPE.history,pinned.history_frames);
 const schema=JSON.parse(fs.readFileSync(new URL('../workflows/runninghub-akatz-remake-schemas.json',import.meta.url))).nodes;
+// Reproduce the first real worker exception. The upstream source used in CPU
+// proofs lacked this range guard; the deployed RunningHub worker enforces it.
+const workerFailure=JSON.parse(fs.readFileSync(new URL('./fixtures/h3-remake-worker-frame-failure.json',import.meta.url)));
+const frameSchema=schema.RemakeConditioning.input.required.frames[1];
+assert.deepEqual(REMAKE_WORKER_FRAMES,{min:frameSchema.min,max:frameSchema.max,step:frameSchema.step,offset:5});
+assert.equal(REMAKE_LEGACY_REVISION,workerFailure.revision);
+assert.equal(h3NodeClass('10405',{revision:workerFailure.revision,nodeClasses:{10405:'RemakeConditioning'}}),'RemakeConditioning',
+  'Old failed tasks must remain diagnosable after a recipe revision');
+function workerFrames(n){
+  if((n-5)%17||n<frameSchema.min||n>frameSchema.max)throw new Error(workerFailure.failure.message);
+}
+assert.throws(()=>workerFrames(workerFailure.failedSegment.modelFrames),/between 90 and 345/);
+const failedSource={...h3PhotoPlan(1080,1920),totalFrames:workerFailure.sourceFrames,fps:24,hasAudio:true};
+const repairedPlan=remakeTemporalPlan(failedSource);
+for(const s of repairedPlan.segments)assert.doesNotThrow(()=>workerFrames(s.modelFrames));
+assert.deepEqual(repairedPlan.segments.map(s=>s.delivered),[124,106,106,106,21]);
+const repairedTail=repairedPlan.segments.at(-1);
+assert.equal(repairedTail.modelFrames,90);assert.equal(repairedTail.paddedTail,51);
+assert.equal(repairedTail.inputFrames,39);assert.equal(repairedTail.history,18);
+const repairedGraph=remakeGraphForInputs({imageName:'photo.png',videoName:'video.mp4',source:failedSource});
+assert.equal(repairedGraph['10404'].inputs.value,90);
+assert.equal(repairedGraph['10402'].inputs.amount,51);
+assert.equal(repairedGraph['10401'].inputs.batch_index,38);
+assert.deepEqual(repairedGraph['10405'].inputs.source,['10403',0]);
+assert.equal(repairedGraph['10411'].inputs.batch_index,18);
+assert.equal(repairedGraph['10411'].inputs.length,21);
+// Sweep every short input and continuation remainder, including exact window
+// boundaries. Internal repeats must never become exported frames or duration.
+for(let frames=6;frames<=2600;frames++){
+  const p=remakeTemporalPlan({...failedSource,totalFrames:frames});let outputFrame=0;
+  for(const s of p.segments){
+    assert.doesNotThrow(()=>workerFrames(s.modelFrames),`source ${frames}, segment ${s.index}`);
+    assert.equal(s.modelFrames,s.inputFrames+s.paddedTail);
+    assert.ok(s.modelFrames<=124);
+    const loaded=Array.from({length:s.inputFrames},(_,i)=>s.loadStart+i);
+    const padded=[...loaded,...Array(s.paddedTail).fill(loaded.at(-1))];
+    assert.equal(padded.length,s.modelFrames);
+    const exported=padded.slice(s.history,s.history+s.delivered);
+    for(const frame of exported)assert.equal(frame,outputFrame++,'No padding/history repeats, lost frames or black tail');
+  }
+  assert.equal(outputFrame,frames);
+}
 const edge=v=>Array.isArray(v)&&v.length===2&&typeof v[0]==='string'&&Number.isInteger(v[1]);
 let cases=0;
 for(const [width,height] of [[1080,1920],[1920,1080],[1080,1080],[1143,2048]])
@@ -37,7 +79,7 @@ for(const hasAudio of [true,false]){
   assert.equal(g['42'].inputs.value,Math.min(source.canvasWidth,source.canvasHeight));
   for(const [i,s] of plan.segments.entries()){
     assert.equal(s.start,i?plan.segments[i-1].end:0);
-    assert.equal((s.modelFrames-5)%17,0);assert.ok(s.modelFrames<=124);
+    assert.equal((s.modelFrames-5)%17,0);assert.ok(s.modelFrames<=124);workerFrames(s.modelFrames);
     assert.equal(s.loadStart,s.start-s.history);assert.equal(s.inputFrames,s.delivered+s.history);
     assert.equal(s.inputFrames+s.paddedTail,s.modelFrames);
     const b=s.base,cond=g[b+5],trim=g[b+11];
@@ -87,6 +129,7 @@ for(const hasAudio of [true,false]){
   assert.equal(editor.extra.vanta_export.source_commit,REMAKE_COMMIT);
   const diagnostics=remakeExecutionPlan(source);
   assert.equal(diagnostics.revision,REMAKE_REVISION);assert.equal(diagnostics.applicationMaxSeconds,null);
+  assert.deepEqual(diagnostics.workerFrameRange,REMAKE_WORKER_FRAMES);
   assert.equal(diagnostics.workBudget.providerHardLimitSeconds,null);assert.equal(diagnostics.gpuExecutionQualified,false);
   for(const [id,n] of Object.entries(g))assert.equal(h3NodeClass(id,diagnostics),n.class_type);
   cases++;

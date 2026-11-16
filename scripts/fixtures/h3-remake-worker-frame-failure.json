@@ -1,0 +1,25 @@
+{
+  "taskId": "2122281866291929089",
+  "revision": "akatz-source-viggle-remake-65e798f-v1",
+  "releaseCommit": "9950f9ca166fbc4b048b8610469957eb4ad0964d",
+  "source": "Read-only production task audit and matching media-plan log, 2026-11-16",
+  "taskStatus": "FAILED",
+  "mode": "plus",
+  "sourceFrames": 463,
+  "failure": {
+    "nodeId": "10405",
+    "nodeName": "RemakeConditioning",
+    "exceptionType": "ValueError",
+    "message": "frames must be 17n+5, between 90 and 345"
+  },
+  "failedSegment": {
+    "start": 442,
+    "end": 463,
+    "loadStart": 424,
+    "delivered": 21,
+    "history": 18,
+    "inputFrames": 39,
+    "modelFrames": 39,
+    "paddedTail": 0
+  }
+}

@@ -6,10 +6,15 @@ import {AKATZ_PROFILE} from './h3-akatz-motion.js';
 import {assertAkatzBaseline} from './h3-akatz-options.js';
 import {runningHubWorkflowContent} from './runninghub-workflow-content.js';
 
-export const REMAKE_REVISION='akatz-source-viggle-remake-65e798f-v1';
+export const REMAKE_LEGACY_REVISION='akatz-source-viggle-remake-65e798f-v1';
+export const REMAKE_REVISION='akatz-source-viggle-remake-65e798f-v2';
 export const REMAKE_SOURCE='https://github.com/akatz-labs/h3-character-swap-tool';
 export const REMAKE_COMMIT='65e798fa778b58ee4abc77251b58ec35c086db89';
 export const REMAKE_EDITOR_FILENAME='VANTA_AKATZ_SOURCE_VIGGLE_REMAKE_6STEP_RUNNINGHUB.json';
+// Actual RunningHub task 2122281866291929089 rejected 39 frames with this
+// runtime range. An INT connection does not remove the worker's own guard.
+// Keep this platform contract separate from the upstream recipe parameters.
+export const REMAKE_WORKER_FRAMES=Object.freeze({min:90,max:345,step:17,offset:5});
 export const REMAKE_RECIPE=Object.freeze({
   model:'minimax_h3_fl2va_int8_convrot.safetensors',
   lora:'viggle-remake/comfyui/viggle_remake_swap_comfyui.safetensors',
@@ -51,7 +56,9 @@ export function remakeTemporalPlan(source){
     const history=start?REMAKE_RECIPE.history:0;
     const delivered=Math.min(REMAKE_RECIPE.window-history,source.totalFrames-start);
     const inputFrames=history+delivered;
-    const modelFrames=5+17*Math.ceil((Math.max(22,inputFrames)-5)/17);
+    const {min,max,step,offset}=REMAKE_WORKER_FRAMES;
+    const modelFrames=offset+step*Math.ceil((Math.max(min,inputFrames)-offset)/step);
+    if(modelFrames>max)throw invalid('Segmen Akatz melampaui batas frame node RunningHub.');
     const index=segments.length;
     segments.push({index,base:10000+index*100,start,end:start+delivered,loadStart:start-history,
       delivered,history,inputFrames,modelFrames,paddedTail:modelFrames-inputFrames,latentFrames:2+(modelFrames-5)/17*5,
@@ -94,9 +101,8 @@ export function remakeGraphForInputs({imageName,videoName,source}){
   add(30,'LoadImage',{image:imageName});
   add(40,'KSamplerSelect',{sampler_name:REMAKE_RECIPE.sampler});
   add(41,'ManualSigmas',{sigmas:REMAKE_RECIPE.sigmas.join(', ')});
-  // An INT link carries the real aligned canvas without widget clamping to
-  // the older node's advertised short-edge/length presets. Its runtime keeps
-  // source pixels unchanged when both dimensions and the short edge match.
+  // An INT link carries the real aligned canvas. Frame counts independently
+  // obey the worker's 90..345 range; links never bypass runtime validation.
   add(42,'PrimitiveInt',{value:Math.min(source.canvasWidth,source.canvasHeight)});
   const delivered=[];
   for(const s of plan.segments){
@@ -175,7 +181,8 @@ export function remakeExecutionPlan(source){
   return {revision:REMAKE_REVISION,sourceRepository:REMAKE_SOURCE,sourceCommit:REMAKE_COMMIT,
     inferenceProfile:source.inferenceProfile,frames:source.totalFrames,fps:24,canvas:[source.canvasWidth,source.canvasHeight],
     output:[source.outputWidth,source.outputHeight],sampling:{...REMAKE_RECIPE},segments:p.segments,samplerCount:p.segments.length,
-    nativeWindowFrames:p.window,continuationFrames:18,continuation:'generated_rgb_17_clean_plus_1_boundary',
+    nativeWindowFrames:p.window,workerFrameRange:{...REMAKE_WORKER_FRAMES},
+    continuationFrames:18,continuation:'generated_rgb_17_clean_plus_1_boundary',
     appearance:'edited_first_frame_as_picture_reference',firstFrameGuide:false,durationStrategy:'automatic_bounded_windows',
     applicationMaxSeconds:null,postDecodeResize:false,postRefinement:false,sourceAudioHeldClean:true,
     memoryPolicy:'RunningHub_native_automatic_offloading',perSegmentMp4RoundTrip:false,
@@ -191,8 +198,11 @@ export function remakeEditorForFrames({frames=360,width=1080,height=1920}={}){
   const editor=JSON.parse(runningHubWorkflowContent(graph));
   editor.extra.vanta_export={source_revision:REMAKE_REVISION,source_repository:REMAKE_SOURCE,source_commit:REMAKE_COMMIT,
     preset_frames:frames,preset_seconds:frames/24,generation_window_frames:124,continuation_frames:18,
+    worker_frame_range:{...REMAKE_WORKER_FRAMES},
     automatic_window_count:true,generation_executed:false,visual_acceptance:'pending_owner_test'};
   return editor;
 }
 
-export function remakeNodeClass(id,plan){return plan?.revision===REMAKE_REVISION?plan.nodeClasses?.[String(id)]||null:null;}
+export function remakeNodeClass(id,plan){
+  return [REMAKE_REVISION,REMAKE_LEGACY_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
+}
