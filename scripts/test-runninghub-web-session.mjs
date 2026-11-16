@@ -704,8 +704,10 @@ test('a rejected account cannot stop healthy backend refreshes or advance its la
   assert.equal(service.sessionAudit(failed.key).lastAutomaticCheckAt,new Date(time+3720000).toISOString());
 }));
 
-test('native machine refusal is before Save/create and cannot mark a paid submission',()=>fixture(async({service,calls,setHandler})=>{
+test('successful preflight flag never replaces the final coin/point decision on create',()=>fixture(async({service,calls,setHandler})=>{
   const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  const refusal={code:402,msg:'TASK_CREATE_FAILED_BY_NOT_ENOUGH_POWER_VALUE',data:null};
+  let reply={code:0,data:{taskId:renderId}},saved;
   setHandler(async config=>{
     const route=new URL(config.url).pathname;
     if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
@@ -714,11 +716,37 @@ test('native machine refusal is before Save/create and cannot mark a paid submis
       assert.equal(JSON.parse(config.data.workflowContent).nodes[0].type,'PrimitiveString');
       return {code:0,data:{billingVersion:'NEW',canCreateTask:false}};
     }
-    throw Error('No Save or paid task after native validation refuses');
+    if(route==='/api/workflow/setContent'){saved=config.data.promptContent;return {code:0,data:null};}
+    if(route==='/task/create'){
+      assert.equal(config.data.promptContent,saved);assert.equal(config.data.instanceType,'plus');
+      assert.equal(config.data.usePersonalQueue,false);
+      assert.deepEqual(Object.keys(config.data).sort(),['clientId','instanceType','promptContent','usePersonalQueue','workflowId']);
+      return reply;
+    }
+    throw Error('Unexpected native operation');
   });
   let submitted=0;
-  await assert.rejects(service.submit(key,{instanceType:'plus',workflow:{'1':{class_type:'PrimitiveString',inputs:{value:'actual'}}}},
-    {onBeforeSubmit:()=>submitted++}),{code:'RH_WEB_MACHINE_REJECTED',definitelyRejected:true});
+  const request=()=>service.submit(key,{instanceType:'plus',workflow:{'1':{class_type:'PrimitiveString',inputs:{value:'actual'}}}},
+    {onBeforeSubmit:()=>submitted++});
+  assert.equal((await request()).data.taskId,renderId,'A code0 preflight flag must not prevent a final provider acceptance');
+  reply=refusal;
+  assert.deepEqual(await request(),refusal,'A final provider refusal is preserved, not bypassed or retried');
+  assert.equal(submitted,2);
+  assert.deepEqual(calls.map(c=>new URL(c.url).pathname),Array(2).fill([
+    '/api/workflow/getContent','/api/user/task/work/valid','/api/workflow/setContent','/task/create']).flat());
+}));
+
+test('a nonzero native validation refusal still stops before Save and create',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(route==='/api/user/task/work/valid')return {code:403,msg:'WORKFLOW_PERMISSION_DENIED'};
+    throw Error('No Save or create after a refused validation request');
+  });
+  let submitted=0;
+  await assert.rejects(service.submit(key,{instanceType:'default',workflow:{'1':{class_type:'PrimitiveString',inputs:{value:'actual'}}}},
+    {onBeforeSubmit:()=>submitted++}),{code:'RH_WEB_PROVIDER_REJECTED',definitelyRejected:true});
   assert.equal(submitted,0);
   assert.deepEqual(calls.map(c=>new URL(c.url).pathname),['/api/workflow/getContent','/api/user/task/work/valid']);
 }));

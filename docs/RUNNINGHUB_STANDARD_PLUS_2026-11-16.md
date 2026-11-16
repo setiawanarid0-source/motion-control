@@ -29,7 +29,7 @@ The shared web-session transport now:
 
 Submissions to one account are serialized through this sequence so that another request cannot replace the saved graph between Save and create. No OpenAPI fallback, retained instance, machine/account substitution or create retry is added.
 
-Native billingVersion NEW / canCreateTask false stops before task creation, just as the editor does. A failed validation or Save is a definite pre-submission failure. An ambiguous response after task/create remains ambiguous; it is never replayed automatically.
+Vanta uses a successful preflight response as advisory, including canCreateTask=false. It submits one normal /task/create so RunningHub makes the final coin/point funding decision. This deliberately avoids reproducing the native frontend's early recharge modal as a second Vanta funding gate. It does not prove that the backend will accept the request. No currency selector, balance conversion or invented payment field is sent. An explicit nonzero validation response or failed Save still stops before task creation. A final create refusal is preserved; an ambiguous create acknowledgement is never replayed.
 
 ## Recipe and validation boundaries
 

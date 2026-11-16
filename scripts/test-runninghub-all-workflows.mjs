@@ -24,11 +24,12 @@ try{
     calls.push(config);const route=new URL(config.url).pathname;
     assert.equal(config.headers.Authorization,'Bearer '+access);
     assert.ok(!route.includes('/openapi/'),'No request may fall back to API-key transport');
-    if(route==='/uc/getUserInfo')return {status:200,data:{code:0,data:{id:'2110000000000000001',totalCoin:'600'}}};
+    if(route==='/uc/getUserInfo')return {status:200,data:{code:0,data:{id:'2110000000000000001',totalCoin:'1001'}}};
+    if(route==='/uc/point/summary')return {status:200,data:{code:0,data:{billingVersion:'NEW',balancePoint:0,paidPoint:0,bonusPoint:0,activityPoint:0,transitionCoinRemained:1001}}};
     if(route==='/api/workflow/upload')return {status:200,data:{code:0,data:{workflowId:'2110000000000000100'}}};
     if(route==='/api/workflow/getContent')return {status:200,data:{code:0,data:{userId:'2110000000000000001',workflowContent:'{"nodes":[]}',draft:true}}};
     if(route==='/api/workflow/setContent'){saved=structuredClone(config.data);return {status:200,data:{code:0,data:null}};}
-    if(route==='/api/user/task/work/valid'){validated=structuredClone(config.data);return {status:200,data:{code:0,data:{billingVersion:'NEW',canCreateTask:true}}};}
+    if(route==='/api/user/task/work/valid'){validated=structuredClone(config.data);return {status:200,data:{code:0,data:{billingVersion:'NEW',canCreateTask:false}}};}
     if(route==='/upload/image'){
       await new Promise((resolve,reject)=>{config.data.on('end',resolve);config.data.on('error',reject);config.data.resume();});
       return {status:200,data:{name:'input-'+calls.length+'.bin'}};
@@ -96,7 +97,7 @@ try{
     (pairs[workflowKey]||={})[mode]=created.at(-1);
     submitted[workflowKey]=created.at(-1);
   }
-  assert.equal(created.length,12,'All six active workflows must reach native create on both machines');
+  assert.equal(created.length,12,'All six workflows reach native create on both machines with 1001 RH, zero points and advisory canCreateTask=false');
   const normalize=graph=>JSON.parse(JSON.stringify(graph).replace(/input-\d+\.bin/g,'input-fixture.bin'));
   for(const [name,pair] of Object.entries(pairs)){
     const standard=normalize(pair.standard),plus=normalize(pair.plus);
@@ -215,5 +216,5 @@ try{
   for(const name of Object.keys(workflowGraphs))assert.ok(html.includes('data-workflow="'+name+'"'));
   assert.equal(createHash('sha256').update(fs.readFileSync(new URL('../h3-akatz-v3-motion.js',import.meta.url))).digest('hex'),
     '91b41ceb399a8ed159b154f18b4305dab043c30eae9fcb9fa77f3b9745a6b40f','The historical v3 source must be preserved');
-  console.log('PASS: all 12 workflow/machine pairs use native validation, Save and exactly one token submission, including MotionFly HD and H3/Akatz v3; model receipts reused; v3 source preserved. No live inference.');
+  console.log('PASS: all 12 workflow/machine pairs use native validation, Save and exactly one token submission, with 1001 RH, zero points and preflight flag false; model receipts reused; v3 source preserved. No live inference.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
