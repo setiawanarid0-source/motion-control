@@ -73,8 +73,11 @@ assert.ok(!code.includes('req.body?.allowRetirement'),
   'Browser history-claim flag must never disable low-credit cleanup');
 assert.ok(browser.includes("body:'{}'"),'Client must trigger refresh without retirement gate');
 assert.ok(!browser.includes('allowRetirement:state.historyClaimed===true'));
-assert.ok(server.includes('setInterval(()=>{void checkPoolBalancesInBackground();},2*60*1000)'),
-  'Auto cleanup must continue when the VANTA browser is closed');
+assert.ok(server.includes('scheduledPoolTimer=setTimeout(()=>{void checkPoolBalancesInBackground();}')&&
+  server.includes('scheduledPoolCheck=null;schedulePoolMaintenance();'),
+  'Backend maintenance must reschedule its next deadline when the VANTA browser is closed');
+assert.ok(!server.includes('setInterval(()=>{void checkPoolBalancesInBackground();}'),
+  'Pool maintenance must use per-account deadlines, not minute polling');
 // A token re-imported while an older status request was pending must not be
 // deleted, or lose its retention state, when that stale response arrives.
 for(const scenario of ['retire','qualify']){

@@ -8,6 +8,8 @@ import axios from 'axios';
 import {runningHubWebBalance,webBalanceNumber} from './runninghub-web-balance.js';
 import {billingScalars} from './runninghub-billing-evidence.js';
 import {runningHubWorkflowContent} from './runninghub-workflow-content.js';
+import {createRunningHubDailyCredit} from './runninghub-daily-credit.js';
+import {RH_POOL_INTERVAL_MS,RH_RENEW_BEFORE_MS,RH_POOL_CACHE_TTL_MS,RH_RECONNECT_CODES,nextRunningHubMaintenance} from './runninghub-maintenance.js';
 import {extractTaskFailure} from './task-failure.js';
 import {safeTaskMetrics,nativeTaskExecutionSeconds} from './rife-task-audit.js';
 
@@ -16,9 +18,9 @@ export const isRunningHubWebKey=key=>/^rhweb:[a-f0-9]{64}$/.test(String(key||'')
 const taskId=value=>/^\d{10,25}$/.test(String(value||''));
 const recordList=data=>Array.isArray(data)?data:Array.isArray(data?.records)?data.records:[];
 const authFailure=response=>[401,412].includes(Number(response?.code));
-const RENEW_BEFORE_MS=10*60*1000; // Same ten-minute window as the native web client.
-export const RH_AUTO_RENEW_INTERVAL_MS=60*60*1000;
-const reconnectCodes=new Set(['RH_WEB_REFRESH_REJECTED','RH_WEB_REFRESH_MISSING','RH_WEB_IDENTITY_MISMATCH']);
+const RENEW_BEFORE_MS=RH_RENEW_BEFORE_MS; // Same ten-minute window as the native web client.
+export const RH_AUTO_RENEW_INTERVAL_MS=RH_POOL_INTERVAL_MS;
+const reconnectCodes=RH_RECONNECT_CODES;
 const error=(message,code='RH_WEB_ERROR',definite=false)=>Object.assign(new Error(message),{code,definitelyRejected:definite});
 function token(value){
   if(typeof value!=='string')return '';
@@ -66,11 +68,13 @@ export function parseRunningHubSession(input){
 }
 const METHODS=new Set(['/uc/getUserInfo','/uc/point/summary','/uc/token/refresh','/api/instance/access/auth',
   '/api/workflow/upload','/api/workflow/getContent','/api/workflow/setContent','/api/workflow/simpleList',
-  '/api/user/task/work/valid','/api/product/v2/pricing','/task/create','/task/list','/task/cancel','/task/failedReason',
+  '/api/user/task/work/valid','/api/product/v2/pricing','/api/welfare/summary','/api/welfare/daily-gift/claim',
+  '/task/create','/task/list','/task/cancel','/task/failedReason',
   '/api/output/v2/history']);
 
 export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=()=>Date.now()}){
   const file=path.join(dir,'runninghub-web-sessions.enc'),refreshing=new Map(),creating=new Map(),comfyRefreshing=new Map(),submitting=new Map();
+  const dailyCredits=createRunningHubDailyCredit({get,remember,post,now});
   function read(){
     if(!fs.existsSync(file))return {};
     const value=decrypt(fs.readFileSync(file,'utf8').trim());
@@ -144,7 +148,21 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     return {...session,access,refresh:next,identify:data.identify||session.identify,
       expiresAt:Number.isFinite(Number(claims.exp))?Number(claims.exp)*1000:null};
   }
+  function automaticRenewalError(session){
+    const failure=session.lastRenewal;
+    if(failure?.outcome!=='failed')return null;
+    const terminal=reconnectCodes.has(failure.code);
+    const failedAt=Date.parse(failure.at||'');
+    if(!terminal&&(!Number.isFinite(failedAt)||now()-failedAt>=RH_AUTO_RENEW_INTERVAL_MS))return null;
+    return Object.assign(error(terminal?
+      'Refresh token akun ini belum tersedia atau ditolak RunningHub. Hubungkan ulang JSON sesi akun ini sekali.':
+      'Pembaruan token belum berhasil; percobaan otomatis berikutnya dijadwalkan dua jam lagi. Tombol Refresh dapat mencoba lebih awal.',
+      failure.code||'RH_WEB_REFRESH_UNAVAILABLE',terminal),{providerCode:failure.providerCode??null});
+  }
   async function renew(key,{source='automatic'}={}){
+    if(refreshing.has(key))return refreshing.get(key);
+    const blocked=source==='automatic'?automaticRenewalError(get(key)):null;
+    if(blocked)throw blocked;
     if(!refreshing.has(key))refreshing.set(key,(async()=>{
       const old=get(key);let next;
       try{next=await refresh(old);}
@@ -216,21 +234,19 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     const identify=session.identify||profile.identify||claim(session.access)?.identify||previous?.identify||'';
     if(identify&&!/^[A-Za-z0-9_-]{1,128}$/.test(identify))throw error('Identitas token tidak valid.','RH_WEB_INVALID_SESSION',true);
     session={...session,identify,refresh:session.refresh||previous?.refresh||'',comfyAuth:session.comfyAuth||previous?.comfyAuth||''};
-    write(hash,{...session,userId:id,workflowId:previous?.workflowId||null,
+    write(hash,{...previous,...session,userId:id,workflowId:previous?.workflowId||null,
       workspaceSavedId:previous?.workspaceSavedId||null,connectedAt:new Date(now()).toISOString()});
+    // A verified re-import clears the old failure latch and cached status, but
+    // preserves the daily receipt and historical successful-renewal timestamps.
+    remember('rhweb:'+hash,{lastRenewal:null,poolSnapshot:null});
     return {key:'rhweb:'+hash,status:{...funds,currentTaskCounts:null,
       expiresAt:session.expiresAt?new Date(session.expiresAt).toISOString():null}};
   }
-  async function readAccountStatus(key,{renewTokens=false,automatic=false}={}){
+  async function readAccountStatus(key,{renewTokens=false,automatic=false,claimDailyCredit=false}={}){
     const stored=get(key);
     let renewalError;
-    if(automatic&&stored.lastRenewal?.outcome==='failed'&&reconnectCodes.has(stored.lastRenewal.code)){
-      renewalError=Object.assign(error(stored.lastRenewal.code==='RH_WEB_REFRESH_REJECTED'?
-        'RunningHub menolak refresh token akun ini (kode '+stored.lastRenewal.providerCode+'). Hubungkan ulang sesi akun ini sekali.':
-        'Sesi akun perlu dihubungkan ulang agar pembaruan otomatis dapat dilanjutkan.',stored.lastRenewal.code,true),
-        {providerCode:stored.lastRenewal.providerCode??null});
-    }
-    const last=stored.lastRenewedAt||(stored.lastRenewal?.outcome==='renewed'?stored.lastRenewal.at:null)||stored.connectedAt;
+    if(automatic)renewalError=automaticRenewalError(stored);
+    const last=new Date(Math.max(Date.parse(stored.lastRenewedAt||'')||0,Date.parse(stored.connectedAt||'')||0)).toISOString();
     if(automatic&&!renewalError&&stored.refresh&&now()-Date.parse(last||'')>=RH_AUTO_RENEW_INTERVAL_MS)renewTokens=true;
     if(renewTokens){try{await renew(key,{source:automatic?'automatic':'manual'});}catch(error){renewalError=error;}}
     const readStatus=(route,data)=>post(key,route,data,{autoRenew:!renewTokens&&!renewalError});
@@ -239,11 +255,16 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     try{profile=requireSuccess(await readStatus('/uc/getUserInfo',{userId:session.userId}),get(key));}
     catch(error){throw renewalError||error;}
     if(String(profile.id||profile.userId||'')!==session.userId)throw error('Identitas sesi berubah. Hubungkan ulang akun.','RH_WEB_IDENTITY_MISMATCH',true);
+    const daily=claimDailyCredit?await dailyCredits.claim(key):{receipt:dailyCredits.snapshot(key)};
+    if(daily.attempted){
+      profile=requireSuccess(await readStatus('/uc/getUserInfo',{userId:session.userId}),get(key));
+      if(String(profile.id||profile.userId||'')!==session.userId)throw error('Identitas akun sesudah klaim tidak cocok.','RH_WEB_IDENTITY_MISMATCH',true);
+    }
     const tasks=requireSuccess(await readStatus('/task/list',{size:1,current:1,taskType:['WORKFLOW','API','CORPAPI','ExclAPI'],taskStatus:['RUNNING','QUEUED']}),get(key));
     const total=webBalanceNumber(tasks.total);
     if(!Number.isInteger(total))throw error('Status task web belum dapat diverifikasi.','RH_WEB_PROTOCOL_ERROR',true);
     const funds=await balances(profile,()=>readStatus('/uc/point/summary',{}));
-    return {...funds,currentTaskCounts:total,
+    return {...funds,currentTaskCounts:total,dailyCredit:daily.receipt,
       sessionRenewal:{state:renewalError?'failed':renewTokens?'renewed':'automatic',
         code:renewalError?.code||null,providerCode:renewalError?.providerCode??null,
         refreshedAt:get(key).lastRenewedAt||(get(key).lastRenewal?.outcome==='renewed'?get(key).lastRenewal.at:null),
@@ -256,7 +277,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     catch(error){
       failure=error;
       const session=get(key),renewal=session.lastRenewal;
-      result={error:String(error.message).slice(0,240),errorCode:error.code||null,
+      result={error:String(error.message).slice(0,240),errorCode:error.code||null,dailyCredit:dailyCredits.snapshot(key),
         providerCode:error.providerCode??null,
         sessionRenewal:{state:renewal?.outcome==='renewed'?'renewed':'failed',
           code:renewal?.code||error.code||null,refreshedAt:session.lastRenewedAt||null}};
@@ -273,7 +294,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     const snapshot=get(key).poolSnapshot;
     if(!snapshot?.status)return null;
     const result=structuredClone(snapshot.status);
-    result.stale=now()-Date.parse(snapshot.checkedAt)>5*60*1000||
+    result.stale=now()-Date.parse(snapshot.checkedAt)>RH_POOL_CACHE_TTL_MS||
       !result.error&&Number.isFinite(Date.parse(result.expiresAt||''))&&Date.parse(result.expiresAt)<=now();
     return result;
   }
@@ -537,7 +558,8 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       lastRenewedAt,lastAutomaticRenewedAt:session.lastAutomaticRenewedAt||null,
       lastCheckedAt:session.poolSnapshot?.checkedAt||null,
       lastAutomaticCheckAt:session.poolSnapshot?.lastAutomaticCheckAt||null,
-      reconnectRequired:!session.refresh||session.lastRenewal?.outcome==='failed'&&reconnectCodes.has(session.lastRenewal.code)};
+      reconnectRequired:!session.refresh||session.lastRenewal?.outcome==='failed'&&reconnectCodes.has(session.lastRenewal.code),
+      nextAutomaticCheckAt:new Date(nextRunningHubMaintenance(session,now())).toISOString(),dailyCredit:dailyCredits.snapshot(key)};
   }
   return {connect,status,cachedStatus,upload,request,submit,prepare:workspace,inspectTask,sessionAudit,file};
 }

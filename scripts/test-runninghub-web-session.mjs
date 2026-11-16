@@ -51,6 +51,51 @@ async function fixture(run){
   finally{fs.rmSync(dir,{recursive:true,force:true});}
 }
 
+test('daily credits are opt-in for maintenance, refresh balances after confirmation, and survive re-import',()=>fixture(async({service,setHandler,calls,reopen})=>{
+  let granted=false;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:granted?625:600}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'NEW',balancePoint:granted?31.123:6.123}};
+    if(route==='/task/list')return {code:0,data:{total:0}};
+    if(route==='/api/welfare/summary'){assert.deepEqual(config.data,{issue:false});return {code:0,data:{enabled:true,dailyGift:{granted,amount:25}}};}
+    if(route==='/api/welfare/daily-gift/claim'){granted=true;return {code:0,data:null};}
+    throw Error('Unexpected operation '+route);
+  });
+  const {key}=await service.connect(exported);
+  await service.status(key);service.sessionAudit(key);service.cachedStatus(key);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname.startsWith('/api/welfare')).length,0,'Read-only status and audits must not claim rewards');
+  const result=await service.status(key,{automatic:true,claimDailyCredit:true});
+  assert.equal(result.dailyCredit.state,'claimed');assert.equal(result.dailyCredit.amount,25);
+  assert.equal(result.balancePoint,31.123);assert.equal(result.remainCoins,625);
+  await service.connect(exported);
+  assert.equal(reopen().sessionAudit(key).dailyCredit.state,'claimed');
+  await reopen().status(key,{automatic:true,claimDailyCredit:true});
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/welfare/daily-gift/claim').length,1);
+}));
+
+test('ordinary requests do not hammer a rejected rotating grant; verified re-import clears the latch',()=>fixture(async({service,setHandler,calls})=>{
+  const {key}=await service.connect(exported);
+  setHandler(async config=>{
+    if(new URL(config.url).pathname==='/uc/token/refresh')return {code:412};
+    return {code:412};
+  });
+  await assert.rejects(service.status(key,{renewTokens:true}),{code:'RH_WEB_REFRESH_REJECTED'});
+  for(let i=0;i<3;i++)await assert.rejects(service.request('/openapi/v2/query',key,{taskId:renderId}),{code:'RH_WEB_REFRESH_REJECTED'});
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/uc/token/refresh').length,1);
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:600}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'OLD'}};
+    if(route==='/uc/token/refresh')return {code:0,data:{access_token:jwt(),refresh_token:'fixture-fresh-refresh'}};
+    if(route==='/task/list')return {code:0,data:{total:0}};
+    throw Error('Unexpected operation');
+  });
+  await service.connect({...exported,refresh:'fixture-new-valid-refresh'});
+  assert.equal(service.sessionAudit(key).lastRenewal,null);
+  await service.status(key,{renewTokens:true});assert.equal(service.sessionAudit(key).lastRenewal.outcome,'renewed');
+}));
+
 test('accepts the original popup and persists only the four needed credential fields',()=>{
   const parsed=parseRunningHubSession({site:'runninghub.ai',access:exported.access,
     cookies:'analytics=unrelated; preferences=private',localStorage:{'Rh-Refreshtoken':exported.refresh,
@@ -640,14 +685,20 @@ test('parallel manual refreshes share one grant and a cross-account renewal neve
   assert.equal(service.sessionAudit(key).accessExpiresAt,expiry);
 }));
 
-test('backend renews hourly without browser requests and persists separate check and token timestamps across restarts',()=>fixture(async({service,calls,advance,reopen,dir})=>{
+test('backend renews every two hours without browser requests and persists separate check and token timestamps across restarts',()=>fixture(async({service,calls,advance,reopen,dir,setHandler})=>{
   const {key}=await service.connect({...exported,access:jwt(userId,time/1000+30*86400)});
+  const originalHandler=async config=>{const route=new URL(config.url).pathname;
+    if(route==='/uc/token/refresh')return {code:0,data:{access_token:jwt(userId,time/1000+30*86400),refresh_token:'fixture-refreshed-token'}};
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:600}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'OLD'}};
+    if(route==='/task/list')return {code:0,data:{total:1}};throw Error('Unexpected fixture route '+route);};
+  setHandler(originalHandler);
   await service.status(key,{automatic:true});
   assert.equal(service.sessionAudit(key).lastAutomaticCheckAt,new Date(time).toISOString());
   assert.equal(service.sessionAudit(key).lastRenewedAt,null,'A balance check must not claim that a token was renewed');
-  advance(60*60*1000);
+  advance(2*60*60*1000);
   await service.status(key,{automatic:true});
-  const audit=service.sessionAudit(key),renewedAt=new Date(time+3600000).toISOString();
+  const audit=service.sessionAudit(key),renewedAt=new Date(time+7200000).toISOString();
   assert.equal(audit.lastRenewedAt,renewedAt);assert.equal(audit.lastAutomaticRenewedAt,renewedAt);
   assert.equal(audit.lastRenewal.source,'automatic');
   const grants=()=>calls.filter(c=>new URL(c.url).pathname==='/uc/token/refresh').length;
@@ -656,9 +707,10 @@ test('backend renews hourly without browser requests and persists separate check
   assert.equal(grants(),1,'Two-minute checks must not rotate the token on every tick');
   const before=calls.length,restarted=reopen(),restored=restarted.sessionAudit(key);
   assert.equal(restored.lastRenewedAt,renewedAt);
-  assert.equal(restored.lastAutomaticCheckAt,new Date(time+3720000).toISOString());
+  assert.equal(restored.lastAutomaticCheckAt,new Date(time+7320000).toISOString());
   assert.equal(restarted.cachedStatus(key).currentTaskCounts,1);
   assert.equal(restarted.cachedStatus(key).stale,false);
+  advance(120*60*1000);assert.equal(restarted.cachedStatus(key).stale,false);
   advance(6*60*1000);assert.equal(restarted.cachedStatus(key).stale,true);
   assert.equal(calls.length,before,'Reading persisted receipts must not contact RunningHub');
   assert.ok(!fs.readFileSync(service.file,'utf8').includes(exported.refresh));
@@ -691,7 +743,7 @@ test('a rejected account cannot stop healthy backend refreshes or advance its la
     if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'OLD'}};
     throw Error('Unexpected read');
   });
-  advance(3600000);
+  advance(7200000);
   const results=await Promise.allSettled([service.status(failed.key,{automatic:true}),service.status(healthy.key,{automatic:true})]);
   assert.equal(results[0].status,'rejected');assert.equal(results[1].status,'fulfilled');
   assert.equal(rejectedGrants,1);assert.equal(healthyGrants,1);
@@ -701,7 +753,7 @@ test('a rejected account cannot stop healthy backend refreshes or advance its la
   advance(120000);
   await assert.rejects(service.status(failed.key,{automatic:true}),{code:'RH_WEB_REFRESH_REJECTED'});
   assert.equal(rejectedGrants,1,'An explicitly rejected grant must wait for reconnection or manual Refresh');
-  assert.equal(service.sessionAudit(failed.key).lastAutomaticCheckAt,new Date(time+3720000).toISOString());
+  assert.equal(service.sessionAudit(failed.key).lastAutomaticCheckAt,new Date(time+7320000).toISOString());
 }));
 
 test('successful preflight flag never replaces the final coin/point decision on create',()=>fixture(async({service,calls,setHandler})=>{

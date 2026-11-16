@@ -197,7 +197,9 @@ function renderPoolRefresh(){
     return Number.isFinite(date.getTime())?date.toLocaleString('id-ID',{
       day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Jakarta'})+' WIB':null;
   };
-  const checked=$('#poolLastChecked'),renewed=$('#poolLastTokenRefresh'),notice=$('#poolRefreshNotice');
+  const checked=$('#poolLastChecked'),renewed=$('#poolLastTokenRefresh'),notice=$('#poolRefreshNotice'),next=$('#poolNextCheck');
+  if(next)next.textContent=timestamp(data.nextAutomaticCheckAt)?
+    'Berikutnya: '+timestamp(data.nextAutomaticCheckAt):'Jadwal otomatis setiap 2 jam';
   if(checked)checked.textContent=timestamp(data.lastAutomaticCheckAt)?
     'Pemeriksaan otomatis: '+timestamp(data.lastAutomaticCheckAt):'Menunggu pemeriksaan otomatis';
   if(renewed)renewed.textContent=timestamp(data.lastTokenRefreshAt)?
@@ -228,7 +230,15 @@ function renderAccounts(){
       {hour:'2-digit',minute:'2-digit',timeZone:'Asia/Jakarta'})+' WIB';
     return '';
   };
-  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>Access token · ${ready?'Siap digunakan':s.billingConverting?'Saldo sedang dikonversi':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>${funds(s)}</span>${ok&&s.billingVersion==='NEW'?`<span>RH ${amount(s.transitionCoinRemained)}</span>`:''}${ok&&s.walletBalance>0&&s.currency?`<span>Wallet ${escapeHtml(s.currency)} ${amount(s.walletBalance)}</span>`:''}<span>Tasks ${ok?amount(s.currentTaskCounts):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}${renewal(s)?`<span>${escapeHtml(renewal(s))}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
+  const daily=s=>{
+    const gift=s.dailyCredit;
+    if(!gift)return '';
+    if(gift.state==='claimed')return 'Kredit gratis: diklaim'+(gift.amount>0?' +'+amount(gift.amount)+' points':'');
+    return {already_claimed:'Kredit gratis: sudah diklaim',unavailable:'Kredit gratis belum tersedia',
+      pending:'Klaim kredit sedang dipastikan',failed:'Klaim kredit belum berhasil',
+      requires_action:'Klaim perlu pemeriksaan di RunningHub'}[gift.state]||'';
+  };
+  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>Access token · ${ready?'Siap digunakan':s.billingConverting?'Saldo sedang dikonversi':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>${funds(s)}</span>${ok&&s.billingVersion==='NEW'?`<span>RH ${amount(s.transitionCoinRemained)}</span>`:''}${ok&&s.walletBalance>0&&s.currency?`<span>Wallet ${escapeHtml(s.currency)} ${amount(s.walletBalance)}</span>`:''}<span>Tasks ${ok?amount(s.currentTaskCounts):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}${renewal(s)?`<span>${escapeHtml(renewal(s))}</span>`:''}${daily(s)?`<span>${escapeHtml(daily(s))}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
   $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{
     // Claim browser-only completed History BEFORE changing the provider key vault.
     await claimBrowserHistory();
