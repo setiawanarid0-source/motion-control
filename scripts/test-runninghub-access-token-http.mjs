@@ -53,6 +53,7 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
         totalCoin:low?fs.readFileSync(${JSON.stringify(lowBalanceFile)},'utf8'):'600'}}};
       if(route==='/uc/point/summary')return {status:200,data:{code:0,data:{billingVersion:low?'NEW':'OLD',converting:false,
         balancePoint:low?'427.5':'0',paidPoint:0,bonusPoint:low?'427.5':'0',activityPoint:0}}};
+      if(route==='/api/welfare/summary')return {status:200,data:{code:0,data:{enabled:false}}};
       if(route==='/task/list')return {status:200,data:{code:0,data:{total:0,records:config.data.taskId==='2110000000000000021'
         ?[{taskId:'2110000000000000021',taskStatus:'RUNNING'}]:[]}}};
       throw Error('Unexpected provider request: '+route);
@@ -108,7 +109,7 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
     response=await fetch(base+'/api/accounts/status',{headers});assert.equal(response.status,200);
     const snapshot=await response.json();
     assert.equal(snapshot.poolRefresh.automatic,true);
-    assert.equal(snapshot.poolRefresh.checkIntervalSeconds,120);assert.equal(snapshot.poolRefresh.renewIntervalSeconds,3600);
+    assert.equal(snapshot.poolRefresh.checkIntervalSeconds,7200);assert.equal(snapshot.poolRefresh.renewIntervalSeconds,7200);
     assert.equal(snapshot.poolRefresh.lastTokenRefreshAt,metadata.accounts[0].lastRenewedAt);
     assert.equal(snapshot.accounts[0].status.currentTaskCounts,0);
     assert.equal(fs.readFileSync(calls,'utf8'),providerBefore,'Reading the Pool receipt must not trigger refresh or provider polling');
@@ -173,7 +174,7 @@ test('real HTTP routes authenticate token imports, reject API keys and purge exi
     assert.ok(retired.accounts.some(a=>a.id===lowAccountId),'Web points accounts cannot be retired using the RH-only threshold');
     assert.ok(!fs.readFileSync(path.join(dir,'runninghub-web-sessions.enc'),'utf8').includes(access));
     const routes=fs.readFileSync(calls,'utf8').trim().split('\n').map(x=>JSON.parse(x).route);
-    assert.ok(routes.every(route=>['/uc/getUserInfo','/uc/point/summary','/uc/token/refresh','/task/list'].includes(route)),'Connecting or refreshing an account must never start inference or call OpenAPI');
+    assert.ok(routes.every(route=>['/uc/getUserInfo','/uc/point/summary','/uc/token/refresh','/task/list','/api/welfare/summary'].includes(route)),'Connecting or refreshing an account must never start inference or call OpenAPI');
   }finally{
     server.kill('SIGTERM');await new Promise(resolve=>server.once('exit',resolve));fs.rmSync(dir,{recursive:true,force:true});
   }

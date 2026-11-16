@@ -9,9 +9,11 @@ const app=express();let manualRequests=0,lastToken='2026-11-11T10:00:00Z';
 const snapshot=()=>({accounts:[
   {id:'fixture-ready',name:'Account 01',canGenerate:true,status:{apiType:'WEB_SESSION',sessionVerified:true,
     billingVersion:'NEW',balancePoint:30,transitionCoinRemained:600,currentTaskCounts:0,
+    dailyCredit:{state:'claimed',amount:30},
     sessionRenewal:{state:'automatic',refreshedAt:lastToken}}},
   {id:'fixture-reconnect',name:'Account 02',canGenerate:false,status:{error:'RunningHub menolak refresh token akun ini (kode 412). Hubungkan ulang sesi akun ini sekali.'}}
-],poolRefresh:{automatic:true,checkIntervalSeconds:120,renewIntervalSeconds:3600,
+],poolRefresh:{automatic:true,checkIntervalSeconds:7200,renewIntervalSeconds:7200,
+  nextAutomaticCheckAt:"2026-11-11T13:00:00Z",
   lastAutomaticCheckAt:'2026-11-11T11:00:00Z',lastTokenRefreshAt:lastToken,reconnectRequired:1}});
 app.get('/api/session',(_req,res)=>res.json(snapshot()));
 app.get('/api/accounts/status',(_req,res)=>res.json(snapshot()));
@@ -37,6 +39,9 @@ try{
     await page.locator('[data-nav-group="accounts"]').click();
     await page.locator('[data-view="accounts"]').click();
     await page.getByText('Refresh otomatis aktif',{exact:true}).waitFor();
+    await page.getByText('Token, saldo, dan klaim gratis setiap 2 jam',{exact:true}).waitFor();
+    await page.getByText('Kredit gratis: diklaim +30 points',{exact:true}).waitFor();
+    assert.match(await page.locator('#poolNextCheck').innerText(),/20[.:]00 WIB/);
     assert.equal(manualRequests,before,'Loading and opening Pool must only read the backend snapshot');
     assert.match(await page.locator('#poolLastChecked').innerText(),/18[.:]00 WIB/);
     assert.match(await page.locator('#poolLastTokenRefresh').innerText(),/17[.:]00 WIB/);

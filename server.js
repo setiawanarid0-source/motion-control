@@ -53,6 +53,7 @@ import {TURBO8_REVISION,TURBO8_ASSET,TURBO8_EDITOR_FILENAME,turbo8GraphForInputs
 import {installFrameDiagnostics} from './h3-frame-diagnostics.js';
 import {createOutputArchiveClassifier} from './output-archive-roles.js';
 import {createRunningHubWebSession,isRunningHubWebKey,RH_AUTO_RENEW_INTERVAL_MS} from './runninghub-web-session.js';
+import {RH_POOL_INTERVAL_MS} from './runninghub-maintenance.js';
 import {migrateRunningHubAccessTokens} from './runninghub-token-migration.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -487,7 +488,8 @@ function poolSnapshot(accounts=loadGlobalAccounts()){
   return {accounts:accounts.map(account=>{
     let status=null;try{status=runningHubWeb.cachedStatus(account.key);}catch{}
     return publicAccount(account,status);
-  }),poolRefresh:{automatic:true,checkIntervalSeconds:120,renewIntervalSeconds:RH_AUTO_RENEW_INTERVAL_MS/1000,
+  }),poolRefresh:{automatic:true,checkIntervalSeconds:RH_POOL_INTERVAL_MS/1000,renewIntervalSeconds:RH_AUTO_RENEW_INTERVAL_MS/1000,
+    nextAutomaticCheckAt:metadata.map(item=>item.nextAutomaticCheckAt).filter(value=>Number.isFinite(Date.parse(value||''))).sort()[0]||null,
     lastCheckedAt:latest('lastCheckedAt'),lastAutomaticCheckAt:latest('lastAutomaticCheckAt'),
     lastTokenRefreshAt:latest('lastRenewedAt'),lastAutomaticTokenRefreshAt:latest('lastAutomaticRenewedAt'),
     reconnectRequired:metadata.filter(item=>item.reconnectRequired).length}};
@@ -781,6 +783,7 @@ async function connectRunningHubAccount(req,res){
     delete account.lowBalanceImportAt; // Web funding is not limited to old RH coins.
     saveVaultAccounts(deviceId,accounts);
     const status=await accountStatus(connected.key).catch(()=>connected.status);
+    schedulePoolMaintenance();
     res.json({account:publicAccount(account,status),updated});
   }catch(error){res.status(400).json({error:error.message||'Access token RunningHub belum dapat diverifikasi.'});}
 }
@@ -809,7 +812,13 @@ app.delete('/api/accounts/:id', async (req, res) => {
 async function refreshPool(req,{renewTokens=false,automatic=false}={}){
   const {deviceId,accounts}=getPersistentAccounts(req);
   const checked=await Promise.all(accounts.map(async account=>{
-    try{return {account,status:await accountStatus(account.key,{renewTokens,automatic})};}
+    try{
+      if(automatic){
+        const cached=runningHubWeb.cachedStatus(account.key),audit=runningHubWeb.sessionAudit(account.key);
+        if(cached&&Date.parse(audit.nextAutomaticCheckAt)>Date.now())return {account,status:cached};
+      }
+      return {account,status:await accountStatus(account.key,{renewTokens,automatic,claimDailyCredit:automatic||renewTokens})};
+    }
     catch(error){return {account,status:error.poolStatus||{error:error.message,errorCode:error.code||null,
       providerCode:error.providerCode??null,sessionRenewal:{state:'failed',code:error.code||null}}};}
   }));
@@ -855,6 +864,7 @@ async function refreshPool(req,{renewTokens=false,automatic=false}={}){
 app.post('/api/accounts/refresh',async(req,res)=>{
   try{res.json(await refreshPool(req,{renewTokens:true}));}
   catch(error){res.status(502).json({error:'Tidak dapat memperbarui Account Pool saat ini.'});}
+  finally{schedulePoolMaintenance();}
 });
 app.get('/api/accounts/status',(_req,res)=>{
   res.setHeader('Cache-Control','private, no-store');
@@ -1580,16 +1590,24 @@ setTimeout(()=>monitorRegisteredTasks(),1200).unref();
 // Refresh balances even when no browser is open. Web-token accounts remain
 // stored even if their old RH-coin ledger is zero.
 // Do not start overlapping provider status checks or auto-delete on API errors.
-let scheduledPoolCheck=null;
+let scheduledPoolCheck=null,scheduledPoolTimer=null;
+function schedulePoolMaintenance(){
+  clearTimeout(scheduledPoolTimer);
+  const deadlines=loadGlobalAccounts().map(account=>{
+    try{return Date.parse(runningHubWeb.sessionAudit(account.key).nextAutomaticCheckAt||'');}catch{return NaN;}
+  }).filter(Number.isFinite);
+  const next=deadlines.length?Math.min(...deadlines):Date.now()+RH_POOL_INTERVAL_MS;
+  scheduledPoolTimer=setTimeout(()=>{void checkPoolBalancesInBackground();},
+    Math.max(1000,Math.min(RH_POOL_INTERVAL_MS,next-Date.now()))).unref();
+}
 function checkPoolBalancesInBackground(){
   if(scheduledPoolCheck)return scheduledPoolCheck;
   scheduledPoolCheck=refreshPool({headers:{},body:{}},{automatic:true}).catch(error=>
     console.warn('Background account balance refresh deferred',String(error.message||error).slice(0,130))
-  ).finally(()=>{scheduledPoolCheck=null;});
+  ).finally(()=>{scheduledPoolCheck=null;schedulePoolMaintenance();});
   return scheduledPoolCheck;
 }
 setTimeout(()=>{void checkPoolBalancesInBackground();},1500).unref();
-setInterval(()=>{void checkPoolBalancesInBackground();},2*60*1000).unref();
 if(/^\d{10,25}$/.test(process.env.VANTA_REFERENCE_AUDIT_TASK||'')){
   console.log('Reference availability audit',process.env.VANTA_REFERENCE_AUDIT_TASK,
     JSON.stringify(referenceAvailability(process.env.VANTA_REFERENCE_AUDIT_TASK)));
