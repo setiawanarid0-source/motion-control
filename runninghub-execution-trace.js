@@ -3,7 +3,7 @@
 import {akatzNodeClass} from './h3-akatz-motion.js';
 import {TURBO8_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_LEGACY_REVISION,turbo8NodeClass} from './h3-akatz-turbo8.js';
 import {AKATZ_RETIRED_REVISIONS} from './h3-akatz-options.js';
-import {REMAKE_REVISION,REMAKE_LEGACY_REVISION,remakeNodeClass} from './h3-akatz-remake.js';
+import {REMAKE_REVISION,REMAKE_PREVIOUS_REVISION,REMAKE_LEGACY_REVISION,remakeNodeClass} from './h3-akatz-remake.js';
 const BASE_NODES={1:'UNETLoader',2:'CLIPLoader',3:'VAELoader',4:'VAELoader',5:'LoraLoaderModelOnly',
   6:'LoraLoaderModelOnly',7:'LoraLoaderModelOnly',8:'MiniMaxH3SigmaShift',30:'LoadImage',
   31:'ImagePadForOutpaint',40:'KSamplerSelect',41:'BasicScheduler',49:'ImageBatchMulti',
@@ -12,7 +12,7 @@ const WINDOW_NODES=['VHS_LoadVideo','ImageFromBatch','RepeatImageBatch','ImageBa
   'MiniMaxH3ReferenceToVideo','MiniMaxH3AddGuide','ImageFromBatch','MiniMaxH3AddGuide',
   'RandomNoise','CFGGuider','SamplerCustomAdvanced','VAEDecode','ImageFromBatch','ImageCrop'];
 export function h3NodeClass(node,plan){
-  if([REMAKE_REVISION,REMAKE_LEGACY_REVISION].includes(plan?.revision))return remakeNodeClass(node,plan);
+  if([REMAKE_REVISION,REMAKE_PREVIOUS_REVISION,REMAKE_LEGACY_REVISION].includes(plan?.revision))return remakeNodeClass(node,plan);
   if([TURBO8_REVISION,TURBO8_ADAPTIVE_REVISION,TURBO8_LEGACY_REVISION,...AKATZ_RETIRED_REVISIONS].includes(plan?.revision))return turbo8NodeClass(node,plan);
   if(/^akatz-native-1080-v[12345678]$/.test(String(plan?.revision)))return akatzNodeClass(node,plan);
   if(!/^motion-transfer-native-1080-v[123456]$/.test(String(plan?.revision)))return null;

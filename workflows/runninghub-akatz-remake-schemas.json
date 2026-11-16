@@ -19,7 +19,26 @@
       "MaskToImage",
       "RemakeNoise",
       "BasicGuider"
-    ]
+    ],
+    "native1080Adapter": {
+      "experiment": "H3-AKATZ-NATIVE-CONDITIONING-20261116",
+      "registry": "https://www.runninghub.ai/object_info",
+      "registrySha256": "e2d6ec333b99e74677cca7b1bd6c4ee2a5a9367a4d94531b7f50e5a5ccf41f1d",
+      "classes": [
+        "ImageScale",
+        "MiniMaxH3RefModExtract",
+        "MiniMaxH3RefModApply",
+        "CLIPTextEncode",
+        "EmptyMiniMaxH3LatentAV",
+        "EmptyAudio",
+        "TrimAudioDuration",
+        "AudioResample",
+        "AudioConcat",
+        "VAEEncodeAudio",
+        "SetLatentNoiseMask"
+      ],
+      "note": "Declaration/layout only, not GPU attestation. RefModApply editor MatchType ports are resolved to CONDITIONING, one of the raw declared allowed types, for this text conditioning recipe."
+    }
   },
   "nodes": {
     "UNETLoader": {
@@ -3368,6 +3387,996 @@
       "python_module": "custom_nodes.ComfyUI_zip",
       "category": "comfyui_zip",
       "output_node": true,
+      "has_intermediate_output": false
+    },
+    "ImageScale": {
+      "input": {
+        "required": {
+          "image": [
+            "IMAGE"
+          ],
+          "upscale_method": [
+            [
+              "nearest-exact",
+              "bilinear",
+              "area",
+              "bicubic",
+              "lanczos"
+            ]
+          ],
+          "width": [
+            "INT",
+            {
+              "default": 512,
+              "min": 0,
+              "max": 16384,
+              "step": 1
+            }
+          ],
+          "height": [
+            "INT",
+            {
+              "default": 512,
+              "min": 0,
+              "max": 16384,
+              "step": 1
+            }
+          ],
+          "crop": [
+            [
+              "disabled",
+              "center"
+            ]
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "image",
+          "upscale_method",
+          "width",
+          "height",
+          "crop"
+        ]
+      },
+      "output": [
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "IMAGE"
+      ],
+      "name": "ImageScale",
+      "display_name": "Upscale Image",
+      "description": "",
+      "python_module": "nodes",
+      "category": "image/upscaling",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "MiniMaxH3RefModExtract": {
+      "input": {
+        "required": {
+          "name": [
+            "STRING",
+            {
+              "tooltip": "Saved mod name (appears in the Load H3 RefMods dropdown after a reload).",
+              "default": "my_concept",
+              "multiline": false
+            }
+          ],
+          "mode": [
+            "COMBO",
+            {
+              "tooltip": "Compressed Reference pools the latent and optionally refines its reconstruction. Full Reference stores the VAE encode, subject to resolution/frame/token limits. Neither mode trains H3 weights. Legacy mode values remain accepted.",
+              "default": "Compressed Reference",
+              "multiselect": false,
+              "options": [
+                "Compressed Reference",
+                "Full Reference",
+                "training",
+                "encode"
+              ]
+            }
+          ],
+          "concept_type": [
+            "COMBO",
+            {
+              "tooltip": "Metadata only; does not select a learning algorithm. What this mod represents — 'identity' (a specific person/character), 'pose_motion' (a pose/dance/gesture/camera move), 'clothing', 'background', 'style', or 'generic'. Stored in the mod and used by the loaders' prompt_hint output (merges concept_type + description into a string you can concat onto your CLIP prompt). 'identity' in training mode with a small grid also triggers a warning nudging you toward 'encode' mode or a bigger grid — pooling is lossy in exactly the way that destroys facial identity.",
+              "default": "generic",
+              "multiselect": false,
+              "options": [
+                "generic",
+                "identity",
+                "pose_motion",
+                "clothing",
+                "background",
+                "voice",
+                "singing",
+                "music_style",
+                "sound_fx",
+                "ambience",
+                "style"
+              ]
+            }
+          ],
+          "background_retention": [
+            "FLOAT",
+            {
+              "tooltip": "Only used when 'mask' is connected. Floor weight for the region outside the mask: 0 = that region collapses to a heavily blurred copy of itself (kills specific structure like a skyline/treeline while staying smooth and in-distribution), 1 = mask has no effect. Middle values (0.3-0.6) partially blur instead of fully.",
+              "default": 0.0,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05
+            }
+          ],
+          "ref_resolution": [
+            "INT",
+            {
+              "tooltip": "Target short edge in px (downscale only, never upscale), applied to BOTH modes: 'encode' stores at that res, 'training' encodes smaller too (it pools to a grid anyway, so native-res encoding is wasted compute — this is the main speed dial for training mode). 1024 is a good default; 512 halves encode cost; 2048 = official max fidelity, 4x the tokens of 1024.",
+              "default": 1024,
+              "min": 256,
+              "max": 2048,
+              "step": 64
+            }
+          ],
+          "pool_h": [
+            "INT",
+            {
+              "tooltip": "Pooled mode: spatial latent grid after pooling. The grid is auto-fit to the source's aspect ratio (long edge = max of the two dials, other edge derived), so a portrait person isn't squished into a square grid (the 'fat/chubby' distortion). Square sources keep the exact dial value. 16x16 = 64 tokens/frame (concept sweet spot); 32x32 = 256; 64x64 = 1024, full-mode parity for identity.",
+              "default": 16,
+              "min": 2,
+              "max": 64,
+              "step": 2
+            }
+          ],
+          "pool_w": [
+            "INT",
+            {
+              "tooltip": "Pooled mode: grid width (long edge if the source is wider than tall).",
+              "default": 16,
+              "min": 2,
+              "max": 64,
+              "step": 2
+            }
+          ],
+          "latent_frames": [
+            "INT",
+            {
+              "tooltip": "Per-video temporal limit. Encode mode samples up to this many source frames on H3's 17k+5 grid before VAE encoding (5, 22, 39...; 16 selects 5 across the clip; below 5 selects the first image); training mode pools to up to this many latent frames after encoding. Aligned clips remain unchanged when the limit is at least their frame count. Images use 1. Higher values increase memory and token cost; max_tokens can still reduce the result.",
+              "default": 16,
+              "min": 1,
+              "max": 2147483647
+            }
+          ],
+          "identity": [
+            "INT",
+            {
+              "display_name": "Refinement Steps",
+              "tooltip": "Compressed Reference only: optimization steps to reduce latent reconstruction error. 0 uses pooling alone. This is not identity strength or model training.",
+              "default": 500,
+              "min": 0,
+              "max": 2000,
+              "step": 50
+            }
+          ],
+          "merge": [
+            "BOOLEAN",
+            {
+              "tooltip": "Merge mode (training only): instead of stacking each ref's own pooled latent, optimize ONE shared grid against every full encode jointly — the result lands on what's COMMON across all the views (structure, motion, identity) rather than any single shot's framing/background. Ideal for a collection: many angles of a subject, a folder of similar clips -> one tiny consensus mod, one ref block's worth of tokens. Keeps every full encode in VRAM during refinement. Off = stack (each ref keeps its own frames). Ignored when mode='encode'.",
+              "default": false,
+              "label_on": "merge",
+              "label_off": "stack"
+            }
+          ],
+          "motion_only": [
+            "BOOLEAN",
+            {
+              "tooltip": "EXPERIMENTAL — extract only what MOVES. Video refs are converted to per-frame temporal differences (|f[t+1] - f[t]|, normalized) before encoding, so the mod carries where/how things move and the static appearance (background, the lineart look, an outfit) never enters the latent. For a lineart animation this keeps the moving lines and drops the static drawing. Needs video refs — a still has no motion, so image refs keep their appearance (warned). Training mode only; the ref channel is content-based, so treat the result as a soft motion guide, not a ControlNet. Combines with 'merge'.",
+              "default": false,
+              "label_on": "motion",
+              "label_off": "full"
+            }
+          ],
+          "multiplier": [
+            "INT",
+            {
+              "tooltip": "Data multiplier: repeat the extracted ref N times along time so a short video/GIF (few tokens) isn't drowned out by the main video's tokens. Each repeat duplicates the same latent frames, so attention weight on the ref scales roughly with N. 1 = no repeat; file size grows with N.",
+              "default": 1,
+              "min": 1,
+              "max": 10,
+              "step": 1
+            }
+          ],
+          "max_tokens": [
+            "INT",
+            {
+              "tooltip": "Hard cap on the total tokens the mod injects (0 = no cap; 5120 is a good performance default). If the stacked refs exceed it, near-duplicate latent frames are dropped first (video refs are full of frames that differ only by noise — each one still costs a token per spatial patch in every block), then frames are resampled to fit. The cap is honored after the multiplier. Lower latent_frames/ref_resolution instead to avoid wasting encode work: ~23K tokens = one 1024px encode-mode video ref at 16 frames.",
+              "default": 5120,
+              "min": 0,
+              "max": 2147483647,
+              "step": 512
+            }
+          ],
+          "description": [
+            "STRING",
+            {
+              "tooltip": "Optional text describing the concept (e.g. 'a ginger woman with messy hair', 'an animation style', 'handheld camera movement'). Stored in the mod and printed in the info block — documentation only, no wiring.",
+              "default": "",
+              "multiline": true
+            }
+          ],
+          "save": [
+            "BOOLEAN",
+            {
+              "tooltip": "Save the mod to mods/ so Load H3 RefMods can pick it up later.",
+              "default": true,
+              "label_on": "save",
+              "label_off": "don't save"
+            }
+          ]
+        },
+        "optional": {
+          "refs_image": [
+            "COMFY_AUTOGROW_V3",
+            {
+              "template": {
+                "input": {
+                  "required": {
+                    "ref_image": [
+                      "IMAGE",
+                      {
+                        "tooltip": "Reference still: one image of the concept (angle / expression / outfit). Optional — leave empty when using video refs and/or a folder bundle."
+                      }
+                    ]
+                  }
+                },
+                "prefix": "ref_image_",
+                "min": 0,
+                "max": 16
+              }
+            }
+          ],
+          "refs_video": [
+            "COMFY_AUTOGROW_V3",
+            {
+              "template": {
+                "input": {
+                  "required": {
+                    "ref_video": [
+                      "IMAGE",
+                      {
+                        "tooltip": "Reference video frames [T,H,W,C] (a multi-frame batch = a video ref with motion). Optional — leave empty when using image refs and/or a folder bundle."
+                      }
+                    ]
+                  }
+                },
+                "prefix": "ref_video_",
+                "min": 0,
+                "max": 8
+              }
+            }
+          ],
+          "refs_bundle": [
+            "H3_REF_LIST",
+            {
+              "tooltip": "All images/videos from a Load H3 RefMod Folder node, appended after the autogrow refs (bulk extraction)."
+            }
+          ],
+          "mask": [
+            "MASK",
+            {
+              "tooltip": "Subject mask (or a batch, one per reference in order: images then videos) marking what to keep at full weight. Everything outside the mask collapses toward a heavily blurred copy of itself per spatial cell (stays in-distribution — a flat noise-mix here decodes as a woven/static texture instead of 'nothing'), controlled by background_retention. Fixes 'encode' mode pulling in a background/style that doesn't belong to the subject. A single mask broadcasts to every reference; a batch must match the reference count."
+            }
+          ],
+          "av_encoder": [
+            "MINIMAX_H3_AV_ENCODER",
+            {
+              "tooltip": "Legacy MiniMax-H3 VAERef. Loads its video checkpoint using the native ComfyUI VAE; prefer vae to share an already loaded VAE."
+            }
+          ],
+          "vae": [
+            "VAE",
+            {
+              "tooltip": "Standard VAE, used when av_encoder is not connected."
+            }
+          ],
+          "extraction_preset": [
+            "COMBO",
+            {
+              "tooltip": "manual preserves controls. identity_encode: Full Reference, resolution=1024, steps=0, merge/motion_only off. style_experimental: Compressed Reference, pool=8x8, steps=150, merge/motion_only off. motion_sequence: Compressed Reference, pool=16x16, merge/motion_only off; preserves frame limit and Refinement Steps. It keeps appearance, not frame differences.",
+              "default": "manual",
+              "multiselect": false,
+              "options": [
+                "manual",
+                "identity_encode",
+                "style_experimental",
+                "motion_sequence"
+              ]
+            }
+          ],
+          "subfolder": [
+            "STRING",
+            {
+              "tooltip": "Optional folder inside models/refmods, for example celebs or voices.",
+              "default": "",
+              "multiline": false
+            }
+          ],
+          "mask_list": [
+            "H3_MASK_LIST",
+            {
+              "tooltip": "Connect Collect H3 RefMod Masks to preserve different mask sizes. One mask broadcasts; otherwise images, videos, then folder references in order. Use mask OR mask_list."
+            }
+          ],
+          "budget_policy": [
+            "COMBO",
+            {
+              "tooltip": "On max_tokens overflow: truncate uses the existing frame reduction; error stops without saving. 0 max_tokens disables the cap.",
+              "default": "truncate",
+              "multiselect": false,
+              "options": [
+                "truncate",
+                "error"
+              ]
+            }
+          ]
+        },
+        "hidden": {
+          "prompt": [
+            "PROMPT"
+          ],
+          "extra_pnginfo": [
+            "EXTRA_PNGINFO"
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "name",
+          "mode",
+          "concept_type",
+          "background_retention",
+          "ref_resolution",
+          "pool_h",
+          "pool_w",
+          "latent_frames",
+          "identity",
+          "merge",
+          "motion_only",
+          "multiplier",
+          "max_tokens",
+          "description",
+          "save"
+        ],
+        "optional": [
+          "refs_image",
+          "refs_video",
+          "refs_bundle",
+          "mask",
+          "av_encoder",
+          "vae",
+          "extraction_preset",
+          "subfolder",
+          "mask_list",
+          "budget_policy"
+        ],
+        "hidden": [
+          "prompt",
+          "extra_pnginfo"
+        ]
+      },
+      "output": [
+        "H3_REF_MODS",
+        "STRING"
+      ],
+      "output_is_list": [
+        false,
+        false
+      ],
+      "output_name": [
+        "mods",
+        "details"
+      ],
+      "name": "MiniMaxH3RefModExtract",
+      "display_name": "Create H3 RefMod",
+      "description": "Turn one or more references of the same concept into a RefMod. Stills plug into ref_image_1, video frames into ref_video_1, and the next slot of that type appears. refs are stacked into one video-kind mod, so a multi-image moodboard keeps each ref's own content instead of averaging away. 'training' mode (default) compresses the refs to a grid and refines it — good identity at a fraction of the tokens; 'encode' stores the full-res encode (max identity, MB-size mod). Flip 'merge' on to extract a collection as ONE consensus latent (joint refinement against every ref) instead of a stack.",
+      "python_module": "custom_nodes.ComfyUI-MiniMaxH3Mod",
+      "category": "MiniMax-H3/mod",
+      "output_node": true,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        "Bundle with this one mod at strength 1.0. Feed it to Apply H3 RefMod (or Load H3 RefMods after saving).",
+        null
+      ],
+      "api_node": false
+    },
+    "MiniMaxH3RefModApply": {
+      "input": {
+        "required": {
+          "conditioning": [
+            "COMFY_MATCHTYPE_V3",
+            {
+              "tooltip": "MINIMAX_H3_COND (ComfyUI-MiniMaxH3 pack) or CONDITIONING (core MiniMaxH3ReferenceToVideo).",
+              "template": {
+                "template_id": "cond",
+                "allowed_types": "MINIMAX_H3_COND,CONDITIONING"
+              }
+            }
+          ],
+          "mods": [
+            "H3_REF_MODS",
+            {
+              "tooltip": "Bundle from Load H3 RefMods / Load H3 RefMod Axis / Create H3 RefMod."
+            }
+          ],
+          "override": [
+            "BOOLEAN",
+            {
+              "tooltip": "Use the config fixed into the mods' own metadata (by 'Fix H3 RefMod Config') instead of the widgets below: retention + curve come from the first mod in the bundle that carries one. Handy for sharing mods whose magic settings took real tuning. Off (default) = use the manual parameters. If no mod has a saved config it falls back to the manual parameters and prints a note.",
+              "default": false
+            }
+          ],
+          "retention": [
+            "FLOAT",
+            {
+              "tooltip": "Master reference strength, multiplied with each loader row's strength. MiniMax retention levels: 1.0 = fully_preserved, 0.7 = partially_preserved, 0.4 = attribute_transfer (keep style/attributes, not identity), 0.15 = weak_reference. 0 = no reference.",
+              "default": 1.0,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.01
+            }
+          ],
+          "curve_direction": [
+            "COMBO",
+            {
+              "tooltip": "Weighting envelope across THIS MOD'S OWN ref frames (stacked images / video-ref latent frames) — i.e. WHICH reference content dominates, NOT where the concept appears in the output video (ref tokens are not bound to output time; for output-timing control use the 'H3 RefMod Step Curve' node instead, which runs over the denoise timeline). 'constant' (default) = every ref frame at full strength (official-ref parity). The old default 'concept_at_end' fades early stack frames toward blur, roughly HALVING average strength on multi-frame mods. Old saved workflows keep their saved values.",
+              "default": "constant",
+              "multiselect": false,
+              "options": [
+                "constant",
+                "concept_at_start",
+                "concept_at_middle",
+                "concept_at_end",
+                "concept_at_ends"
+              ]
+            }
+          ],
+          "scramble_seed": [
+            "INT",
+            {
+              "tooltip": "Ref scrambling seed. -1 (default) = off: all refs in saved order. With 2+ refs in the bundle, a seed >= 0 shuffles the ref order and keeps a random subset, so a different ref leads each run (a multi-ref mod 'pops' a different video/image per seed). Same seed = same scramble; set this widget's control-after-generate to 'randomize' for per-run variation.",
+              "default": -1,
+              "min": -1,
+              "max": 2147483647,
+              "step": 1,
+              "control_after_generate": "fixed"
+            }
+          ],
+          "curve_shape": [
+            "COMBO",
+            {
+              "tooltip": "How the weighting travels between its endpoints: 'linear', 'ease' (smoothstep), 'sigmoid'/'tanh' (S-curves, tanh with a steeper knee), 'quadratic', 'cubic', 'exponential', 'stair' (stepped), 'elastic' (overshoots), 'bump'/'dip' (peak/trough mid-stack). Only matters when curve_direction != constant.",
+              "default": "linear",
+              "multiselect": false,
+              "options": [
+                "linear",
+                "ease",
+                "sigmoid",
+                "tanh",
+                "quadratic",
+                "cubic",
+                "exponential",
+                "stair",
+                "elastic",
+                "bump",
+                "dip"
+              ]
+            }
+          ],
+          "curve_value": [
+            "FLOAT",
+            {
+              "tooltip": "Endpoint weight ('user input'): both endpoints for 'constant' and 'concept_at_ends', the start for 'concept_at_start', the end for 'concept_at_end', the mid peak for 'concept_at_middle'. On single-image ('image'-kind) mods this acts as a simple STRENGTH CAP (directions are meaningless on one frame): 0.4 = the ref blends 40% toward its blurred self.",
+              "default": 1.0,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.01
+            }
+          ]
+        },
+        "optional": {
+          "graph_preset": [
+            "COMBO",
+            {
+              "tooltip": "Optional shared graph preset — leave on '(none)' to use the curve widgets above. Selecting one loads direction/shape/value from a saved debug-grid PNG (graph embedded in its metadata) or a legacy .json, in models/refmods/graph_presets/. Share the preset PNG itself to share a curve. Use Refresh Graph Presets on the node to load the list without scanning models during object_info.",
+              "default": "(none)",
+              "multiselect": false,
+              "options": [
+                "(none)"
+              ]
+            }
+          ],
+          "scramble_mode": [
+            "COMBO",
+            {
+              "default": "shuffle",
+              "multiselect": false,
+              "options": [
+                "shuffle",
+                "subset",
+                "legacy_subset"
+              ]
+            }
+          ],
+          "scramble_keep": [
+            "INT",
+            {
+              "tooltip": "Refs retained in subset mode; shuffle keeps all refs.",
+              "default": 1,
+              "min": 1,
+              "max": 80
+            }
+          ],
+          "max_total_tokens": [
+            "INT",
+            {
+              "tooltip": "Total reference token budget after copies; 0 disables the limit.",
+              "default": 0,
+              "min": 0,
+              "max": 1048576
+            }
+          ],
+          "save_preset_as": [
+            "STRING",
+            {
+              "tooltip": "Optional: type a name and run to save the current (resolved) curve as a PNG preset — the curve graph itself with the graph embedded in its metadata — in models/refmods/graph_presets/. Share that image to share the curve. Leave empty to skip.",
+              "default": "",
+              "multiline": false
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "conditioning",
+          "mods",
+          "override",
+          "retention",
+          "curve_direction",
+          "scramble_seed",
+          "curve_shape",
+          "curve_value"
+        ],
+        "optional": [
+          "graph_preset",
+          "scramble_mode",
+          "scramble_keep",
+          "max_total_tokens",
+          "save_preset_as"
+        ]
+      },
+      "output": [
+        "COMFY_MATCHTYPE_V3",
+        "IMAGE"
+      ],
+      "output_is_list": [
+        false,
+        false
+      ],
+      "output_name": [
+        "conditioning",
+        "curve graph"
+      ],
+      "name": "MiniMaxH3RefModApply",
+      "display_name": "Apply H3 RefMod",
+      "description": "Inject a loader bundle of RefMods into a MiniMax H3 conditioning. Accepts both the pack's MINIMAX_H3_COND and the built-in CONDITIONING and returns the same type. For video references use a Ref2VA checkpoint and reference workflow; FL2VA first-frame conditioning does not provide a motion-copy guarantee.",
+      "python_module": "custom_nodes.ComfyUI-MiniMaxH3Mod",
+      "category": "MiniMax-H3/mod",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        "The conditioning with the ref blocks injected, same type as the input.",
+        "Optional 1024x1024 curve graph: the strength envelope (direction/shape/value) with the concept zone shaded. Leave unconnected to skip the preview."
+      ],
+      "api_node": false
+    },
+    "CLIPTextEncode": {
+      "input": {
+        "required": {
+          "text": [
+            "STRING",
+            {
+              "multiline": true,
+              "dynamicPrompts": true,
+              "tooltip": "The text to be encoded."
+            }
+          ],
+          "clip": [
+            "CLIP",
+            {
+              "tooltip": "The CLIP model used for encoding the text."
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "text",
+          "clip"
+        ]
+      },
+      "output": [
+        "CONDITIONING"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "CONDITIONING"
+      ],
+      "name": "CLIPTextEncode",
+      "display_name": "CLIP Text Encode (Prompt)",
+      "description": "Encodes a text prompt using a CLIP model into an embedding that can be used to guide the diffusion model towards generating specific images.",
+      "python_module": "nodes",
+      "category": "model/conditioning",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        "A conditioning containing the embedded text used to guide the diffusion model."
+      ]
+    },
+    "EmptyMiniMaxH3LatentAV": {
+      "input": {
+        "required": {
+          "width": [
+            "INT",
+            {
+              "default": 1344,
+              "min": 32,
+              "max": 16384,
+              "step": 32
+            }
+          ],
+          "height": [
+            "INT",
+            {
+              "default": 768,
+              "min": 32,
+              "max": 16384,
+              "step": 32
+            }
+          ],
+          "length": [
+            "INT",
+            {
+              "tooltip": "Frame count at 24 fps, snapped up to the model's 17k+5 grid (124 = ~5s; trained range is ~124-362, longer is untested)",
+              "default": 124,
+              "min": 5,
+              "max": 3600,
+              "step": 17
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "width",
+          "height",
+          "length"
+        ]
+      },
+      "output": [
+        "LATENT"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "LATENT"
+      ],
+      "name": "EmptyMiniMaxH3LatentAV",
+      "display_name": "Empty MiniMax H3 AV Latent",
+      "description": "Joint video+audio latent for MiniMax H3. Duration snaps to the model's 17k+5 frame grid at 24 fps.",
+      "python_module": "comfy_extras.nodes_minimax_h3",
+      "category": "model/latent/minimax",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "EmptyAudio": {
+      "input": {
+        "required": {
+          "duration": [
+            "FLOAT",
+            {
+              "tooltip": "Duration of the empty audio clip in seconds",
+              "default": 60.0,
+              "min": 0.0,
+              "max": 18446744073709551615,
+              "step": 0.01
+            }
+          ],
+          "sample_rate": [
+            "INT",
+            {
+              "tooltip": "Sample rate of the empty audio clip.",
+              "advanced": true,
+              "default": 44100,
+              "min": 1,
+              "max": 192000
+            }
+          ],
+          "channels": [
+            "INT",
+            {
+              "tooltip": "Number of audio channels (1 for mono, 2 for stereo).",
+              "advanced": true,
+              "default": 2,
+              "min": 1,
+              "max": 2
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "duration",
+          "sample_rate",
+          "channels"
+        ]
+      },
+      "output": [
+        "AUDIO"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "AUDIO"
+      ],
+      "name": "EmptyAudio",
+      "display_name": "Empty Audio",
+      "description": "",
+      "python_module": "comfy_extras.nodes_audio",
+      "category": "audio",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "TrimAudioDuration": {
+      "input": {
+        "required": {
+          "audio": [
+            "AUDIO",
+            {}
+          ],
+          "start_index": [
+            "FLOAT",
+            {
+              "tooltip": "Start time in seconds, can be negative to count from the end (supports sub-seconds).",
+              "default": 0.0,
+              "min": -18446744073709551615,
+              "max": 18446744073709551615,
+              "step": 0.01
+            }
+          ],
+          "duration": [
+            "FLOAT",
+            {
+              "tooltip": "Duration in seconds",
+              "default": 60.0,
+              "min": 0.0,
+              "step": 0.01
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "audio",
+          "start_index",
+          "duration"
+        ]
+      },
+      "output": [
+        "AUDIO"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "AUDIO"
+      ],
+      "name": "TrimAudioDuration",
+      "display_name": "Trim Audio Duration",
+      "description": "Trim audio tensor into chosen time range.",
+      "python_module": "comfy_extras.nodes_audio",
+      "category": "audio",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "AudioResample": {
+      "input": {
+        "required": {
+          "audio": [
+            "AUDIO",
+            {
+              "tooltip": "Input audio to be processed"
+            }
+          ],
+          "new_sample_rate": [
+            "INT",
+            {
+              "default": 44100,
+              "min": 8000,
+              "max": 192000,
+              "step": 100,
+              "tooltip": "Desired new sample rate (8000 to 192000 Hz)"
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "audio",
+          "new_sample_rate"
+        ]
+      },
+      "output": [
+        "AUDIO"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "AUDIO"
+      ],
+      "name": "AudioResample",
+      "display_name": "Audio Resample ⚡🅡🅞🅣🅘",
+      "description": "",
+      "python_module": "custom_nodes.ComfyUI_RyanOnTheInside",
+      "category": "RyanOnTheInside/Audio/Utility",
+      "output_node": false,
+      "has_intermediate_output": false
+    },
+    "AudioConcat": {
+      "input": {
+        "required": {
+          "audio1": [
+            "AUDIO",
+            {}
+          ],
+          "audio2": [
+            "AUDIO",
+            {}
+          ],
+          "direction": [
+            "COMBO",
+            {
+              "tooltip": "Whether to append audio2 after or before audio1.",
+              "default": "after",
+              "multiselect": false,
+              "options": [
+                "after",
+                "before"
+              ]
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "audio1",
+          "audio2",
+          "direction"
+        ]
+      },
+      "output": [
+        "AUDIO"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "AUDIO"
+      ],
+      "name": "AudioConcat",
+      "display_name": "Concatenate Audio",
+      "description": "Concatenates the audio1 to audio2 in the specified direction.",
+      "python_module": "comfy_extras.nodes_audio",
+      "category": "audio",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "VAEEncodeAudio": {
+      "input": {
+        "required": {
+          "audio": [
+            "AUDIO",
+            {}
+          ],
+          "vae": [
+            "VAE",
+            {}
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "audio",
+          "vae"
+        ]
+      },
+      "output": [
+        "LATENT"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "LATENT"
+      ],
+      "name": "VAEEncodeAudio",
+      "display_name": "VAE Encode Audio",
+      "description": "",
+      "python_module": "comfy_extras.nodes_audio",
+      "category": "model/latent",
+      "output_node": false,
+      "has_intermediate_output": false,
+      "output_tooltips": [
+        null
+      ],
+      "api_node": false
+    },
+    "SetLatentNoiseMask": {
+      "input": {
+        "required": {
+          "samples": [
+            "LATENT"
+          ],
+          "mask": [
+            "MASK"
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "samples",
+          "mask"
+        ]
+      },
+      "output": [
+        "LATENT"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "LATENT"
+      ],
+      "name": "SetLatentNoiseMask",
+      "display_name": "Set Latent Noise Mask",
+      "description": "",
+      "python_module": "nodes",
+      "category": "model/latent",
+      "output_node": false,
       "has_intermediate_output": false
     }
   }

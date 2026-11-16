@@ -1,0 +1,15 @@
+{
+  "revision": "akatz-source-viggle-remake-65e798f-v2",
+  "sourceFrames": 463,
+  "canvas": [
+    1088,
+    1920
+  ],
+  "failedNode": "10405",
+  "classType": "RemakeConditioning",
+  "shortEdge": 1088,
+  "failure": {
+    "type": "ValueError",
+    "message": "short_edge must be between 480 and 736, in steps of 32"
+  }
+}

@@ -1,13 +1,14 @@
-// Port of the active recipe in akatz-labs/h3-character-swap-tool, pinned below.
-// Native Remake conditioning/noise and tensor operators implement the workbench
-// helpers. No old Turbo8/Ref2VA or spatial-mask experiment is used on this path.
+// Adaptation of the active recipe in akatz-labs/h3-character-swap-tool.
+// Full-resolution reference operators replace the installed conditioner's
+// 736-pixel guard. Text tokenization/precision differences are disclosed below.
 import {h3PhotoPlan,prepareH3Input} from './minimax-h3-motion.js';
 import {AKATZ_PROFILE} from './h3-akatz-motion.js';
 import {assertAkatzBaseline} from './h3-akatz-options.js';
 import {runningHubWorkflowContent} from './runninghub-workflow-content.js';
 
 export const REMAKE_LEGACY_REVISION='akatz-source-viggle-remake-65e798f-v1';
-export const REMAKE_REVISION='akatz-source-viggle-remake-65e798f-v2';
+export const REMAKE_PREVIOUS_REVISION='akatz-source-viggle-remake-65e798f-v2';
+export const REMAKE_REVISION='akatz-source-viggle-remake-65e798f-v3';
 export const REMAKE_SOURCE='https://github.com/akatz-labs/h3-character-swap-tool';
 export const REMAKE_COMMIT='65e798fa778b58ee4abc77251b58ec35c086db89';
 export const REMAKE_EDITOR_FILENAME='VANTA_AKATZ_SOURCE_VIGGLE_REMAKE_6STEP_RUNNINGHUB.json';
@@ -30,6 +31,26 @@ const edge=v=>Array.isArray(v)&&v.length===2&&typeof v[0]==='string'&&Number.isS
 const file=v=>typeof v==='string'&&v.length>0&&v.length<=500&&!/[\u0000-\u001f\\]/.test(v)&&
   !v.startsWith('/')&&!v.includes('://')&&!v.split('/').includes('..');
 const invalid=message=>Object.assign(new Error(message),{code:'AKATZ_REMAKE_INPUT_INVALID',definitelyRejected:true});
+const roundEven=n=>{const i=Math.floor(n);return n-i===0.5?i+i%2:Math.round(n);};
+
+// The source concatenates separately tokenized labels. Stock CLIPTextEncode
+// accepts one text string instead. Preserve the presentation and text-only
+// modality, while recording this tokenization difference in the plan.
+export function remakePresentation(frames){
+  const times=Array.from({length:Math.ceil(frames/12)},(_,i)=>i/2);
+  if(times.length%2)times.push(times.at(-1));
+  const labels=[];
+  for(let i=0;i<times.length;i+=2)labels.push('<'+(roundEven((times[i]+times[i+1])*5)/10).toFixed(1)+' seconds>');
+  return '<Video 1>: '+labels.join('')+'<Picture 1>: '+remakePrompt();
+}
+
+const fullReference=(name,reference,port,frames)=>({name,mode:'Full Reference',concept_type:'generic',
+  background_retention:1,ref_resolution:['42',0],pool_h:16,pool_w:16,latent_frames:frames,identity:0,
+  merge:false,motion_only:false,multiplier:1,max_tokens:0,description:'',save:false,
+  vae:['3',0],extraction_preset:'manual',subfolder:'',budget_policy:'error',[port]:reference});
+const fullApply=(conditioning,mods)=>({conditioning,mods,override:false,retention:1,
+  curve_direction:'constant',scramble_seed:-1,curve_shape:'linear',curve_value:1,
+  graph_preset:'(none)',scramble_mode:'shuffle',scramble_keep:1,max_total_tokens:0,save_preset_as:''});
 
 export function prepareRemakeInput(video,mode,image){
   // Remake reads its output canvas directly from source pixels. Old Turbo8
@@ -45,6 +66,8 @@ export function remakeTemporalPlan(source){
     throw invalid('Metadata video Akatz belum valid.');
   for(const key of ['canvasWidth','canvasHeight','outputWidth','outputHeight'])
     if(!Number.isSafeInteger(source[key])||source[key]<64||source[key]>8192)throw invalid('Canvas Akatz belum valid.');
+  for(const key of ['referenceWidth','referenceHeight'])
+    if(!Number.isSafeInteger(source[key])||source[key]<64||source[key]>8192)throw invalid('Ukuran foto Akatz belum valid.');
   if(source.canvasWidth%32||source.canvasHeight%32||Math.min(source.outputWidth,source.outputHeight)!==1080||
     source.outputWidth>source.canvasWidth||source.outputHeight>source.canvasHeight)throw invalid('Ukuran native Akatz belum valid.');
   if(source.driverCanvas&&(source.driverCanvas[0]!==source.canvasWidth||source.driverCanvas[1]!==source.canvasHeight))
@@ -99,11 +122,17 @@ export function remakeGraphForInputs({imageName,videoName,source}){
   add(7,'LoraLoaderBypassModelOnly',{model:['6',0],lora_name:['8',0],strength_model:REMAKE_RECIPE.strength});
   add(10,'RemakeKeyframeUntil',{model:['7',0],keyframe_until:REMAKE_RECIPE.keyframeUntil});
   add(30,'LoadImage',{image:imageName});
+  add(31,'ImageFromBatch',{image:['30',0],batch_index:0,length:1});
+  const shortEdge=Math.min(source.canvasWidth,source.canvasHeight);
+  const refWidth=Math.max(32,roundEven(source.referenceWidth*shortEdge/Math.min(source.referenceWidth,source.referenceHeight)/32)*32);
+  const refHeight=Math.max(32,roundEven(source.referenceHeight*shortEdge/Math.min(source.referenceWidth,source.referenceHeight)/32)*32);
+  add(32,'ImageScale',{image:['31',0],upscale_method:'lanczos',width:refWidth,height:refHeight,crop:'disabled'});
+  add(33,'MiniMaxH3RefModExtract',fullReference('vanta_akatz_picture',['32',0],'refs_image.ref_image_1',1));
   add(40,'KSamplerSelect',{sampler_name:REMAKE_RECIPE.sampler});
   add(41,'ManualSigmas',{sigmas:REMAKE_RECIPE.sigmas.join(', ')});
-  // An INT link carries the real aligned canvas. Frame counts independently
-  // obey the worker's 90..345 range; links never bypass runtime validation.
-  add(42,'PrimitiveInt',{value:Math.min(source.canvasWidth,source.canvasHeight)});
+  // Full Reference supports this 1088 short edge. Never send it to the
+  // installed RemakeConditioning, which enforces a 736-pixel cap.
+  add(42,'PrimitiveInt',{value:shortEdge});
   const delivered=[];
   for(const s of plan.segments){
     const b=s.base,n=(offset,type,inputs)=>add(b+offset,type,inputs);
@@ -115,10 +144,27 @@ export function remakeGraphForInputs({imageName,videoName,source}){
       pixels=n(3,'ImageBatch',{image1:pixels,image2:tail});
     }
     const frameCount=n(4,'PrimitiveInt',{value:s.modelFrames});
-    let positive=n(5,'RemakeConditioning',{clip:['2',0],vae:['3',0],audio_vae:['4',0],source:pixels,
-      prompt:remakePrompt(),ref_1:['30',0],pins:'',frames:frameCount,short_edge:['42',0],
-      ...(source.hasAudio?{audio:[String(b),2]}:{})});
-    let latent=[String(b+5),1];
+    const text=n(12,'CLIPTextEncode',{clip:['2',0],text:remakePresentation(s.modelFrames)});
+    const videoRef=n(14,'MiniMaxH3RefModExtract',fullReference('vanta_akatz_video_'+s.index,pixels,'refs_video.ref_video_1',s.modelFrames));
+    const withVideo=n(15,'MiniMaxH3RefModApply',fullApply(text,videoRef));
+    let positive=n(5,'MiniMaxH3RefModApply',fullApply(withVideo,['33',0]));
+    const empty=n(17,'EmptyMiniMaxH3LatentAV',{width:source.canvasWidth,height:source.canvasHeight,length:frameCount});
+    const audioMask=n(18,'SolidMask',{value:0,width:1,height:1});
+    const audioSamples=Math.ceil(Math.round((s.modelFrames+1)/24*32000)/800)*800;
+    // Add one spare silence sample, then trim with the native rounded sample
+    // clock. This avoids float truncation and the audio VAE's centre crop.
+    const silence=n(54,'EmptyAudio',{duration:(audioSamples+1)/32000,sample_rate:32000,channels:2});
+    let audio=silence;
+    if(source.hasAudio){
+      const cropped=n(50,'TrimAudioDuration',{audio:[String(b),2],start_index:0,duration:s.modelFrames/24});
+      const resampled=n(51,'AudioResample',{audio:cropped,new_sample_rate:32000});
+      audio=n(55,'AudioConcat',{audio1:resampled,audio2:silence,direction:'after'});
+    }
+    const padded=n(56,'TrimAudioDuration',{audio,start_index:0,duration:audioSamples/32000});
+    const encodedAudio=n(57,'VAEEncodeAudio',{audio:padded,vae:['4',0]});
+    const cutAudio=n(58,'LatentCut',{samples:encodedAudio,dim:'x',index:0,amount:Math.round(s.modelFrames/24*40)});
+    const heldAudio=n(59,'SetLatentNoiseMask',{samples:cutAudio,mask:audioMask});
+    let latent=n(19,'LTXVConcatAVLatent',{video_latent:empty,audio_latent:heldAudio});
     if(s.history){
       const previous=plan.segments[s.index-1];
       const history=n(20,'ImageFromBatch',{image:[String(previous.base+11),0],batch_index:previous.delivered-18,length:18});
@@ -183,6 +229,8 @@ export function remakeExecutionPlan(source){
     output:[source.outputWidth,source.outputHeight],sampling:{...REMAKE_RECIPE},segments:p.segments,samplerCount:p.segments.length,
     nativeWindowFrames:p.window,workerFrameRange:{...REMAKE_WORKER_FRAMES},
     continuationFrames:18,continuation:'generated_rgb_17_clean_plus_1_boundary',
+    conditioningAdapter:'native_1080_full_reference_composition',
+    textPresentation:'text_only_joint_tokenization',sourceTextTokenization:'per_segment',referenceLatentDtype:'float16',
     appearance:'edited_first_frame_as_picture_reference',firstFrameGuide:false,durationStrategy:'automatic_bounded_windows',
     applicationMaxSeconds:null,postDecodeResize:false,postRefinement:false,sourceAudioHeldClean:true,
     memoryPolicy:'RunningHub_native_automatic_offloading',perSegmentMp4RoundTrip:false,
@@ -197,6 +245,7 @@ export function remakeEditorForFrames({frames=360,width=1080,height=1920}={}){
   const graph=remakeGraphForInputs({imageName:'UPLOAD_EDITED_FIRST_FRAME.png',videoName:'UPLOAD_SOURCE_VIDEO.mp4',source});
   const editor=JSON.parse(runningHubWorkflowContent(graph));
   editor.extra.vanta_export={source_revision:REMAKE_REVISION,source_repository:REMAKE_SOURCE,source_commit:REMAKE_COMMIT,
+    conditioning_adapter:'native_1080_full_reference_composition',text_tokenization:'joint_text_only',reference_latent_dtype:'float16',
     preset_frames:frames,preset_seconds:frames/24,generation_window_frames:124,continuation_frames:18,
     worker_frame_range:{...REMAKE_WORKER_FRAMES},
     automatic_window_count:true,generation_executed:false,visual_acceptance:'pending_owner_test'};
@@ -204,5 +253,5 @@ export function remakeEditorForFrames({frames=360,width=1080,height=1920}={}){
 }
 
 export function remakeNodeClass(id,plan){
-  return [REMAKE_REVISION,REMAKE_LEGACY_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
+  return [REMAKE_REVISION,REMAKE_PREVIOUS_REVISION,REMAKE_LEGACY_REVISION].includes(plan?.revision)?plan.nodeClasses?.[String(id)]||null:null;
 }

@@ -30,6 +30,25 @@
         "RemakeNoise",
         "BasicGuider"
       ]
+    },
+    "native1080Adapter": {
+      "experiment": "H3-AKATZ-NATIVE-CONDITIONING-20261116",
+      "registry": "https://www.runninghub.ai/object_info",
+      "registrySha256": "e2d6ec333b99e74677cca7b1bd6c4ee2a5a9367a4d94531b7f50e5a5ccf41f1d",
+      "classes": [
+        "ImageScale",
+        "MiniMaxH3RefModExtract",
+        "MiniMaxH3RefModApply",
+        "CLIPTextEncode",
+        "EmptyMiniMaxH3LatentAV",
+        "EmptyAudio",
+        "TrimAudioDuration",
+        "AudioResample",
+        "AudioConcat",
+        "VAEEncodeAudio",
+        "SetLatentNoiseMask"
+      ],
+      "note": "Declaration/layout only, not GPU attestation. RefModApply editor MatchType ports are resolved to CONDITIONING, one of the raw declared allowed types, for this text conditioning recipe."
     }
   },
   "nodes": {
@@ -4981,6 +5000,646 @@
       "defaults": {},
       "controls": {},
       "objectWidgets": false
+    },
+    "MiniMaxH3RefModExtract": {
+      "inputs": [
+        {
+          "name": "name",
+          "type": "STRING",
+          "widget": {
+            "name": "name"
+          }
+        },
+        {
+          "name": "mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "mode"
+          }
+        },
+        {
+          "name": "concept_type",
+          "type": "COMBO",
+          "widget": {
+            "name": "concept_type"
+          }
+        },
+        {
+          "name": "background_retention",
+          "type": "FLOAT",
+          "widget": {
+            "name": "background_retention"
+          }
+        },
+        {
+          "name": "ref_resolution",
+          "type": "INT",
+          "widget": {
+            "name": "ref_resolution"
+          }
+        },
+        {
+          "name": "pool_h",
+          "type": "INT",
+          "widget": {
+            "name": "pool_h"
+          }
+        },
+        {
+          "name": "pool_w",
+          "type": "INT",
+          "widget": {
+            "name": "pool_w"
+          }
+        },
+        {
+          "name": "latent_frames",
+          "type": "INT",
+          "widget": {
+            "name": "latent_frames"
+          }
+        },
+        {
+          "name": "identity",
+          "type": "INT",
+          "widget": {
+            "name": "identity"
+          }
+        },
+        {
+          "name": "merge",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "merge"
+          }
+        },
+        {
+          "name": "motion_only",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "motion_only"
+          }
+        },
+        {
+          "name": "multiplier",
+          "type": "INT",
+          "widget": {
+            "name": "multiplier"
+          }
+        },
+        {
+          "name": "max_tokens",
+          "type": "INT",
+          "widget": {
+            "name": "max_tokens"
+          }
+        },
+        {
+          "name": "description",
+          "type": "STRING",
+          "widget": {
+            "name": "description"
+          }
+        },
+        {
+          "name": "save",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "save"
+          }
+        },
+        {
+          "name": "refs_image.ref_image_1",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_2",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_3",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_4",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_5",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_6",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_7",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_8",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_9",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_10",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_11",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_12",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_13",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_14",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_15",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_image.ref_image_16",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_video.ref_video_1",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_video.ref_video_2",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_video.ref_video_3",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_video.ref_video_4",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_video.ref_video_5",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_video.ref_video_6",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_video.ref_video_7",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_video.ref_video_8",
+          "type": "IMAGE"
+        },
+        {
+          "name": "refs_bundle",
+          "type": "H3_REF_LIST"
+        },
+        {
+          "name": "mask",
+          "type": "MASK"
+        },
+        {
+          "name": "av_encoder",
+          "type": "MINIMAX_H3_AV_ENCODER"
+        },
+        {
+          "name": "vae",
+          "type": "VAE"
+        },
+        {
+          "name": "extraction_preset",
+          "type": "COMBO",
+          "widget": {
+            "name": "extraction_preset"
+          }
+        },
+        {
+          "name": "subfolder",
+          "type": "STRING",
+          "widget": {
+            "name": "subfolder"
+          }
+        },
+        {
+          "name": "mask_list",
+          "type": "H3_MASK_LIST"
+        },
+        {
+          "name": "budget_policy",
+          "type": "COMBO",
+          "widget": {
+            "name": "budget_policy"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mods",
+          "type": "H3_REF_MODS"
+        },
+        {
+          "name": "details",
+          "type": "STRING"
+        }
+      ],
+      "widgetOrder": [
+        "name",
+        "mode",
+        "concept_type",
+        "background_retention",
+        "ref_resolution",
+        "pool_h",
+        "pool_w",
+        "latent_frames",
+        "identity",
+        "merge",
+        "motion_only",
+        "multiplier",
+        "max_tokens",
+        "description",
+        "save",
+        "extraction_preset",
+        "subfolder",
+        "budget_policy"
+      ],
+      "defaults": {
+        "name": "my_concept",
+        "mode": "Compressed Reference",
+        "concept_type": "generic",
+        "background_retention": 0.0,
+        "ref_resolution": 1024,
+        "pool_h": 16,
+        "pool_w": 16,
+        "latent_frames": 16,
+        "identity": 500,
+        "merge": false,
+        "motion_only": false,
+        "multiplier": 1,
+        "max_tokens": 5120,
+        "description": "",
+        "save": true,
+        "extraction_preset": "manual",
+        "subfolder": "",
+        "budget_policy": "truncate"
+      }
+    },
+    "MiniMaxH3RefModApply": {
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "mods",
+          "type": "H3_REF_MODS"
+        },
+        {
+          "name": "override",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "override"
+          }
+        },
+        {
+          "name": "retention",
+          "type": "FLOAT",
+          "widget": {
+            "name": "retention"
+          }
+        },
+        {
+          "name": "curve_direction",
+          "type": "COMBO",
+          "widget": {
+            "name": "curve_direction"
+          }
+        },
+        {
+          "name": "scramble_seed",
+          "type": "INT",
+          "widget": {
+            "name": "scramble_seed"
+          }
+        },
+        {
+          "name": "curve_shape",
+          "type": "COMBO",
+          "widget": {
+            "name": "curve_shape"
+          }
+        },
+        {
+          "name": "curve_value",
+          "type": "FLOAT",
+          "widget": {
+            "name": "curve_value"
+          }
+        },
+        {
+          "name": "graph_preset",
+          "type": "COMBO",
+          "widget": {
+            "name": "graph_preset"
+          }
+        },
+        {
+          "name": "scramble_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "scramble_mode"
+          }
+        },
+        {
+          "name": "scramble_keep",
+          "type": "INT",
+          "widget": {
+            "name": "scramble_keep"
+          }
+        },
+        {
+          "name": "max_total_tokens",
+          "type": "INT",
+          "widget": {
+            "name": "max_total_tokens"
+          }
+        },
+        {
+          "name": "save_preset_as",
+          "type": "STRING",
+          "widget": {
+            "name": "save_preset_as"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "curve graph",
+          "type": "IMAGE"
+        }
+      ],
+      "widgetOrder": [
+        "override",
+        "retention",
+        "curve_direction",
+        "scramble_seed",
+        "curve_shape",
+        "curve_value",
+        "graph_preset",
+        "scramble_mode",
+        "scramble_keep",
+        "max_total_tokens",
+        "save_preset_as"
+      ],
+      "defaults": {
+        "override": false,
+        "retention": 1.0,
+        "curve_direction": "constant",
+        "scramble_seed": -1,
+        "curve_shape": "linear",
+        "curve_value": 1.0,
+        "graph_preset": "(none)",
+        "scramble_mode": "shuffle",
+        "scramble_keep": 1,
+        "max_total_tokens": 0,
+        "save_preset_as": ""
+      },
+      "controls": {
+        "scramble_seed": "fixed"
+      }
+    },
+    "EmptyMiniMaxH3LatentAV": {
+      "inputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgetOrder": [
+        "width",
+        "height",
+        "length"
+      ],
+      "defaults": {
+        "width": 1344,
+        "height": 768,
+        "length": 124
+      }
+    },
+    "EmptyAudio": {
+      "inputs": [
+        {
+          "name": "duration",
+          "type": "FLOAT",
+          "widget": {
+            "name": "duration"
+          }
+        },
+        {
+          "name": "sample_rate",
+          "type": "INT",
+          "widget": {
+            "name": "sample_rate"
+          }
+        },
+        {
+          "name": "channels",
+          "type": "INT",
+          "widget": {
+            "name": "channels"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "widgetOrder": [
+        "duration",
+        "sample_rate",
+        "channels"
+      ],
+      "defaults": {
+        "duration": 60.0,
+        "sample_rate": 44100,
+        "channels": 2
+      }
+    },
+    "TrimAudioDuration": {
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO"
+        },
+        {
+          "name": "start_index",
+          "type": "FLOAT",
+          "widget": {
+            "name": "start_index"
+          }
+        },
+        {
+          "name": "duration",
+          "type": "FLOAT",
+          "widget": {
+            "name": "duration"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "widgetOrder": [
+        "start_index",
+        "duration"
+      ],
+      "defaults": {
+        "start_index": 0.0,
+        "duration": 60.0
+      }
+    },
+    "AudioResample": {
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO"
+        },
+        {
+          "name": "new_sample_rate",
+          "type": "INT",
+          "widget": {
+            "name": "new_sample_rate"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "widgetOrder": [
+        "new_sample_rate"
+      ],
+      "defaults": {
+        "new_sample_rate": 44100
+      }
+    },
+    "AudioConcat": {
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "AUDIO"
+        },
+        {
+          "name": "audio2",
+          "type": "AUDIO"
+        },
+        {
+          "name": "direction",
+          "type": "COMBO",
+          "widget": {
+            "name": "direction"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "widgetOrder": [
+        "direction"
+      ],
+      "defaults": {
+        "direction": "after"
+      }
+    },
+    "VAEEncodeAudio": {
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO"
+        },
+        {
+          "name": "vae",
+          "type": "VAE"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgetOrder": [],
+      "defaults": {}
+    },
+    "SetLatentNoiseMask": {
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT"
+        },
+        {
+          "name": "mask",
+          "type": "MASK"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgetOrder": [],
+      "defaults": {}
     }
   }
 }
