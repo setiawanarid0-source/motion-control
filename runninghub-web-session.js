@@ -427,12 +427,14 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     // save that same editor + prompt, then issue exactly one /task/create.
     // Neither operation here allocates a GPU; failures are before submission.
     try{
-      const validation=requireSuccess(await post(key,'/api/user/task/work/valid',{
+      requireSuccess(await post(key,'/api/user/task/work/valid',{
         taskType:'WORKFLOW',id:workflowId,taskCode:null,workflowContent,
         instanceType:payload.instanceType||'default'}),get(key));
-      if(validation.billingVersion==='NEW'&&validation.canCreateTask===false)
-        throw error('RunningHub belum mengizinkan generate pada mode '+(payload.instanceType==='plus'?'Plus':'Standard')+
-          ' untuk akun ini. Task belum dibuat.','RH_WEB_MACHINE_REJECTED',true);
+      // Vanta delegates coin/point eligibility and deduction to /task/create.
+      // A successful preflight's canCreateTask flag is advisory here: it must
+      // not become a second client-side funding gate. The create endpoint can
+      // accept or explicitly refuse; never change currency, account or machine,
+      // forge balances, or retry a refused/ambiguous create to obtain acceptance.
       const saved=await post(key,'/api/workflow/setContent',{workflowId,workflowContent,promptContent},{retryAuth:false});
       if(Number(saved.code)!==0)requireSuccess(saved,get(key));
     }catch(cause){
