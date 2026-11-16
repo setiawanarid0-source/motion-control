@@ -208,7 +208,8 @@ test('expired imported access token uses refresh credentials before verifying th
 test('web create initializes its owned workspace once, applies existing input overrides and never opens an editor',()=>fixture(async({service,calls})=>{
   const {key}=await service.connect(exported);
   const graph={'3':{class_type:'VHS_VideoCombine',inputs:{images:['2',0],save_output:true,frame_rate:60}},
-    '1':{class_type:'VHS_LoadVideo',inputs:{video:'old.mp4'}}};
+    '1':{class_type:'VHS_LoadVideo',inputs:{video:'old.mp4'}},
+    '2':{class_type:'LoadImage',inputs:{image:'source.png'}}};
   await service.request('/task/openapi/create',key,{apiKey:key,workflowId:'not-an-owned-web-workflow',
     workflow:JSON.stringify(graph),instanceType:'plus',retainSeconds:259200,
     nodeInfoList:[{nodeId:'1',fieldName:'video',fieldValue:'input/new.mp4'}]});
@@ -233,7 +234,7 @@ test('web create initializes its owned workspace once, applies existing input ov
   await service.connect(exported);
   await service.request('/task/openapi/create',key,{workflow:JSON.stringify(graph)});
   assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/workflow/upload').length,1);
-  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/workflow/setContent').length,1,'Reconnecting must retain initialization of the VANTA-only workspace');
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/workflow/setContent').length,3,'One workspace initialization plus one native Save per submitted graph');
 }));
 
 test('a lost create acknowledgement never causes another paid request or an OpenAPI fallback',()=>fixture(async({service,calls,setHandler})=>{
@@ -241,10 +242,12 @@ test('a lost create acknowledgement never causes another paid request or an Open
   setHandler(async config=>{
     if(new URL(config.url).pathname==='/api/workflow/upload')return {code:0,data:{id:'2110000000000000100'}};
     if(new URL(config.url).pathname==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(new URL(config.url).pathname==='/api/user/task/work/valid')return {code:0,data:{billingVersion:'NEW',canCreateTask:true}};
+    if(new URL(config.url).pathname==='/api/workflow/setContent')return {code:0,data:null};
     if(new URL(config.url).pathname==='/task/create')throw Error('Lost response after task acceptance');
     throw Error('unexpected');
   });
-  await assert.rejects(service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"Fixture","inputs":{}}}'}),{code:'RH_WEB_TRANSPORT_ERROR'});
+  await assert.rejects(service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"PrimitiveString","inputs":{"value":"fixture"}}}'}),{code:'RH_WEB_TRANSPORT_ERROR'});
   assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,1);
   assert.ok(calls.every(c=>!c.url.includes('/openapi/')));
 }));
@@ -364,8 +367,14 @@ test('workspace ownership and unknown lookup failures fail before submission ins
 test('provider authentication refusal on create does not replay the create request',()=>fixture(async({service,calls,setHandler})=>{
   const {key}=await service.connect(exported);
   await service.prepare(key);
-  setHandler(async config=>new URL(config.url).pathname==='/api/workflow/getContent'?{code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}}:{code:412,msg:'Token expired'});
-  const response=await service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"Fixture","inputs":{}}}'});
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(route==='/api/user/task/work/valid')return {code:0,data:{billingVersion:'NEW',canCreateTask:true}};
+    if(route==='/api/workflow/setContent')return {code:0,data:null};
+    return {code:412,msg:'Token expired'};
+  });
+  const response=await service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"PrimitiveString","inputs":{"value":"fixture"}}}'});
   assert.equal(response.code,412);
   assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,1);
 }));
@@ -376,16 +385,18 @@ test('only an explicit taskless missing-workflow refusal invalidates the cached 
   setHandler(async config=>{
     const route=new URL(config.url).pathname;
     if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(route==='/api/user/task/work/valid')return {code:0,data:{billingVersion:'NEW',canCreateTask:true}};
+    if(route==='/api/workflow/setContent')return {code:0,data:null};
     if(route==='/task/create')return reply;
     throw Error('No automatic re-import or create replay');
   });
   for(reply of [{msg:'WORKFLOW_NOT_EXISTS'},{code:0,msg:'WORKFLOW_NOT_EXISTS'},
     {code:380,msg:'WORKFLOW_NOT_EXISTS',data:{taskId:renderId}}]){
-    await service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"Fixture","inputs":{}}}'});
+    await service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"PrimitiveString","inputs":{"value":"fixture"}}}'});
     assert.equal(await service.prepare(key),'2110000000000000100');
   }
   reply={code:380,msg:'WORKFLOW_NOT_EXISTS'};
-  await service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"Fixture","inputs":{}}}'});
+  await service.request('/task/openapi/create',key,{workflow:'{"1":{"class_type":"PrimitiveString","inputs":{"value":"fixture"}}}'});
   assert.equal(calls.filter(x=>new URL(x.url).pathname==='/task/create').length,4);
   assert.ok(!calls.some(x=>new URL(x.url).pathname==='/api/workflow/upload'));
 }));
@@ -691,4 +702,85 @@ test('a rejected account cannot stop healthy backend refreshes or advance its la
   await assert.rejects(service.status(failed.key,{automatic:true}),{code:'RH_WEB_REFRESH_REJECTED'});
   assert.equal(rejectedGrants,1,'An explicitly rejected grant must wait for reconnection or manual Refresh');
   assert.equal(service.sessionAudit(failed.key).lastAutomaticCheckAt,new Date(time+3720000).toISOString());
+}));
+
+test('native machine refusal is before Save/create and cannot mark a paid submission',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(route==='/api/user/task/work/valid'){
+      assert.equal(config.data.instanceType,'plus');
+      assert.equal(JSON.parse(config.data.workflowContent).nodes[0].type,'PrimitiveString');
+      return {code:0,data:{billingVersion:'NEW',canCreateTask:false}};
+    }
+    throw Error('No Save or paid task after native validation refuses');
+  });
+  let submitted=0;
+  await assert.rejects(service.submit(key,{instanceType:'plus',workflow:{'1':{class_type:'PrimitiveString',inputs:{value:'actual'}}}},
+    {onBeforeSubmit:()=>submitted++}),{code:'RH_WEB_MACHINE_REJECTED',definitelyRejected:true});
+  assert.equal(submitted,0);
+  assert.deepEqual(calls.map(c=>new URL(c.url).pathname),['/api/workflow/getContent','/api/user/task/work/valid']);
+}));
+
+test('native Save failure is definite pre-submission; chosen mode is never changed',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(route==='/api/user/task/work/valid'){
+      assert.equal(config.data.instanceType,'default');
+      return {code:0,data:{billingVersion:'NEW',canCreateTask:true}};
+    }
+    if(route==='/api/workflow/setContent')throw Error('Save acknowledgement lost');
+    throw Error('No GPU allocation allowed');
+  });
+  let submitted=0;
+  await assert.rejects(service.submit(key,{instanceType:'default',workflow:{'1':{class_type:'PrimitiveString',inputs:{value:'actual'}}}},
+    {onBeforeSubmit:()=>submitted++}),{code:'RH_WEB_PREPARATION_FAILED',definitelyRejected:true});
+  assert.equal(submitted,0);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,0);
+}));
+
+test('concurrent native submissions keep validation, Save and create together for each owned workspace',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  let saved;const sequence=[];
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(route==='/api/user/task/work/valid'){
+      const editor=JSON.parse(config.data.workflowContent);
+      sequence.push('valid:'+editor.nodes[0].widgets_values_named.value);
+      await new Promise(resolve=>setImmediate(resolve));
+      return {code:0,data:{billingVersion:'NEW',canCreateTask:true}};
+    }
+    if(route==='/api/workflow/setContent'){
+      saved=config.data.promptContent;sequence.push('save:'+JSON.parse(saved).prompt['1'].inputs.value);
+      return {code:0,data:null};
+    }
+    if(route==='/task/create'){
+      assert.equal(config.data.promptContent,saved);
+      const value=JSON.parse(saved).prompt['1'].inputs.value;
+      sequence.push('create:'+value);
+      assert.equal(config.data.instanceType,value==='A'?'default':'plus');
+      return {code:0,data:{taskId:renderId}};
+    }
+    throw Error('Unexpected operation');
+  });
+  await Promise.all(['A','B'].map(value=>service.submit(key,{instanceType:value==='A'?'default':'plus',
+    workflow:{'1':{class_type:'PrimitiveString',inputs:{value}}}},
+    {onBeforeSubmit:()=>sequence.push('mark:'+value)})));
+  assert.deepEqual(sequence,['valid:A','save:A','mark:A','create:A','valid:B','save:B','mark:B','create:B']);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,2);
+}));
+
+test('invalid editor ports and graphs fail before any workspace or GPU request',()=>fixture(async({service,calls})=>{
+  const {key}=await service.connect(exported);calls.length=0;
+  for(const workflow of ['invalid json',{},
+    {'1':{class_type:'UnknownNode',inputs:{}}},
+    {'1':{class_type:'PrimitiveString',inputs:{value:['999',0]}}},
+    {'1':{class_type:'PrimitiveString',inputs:{value:'text'}},'2':{class_type:'PreviewImage',inputs:{images:['1',0]}}}]){
+    await assert.rejects(service.submit(key,{workflow,instanceType:'default'}),{code:'RH_WEB_INVALID_GRAPH',definitelyRejected:true});
+  }
+  assert.equal(calls.length,0,'No provider request after invalid prompt or typed connection');
 }));

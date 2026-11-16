@@ -55,7 +55,9 @@ assert.equal(graphValidationError({msg:JSON.stringify({result:false,error:{type:
 const uploads=[],requests=[];
 let nextReply=0;
 const context={withIntegratedRife60,INTEGRATED_RIFE_WORKFLOWS,withOriginalVideoArchive,
-  isRunningHubWebKey,runningHubWeb:{prepare:async()=>{}},
+  isRunningHubWebKey,runningHubWeb:{submit:async(key,payload,{onBeforeSubmit})=>{
+    onBeforeSubmit();return context.rhJson('/task/openapi/create',key,payload);
+  }},
   uploadToRunningHub:async(key,file)=>{uploads.push([key,file.originalname]);return 'uploaded-'+file.originalname;},
   prepareDiagnosticAssets:()=>null,
   runningHubInstanceType:mode=>mode==='plus'?'plus':'default',

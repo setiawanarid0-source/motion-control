@@ -18,7 +18,7 @@ import {createTaskRegistry} from './task-registry.js';
 import {createMotionResultArchive} from './motion-result-archive.js';
 import {createMotionResultBucket, MOTION_VIDEO_RETENTION_MS,validProviderUrl} from './motion-result-bucket.js';
 import {createGenerationQueue} from './generation-queue.js';
-import {runningHubInstanceType,canSubmitMachineMode} from './runninghub-instance.js';
+import {runningHubInstanceType,canSubmitMachineMode,RUNNINGHUB_NEW_MODES} from './runninghub-instance.js';
 import {explicitQueueMaxed,queueCapacityError,isDefinitelyRejectedAtCapacity,mayTryNextAccountAfterCreate} from './runninghub-capacity.js';
 import {readLegacyFinal40} from './legacy-final40-cache.js';
 import {createKieStudio} from './kie-studio.js';
@@ -90,22 +90,22 @@ const workflowMeta = {
   },
   minimaxH3AkatzV3: {
     id:'minimaxH3AkatzV3',name:'MiniMax H3 · Akatz v3 · 1080p',
-    subtitle:'1080p · foto + video · 24 FPS · Plus · hingga 15 detik',
+    subtitle:'1080p · foto + video · 24 FPS · Standard / Plus · hingga 15 detik',
     detail:'Workflow Akatz v3 asli. Versi uji yang perbaikan visualnya belum selesai.',
-    outputKind:'video',experimental:true,requiredMode:'plus'
+    outputKind:'video',experimental:true
   },
   minimaxH3Akatz: {
     id:'minimaxH3Akatz',name:'MiniMax H3 · Akatz V1.5 Native · 1080p',
-    subtitle:'Turbo8 · 1080p · 24 FPS · Plus · durasi adaptif',
+    subtitle:'Turbo8 · 1080p · 24 FPS · Standard / Plus · durasi adaptif',
     detail:'Gunakan frame pertama video yang sudah diedit menjadi karakter Anda sebagai foto referensi. Foto menjadi acuan tampilan dan frame awal; video memandu gerak dan kamera. Durasi adaptif tanpa batas maksimal 15 detik, dengan audio sumber, MP4 24 FPS dan ZIP tiga frame PNG. Output native 1080p tanpa resize atau refinement; kualitas visual masih menunggu hasil tes.',
     revision:TURBO8_REVISION,frameDiagnostics:true,
-    outputKind:'video',experimental:true,requiredMode:'plus'
+    outputKind:'video',experimental:true
   },
   minimaxH3: {
     id:'minimaxH3',name:'MiniMax H3 · Motion Control · 1080p',
-    subtitle:'1080p · foto + panduan gerak video · 24 FPS · Plus',
+    subtitle:'1080p · foto + panduan gerak video · 24 FPS · Standard / Plus',
     detail:'Foto menentukan wajah, rambut, pakaian, latar dan rasio hasil; video memandu gerak tubuh, ekspresi dan kamera. Deskripsi tampilan dibaca dari foto yang diunggah. Hasil native 1080p tanpa upscale, downscale atau refinement, dengan audio sumber. Video 0,25–60 detik diproses per segmen. Konsistensi visual tetap dapat bervariasi.',
-    outputKind:'video',experimental:true,requiredMode:'plus'
+    outputKind:'video',experimental:true
   },
   rife60: {
     id: 'rife60', name: 'RIFE · ≤60 → 60 FPS',
@@ -514,7 +514,6 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
     {mode,width:rifeSource?.width,height:rifeSource?.height}):workflowGraphs[workflowKey];
   if(h3&&!h3Source?.file)
     throw Error('Metadata video sumber H3 belum tervalidasi.');
-  if(h3&&mode!=='plus')throw Error('Motion Control H3 1080p membutuhkan machine Plus.');
   if(workflowKey==='minimaxH3Akatz'&&h3Source.totalFrames>AKATZ_WINDOW_FRAMES)
     await assertH3MotionContextSchema(DATA_DIR);
   const imageName = workflowKey==='rife60'?null:await uploadToRunningHub(apiKey,
@@ -572,11 +571,15 @@ async function createTask({ apiKey, workflowId, workflowKey, mode, imageFile, vi
   const instanceType=runningHubInstanceType(mode);
   if(instanceType)payload.instanceType=instanceType;
 
-  // Workspace setup must finish before marking a potentially paid submission.
-  if(isRunningHubWebKey(apiKey))await runningHubWeb.prepare(apiKey);
-  const submittedAt = new Date().toISOString();
-  if(onBeforeSubmit)onBeforeSubmit();
-  const data = await rhJson('/task/openapi/create', apiKey, payload, 60000);
+  // Mark a potentially paid submission only after native validation + Save.
+  let submittedAt;
+  const beforeSubmit=()=>{submittedAt=new Date().toISOString();onBeforeSubmit?.();};
+  let data;
+  if(isRunningHubWebKey(apiKey))data=await runningHubWeb.submit(apiKey,payload,{onBeforeSubmit:beforeSubmit});
+  else{
+    beforeSubmit();
+    data=await rhJson('/task/openapi/create', apiKey, payload, 60000);
+  }
   if (!data || Number(data.code) !== 0 || !data.data?.taskId) {
     // A known structured billing refusal is not a lost acknowledgement.
     // Any task ID or an explicit success code keeps the response ambiguous.
@@ -726,7 +729,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 app.get('/health', (req, res) => res.json({ ok: true, service: 'vanta-motion-studio', workflows: Object.keys(workflowGraphs), persistentStorage: DATA_DIR, runningHubAuthentication:'access-token' }));
 
 app.get('/api/workflows', (req, res) => {
-  res.json({ workflows: Object.values(workflowMeta) });
+  res.json({ workflows: Object.values(workflowMeta).map(workflow=>({...workflow,supportedModes:RUNNINGHUB_NEW_MODES})) });
 });
 
 installAkatzEditorDownload({app,getModelFiles:()=>({

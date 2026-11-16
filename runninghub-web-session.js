@@ -7,6 +7,7 @@ import FormData from 'form-data';
 import axios from 'axios';
 import {runningHubWebBalance,webBalanceNumber} from './runninghub-web-balance.js';
 import {billingScalars} from './runninghub-billing-evidence.js';
+import {runningHubWorkflowContent} from './runninghub-workflow-content.js';
 import {extractTaskFailure} from './task-failure.js';
 import {safeTaskMetrics,nativeTaskExecutionSeconds} from './rife-task-audit.js';
 
@@ -69,7 +70,7 @@ const METHODS=new Set(['/uc/getUserInfo','/uc/point/summary','/uc/token/refresh'
   '/api/output/v2/history']);
 
 export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=()=>Date.now()}){
-  const file=path.join(dir,'runninghub-web-sessions.enc'),refreshing=new Map(),creating=new Map(),comfyRefreshing=new Map();
+  const file=path.join(dir,'runninghub-web-sessions.enc'),refreshing=new Map(),creating=new Map(),comfyRefreshing=new Map(),submitting=new Map();
   function read(){
     if(!fs.existsSync(file))return {};
     const value=decrypt(fs.readFileSync(file,'utf8').trim());
@@ -403,8 +404,10 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       pointSummary:Number(summaryReply.code)===0?summaryReply.data:null,
       pricing:Number(pricingReply.code)===0?pricingReply.data:null});
   }
-  async function create(key,payload){
-    const graph=typeof payload.workflow==='string'?JSON.parse(payload.workflow):payload.workflow;
+  async function create(key,payload,{onBeforeSubmit}={}){
+    let graph;
+    try{graph=typeof payload.workflow==='string'?JSON.parse(payload.workflow):structuredClone(payload.workflow);}
+    catch{throw error('Graph generate tidak valid.','RH_WEB_INVALID_GRAPH',true);}
     if(!graph||Array.isArray(graph)||typeof graph!=='object')throw error('Graph generate tidak valid.','RH_WEB_INVALID_GRAPH',true);
     for(const change of payload.nodeInfoList||[]){
       const inputs=graph[String(change.nodeId)]?.inputs;
@@ -416,10 +419,29 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       inputs[change.fieldName]=typeof previous==='number'?Number(change.fieldValue):
         typeof previous==='boolean'?change.fieldValue===true||change.fieldValue==='true':change.fieldValue;
     }
+    const workflowContent=runningHubWorkflowContent(graph);
     const workflowId=await workspace(key),clientId=crypto.randomUUID().replaceAll('-','');
-    const promptContent=JSON.stringify({client_id:clientId,prompt:graph,extra_data:{extra_pnginfo:{}}});
-    // Deliberately no create retry, API fallback, workflow save, retained GPU or
-    // implicit paid-balance substitution. The graph is submitted as-is.
+    const promptContent=JSON.stringify({client_id:clientId,prompt:graph,
+      extra_data:{extra_pnginfo:{workflow:JSON.parse(workflowContent)}}});
+    // Native editor: validate the actual workflow for the selected machine,
+    // save that same editor + prompt, then issue exactly one /task/create.
+    // Neither operation here allocates a GPU; failures are before submission.
+    try{
+      const validation=requireSuccess(await post(key,'/api/user/task/work/valid',{
+        taskType:'WORKFLOW',id:workflowId,taskCode:null,workflowContent,
+        instanceType:payload.instanceType||'default'}),get(key));
+      if(validation.billingVersion==='NEW'&&validation.canCreateTask===false)
+        throw error('RunningHub belum mengizinkan generate pada mode '+(payload.instanceType==='plus'?'Plus':'Standard')+
+          ' untuk akun ini. Task belum dibuat.','RH_WEB_MACHINE_REJECTED',true);
+      const saved=await post(key,'/api/workflow/setContent',{workflowId,workflowContent,promptContent},{retryAuth:false});
+      if(Number(saved.code)!==0)requireSuccess(saved,get(key));
+    }catch(cause){
+      if(cause.definitelyRejected)throw cause;
+      throw error('Validasi atau penyimpanan workflow ke RunningHub belum berhasil. Task belum dikirim.',
+        'RH_WEB_PREPARATION_FAILED',true);
+    }
+    onBeforeSubmit?.();
+    // No create retry, OpenAPI fallback, retained GPU or billing substitution.
     const result=await post(key,'/task/create',{workflowId,promptContent,clientId,
       ...(payload.instanceType?{instanceType:payload.instanceType}:{}),usePersonalQueue:false},{retryAuth:false,timeout:60000});
     if(!result.taskId&&!result.data?.taskId&&['number','string'].includes(typeof result.code)&&
@@ -429,6 +451,14 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(Number(result.code)===424&&!result.taskId&&!result.data?.taskId)
       return {...result,msg:'TASK_QUEUE_MAXED'};
     return result;
+  }
+  async function submit(key,payload,options){
+    // One owned workspace per account. Prevent two submissions from overwriting
+    // each other's saved graph between validation, Save and task/create.
+    const previous=submitting.get(key)||Promise.resolve();
+    const pending=previous.catch(()=>{}).then(()=>create(key,payload,options));
+    submitting.set(key,pending);
+    try{return await pending;}finally{if(submitting.get(key)===pending)submitting.delete(key);}
   }
   async function lookupTask(key,id){
     if(!taskId(id))throw error('Task ID tidak valid.','RH_WEB_INVALID_TASK',true);
@@ -487,7 +517,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(route==='/uc/openapi/accountStatus')return {code:0,data:{...await status(key),
       ...(body?.inspectWorkspace?{workspace:await inspectWorkspace(key,{instanceType:body.instanceType||'default',workflowAudit:body.workflowAudit||null})}:{}),
       ...(body?.inspectBilling?{billingEvidence:await inspectBilling(key)}:{})}};
-    if(route==='/task/openapi/create')return create(key,body);
+    if(route==='/task/openapi/create')return submit(key,body);
     if(route==='/task/openapi/outputs')return outputs(key,body.taskId);
     if(route==='/task/openapi/cancel')return post(key,'/task/cancel',{taskId:String(body.taskId)},{retryAuth:false});
     if(route==='/openapi/v2/query'){
@@ -507,5 +537,5 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       lastAutomaticCheckAt:session.poolSnapshot?.lastAutomaticCheckAt||null,
       reconnectRequired:!session.refresh||session.lastRenewal?.outcome==='failed'&&reconnectCodes.has(session.lastRenewal.code)};
   }
-  return {connect,status,cachedStatus,upload,request,prepare:workspace,inspectTask,sessionAudit,file};
+  return {connect,status,cachedStatus,upload,request,submit,prepare:workspace,inspectTask,sessionAudit,file};
 }

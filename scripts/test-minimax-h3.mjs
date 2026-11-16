@@ -26,7 +26,8 @@ assert.deepEqual([h3PhotoPlan(1920,1080).canvasWidth,h3PhotoPlan(1920,1080).canv
 assert.deepEqual([h3PhotoPlan(720,720).outputWidth,h3PhotoPlan(720,720).outputHeight],[1080,1080]);
 for(const seconds of [0,.1,61,Infinity])assert.throws(()=>validateH3Probe(videoProbe(seconds),'plus'),/0,25–60/);
 assert.throws(()=>validateH3Probe({streams:[]},'plus'),/dimensi/);
-for(const mode of ['standard','lite','other'])assert.throws(()=>validateH3Probe(videoProbe(),mode),/Plus/);
+assert.deepEqual(validateH3Probe(videoProbe(),'standard'),validateH3Probe(videoProbe(),'plus'));
+for(const mode of ['lite','other'])assert.throws(()=>validateH3Probe(videoProbe(),mode),/Standard atau Plus/);
 for(const size of [[2049,3000],[3200,1080],[100,20]])assert.throws(()=>h3PhotoPlan(...size));
 const rotation=videoProbe(1,1920,1080);rotation.streams[0].side_data_list=[{rotation:-90}];
 assert.deepEqual([validateH3Probe(rotation).sourceWidth,validateH3Probe(rotation).sourceHeight],[1080,1920]);
@@ -262,8 +263,10 @@ assert.deepEqual(JSON.parse(calls[1].payload.workflow),withOriginalVideoArchive(
 const srgb={originalname:'reference-srgb.png'};
 await context.createTask({...request,h3Source:{...request.h3Source,referenceFile:srgb}});
 assert.equal(uploads.at(-2),srgb,'ICC-normalized reference, when present, must reach RunningHub');
+await context.createTask({...request,mode:'standard'});
+assert.equal(calls.at(-1).payload.instanceType,'default');
+assert.deepEqual(JSON.parse(calls.at(-1).payload.workflow),JSON.parse(calls[0].payload.workflow),'Standard preserves native H3 graph');
 let count=calls.length,uploaded=uploads.length;
-await assert.rejects(context.createTask({...request,mode:'standard'}),/Plus/);
 await assert.rejects(context.createTask({...request,h3Source:null}),/Metadata/);
 assert.equal(calls.length,count);assert.equal(uploads.length,uploaded);
 response={code:1,msg:JSON.stringify({result:false,error:{type:'prompt_outputs_failed_validation'},
