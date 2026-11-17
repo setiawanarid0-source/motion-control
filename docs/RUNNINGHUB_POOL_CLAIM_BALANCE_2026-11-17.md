@@ -54,3 +54,6 @@ PR118 merged as 5f65dae043249001b1b58ef81a740f2c6255163f. Deployment bfd87fca-e4
 The provider returned negative point numbers; the generic nonnegative parser hid them as unknown. Do not interpret a daily reward amount as the current net balance. Do not infer a debt/payment obligation, usage history, required reserve or exact private amount from the sign alone.
 
 Before the final correction: introduce a signed finite ledger parser specifically for balancePoint, preserve the nonnegative parser for counters/reward amounts, and display/classify negative points explicitly without inventing zero. The funded counter must not count a negative point-only balance; positive transition RH remains a separate usable ledger. Funding approval, manual selection, claim-once behavior and single-create/replay rules stay unchanged. Tests will use neutral signed-number and claim fixtures, not private amounts or live inference.
+
+
+Signed-ledger candidate prepared. Hosted pure-function checks preserve a negative point ledger, reject the same value as a counter/reward amount, exclude negative point-only funds from the funded counter, and retain positive transition RH separately. HTTP/claim and real-renderer fixtures cover these behaviors without private amounts or inference. Full CI remains required before release.

@@ -111,6 +111,17 @@ assert.equal(poolNodes.poolCount.textContent,'1 akun bersaldo');
 state.accounts[2].status.transitionCoinRemained=200;
 summaryContext.updatePoolSummary();
 assert.equal(poolNodes.poolCount.textContent,'2 akun bersaldo','Verified transition RH remains usable when points are missing');
+state.accounts[3].status.balancePoint=-12.5;
+context.renderAccounts();
+assert.ok(accountList.innerHTML.includes('Points -12,5'),'The owner must see the signed provider ledger');
+assert.ok(accountList.innerHTML.includes('Saldo points negatif'));
+assert.ok(accountList.innerHTML.includes('Klaim harian dikonfirmasi; saldo points masih negatif'));
+summaryContext.updatePoolSummary();
+assert.equal(poolNodes.poolCount.textContent,'2 akun bersaldo','A negative point-only balance is not funded');
+state.accounts[3].status.transitionCoinRemained=1000;
+summaryContext.updatePoolSummary();
+assert.equal(poolNodes.poolCount.textContent,'3 akun bersaldo','Negative points must not hide positive transition RH');
+
 
 state.accounts=[];
 assert.doesNotThrow(()=>context.renderAccounts(),'Empty Account Pool still renders safely');

@@ -7,7 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import vm from 'node:vm';
 import {createRunningHubWebSession,parseRunningHubSession,isRunningHubWebKey} from '../runninghub-web-session.js';
-import {runningHubWebBalance,webBalanceNumber,webBalanceEncoding} from '../runninghub-web-balance.js';
+import {runningHubWebBalance,webBalanceNumber,webBalanceEncoding,webLedgerBalanceNumber} from '../runninghub-web-balance.js';
 import {canGenerateWithAccount,rankGenerationAccounts} from '../runninghub-account-priority.js';
 import {partitionAccountRefresh} from '../account-eligibility.js';
 
@@ -75,6 +75,44 @@ test('daily credits are opt-in for maintenance, refresh balances after confirmat
 }));
 
 
+
+
+test('a confirmed claim preserves the actual negative point ledger instead of showing unknown or the reward amount',()=>fixture(async({service,setHandler,calls})=>{
+  let granted=false;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:0}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'NEW',balancePoint:granted?-12.5:-42.5,transitionCoinRemained:0}};
+    if(route==='/task/list')return {code:0,data:{total:0}};
+    if(route==='/api/welfare/summary')return {code:0,data:{enabled:true,dailyGift:{granted,amount:30}}};
+    if(route==='/api/welfare/daily-gift/claim'){granted=true;return {code:0,data:null};}
+    throw Error('Unexpected operation '+route);
+  });
+  const {key,status:initial}=await service.connect(exported);
+  assert.equal(initial.balancePoint,-42.5);
+  const status=await service.status(key,{claimDailyCredit:true});
+  assert.equal(status.dailyCredit.state,'claimed');
+  assert.equal(status.dailyCredit.amount,30);
+  assert.equal(status.balancePoint,-12.5);
+  assert.equal(status.balanceRead.state,'verified');
+  assert.equal(status.balanceRead.pointEncoding,'negative_number');
+  assert.equal(status.balanceRead.pointAvailability,'negative');
+  assert.equal(status.balanceRead.attempts,1,'A real negative ledger is complete, not a failed read');
+  assert.equal(canGenerateWithAccount(status),true,'Final funding remains the provider decision');
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/welfare/daily-gift/claim').length,1);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,0);
+}));
+test('signed point ledgers do not allow negative counts or reward quantities',()=>{
+  for(const value of [-12.5,'-12.5','-1.25e1']){
+    assert.equal(webLedgerBalanceNumber(value),-12.5);
+    assert.equal(webBalanceNumber(value),null);
+  }
+  assert.equal(webLedgerBalanceNumber('-0E-8'),0);
+  for(const value of [null,undefined,'',true,false,NaN,Infinity,-Infinity,'--1','1,23','fixture-private'])
+    assert.equal(webLedgerBalanceNumber(value),null);
+  assert.equal(webBalanceEncoding(-12.5),'negative_number');
+  assert.equal(runningHubWebBalance({totalCoin:0},{billingVersion:'NEW',balancePoint:-12.5}).balancePoint,-12.5);
+});
 
 test('native exponent strings stay points, preserve real zero and never create a task',()=>fixture(async({service,setHandler,calls})=>{
   setHandler(async config=>{
