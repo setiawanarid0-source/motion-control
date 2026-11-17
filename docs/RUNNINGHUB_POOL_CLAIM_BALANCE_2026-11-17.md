@@ -45,3 +45,12 @@ This is not a currency conversion or a fallback from a reward amount/accounting 
 
 
 Numeric candidate prepared: plain decimal/exponent encodings are supported without any currency scaling; finite nonnegative amounts remain required; malformed comma groups remain unknown. Metadata adds an encoding tag only. A hosted pure-function comparison reproduced the old rejection of valid exponent strings and passed twelve targeted cases with the candidate. These are synthetic parser tests, not evidence that the affected live accounts use that representation. Full Node/HTTP/renderer validation remains delegated to CI.
+
+
+## Confirmed live cause and signed-ledger plan
+
+PR118 merged as 5f65dae043249001b1b58ef81a740f2c6255163f. Deployment bfd87fca-e4fa-45d5-bef6-e750793fbbee reached SUCCESS at 08:05:43 WIB. Fresh readonly maintenance evidence at 08:05:41–42 WIB identified negative_number as the actual balancePoint encoding for the three affected sessions, with confirmed daily-claim receipts. The exponent-format hypothesis was not the cause of these live unknown balances.
+
+The provider returned negative point numbers; the generic nonnegative parser hid them as unknown. Do not interpret a daily reward amount as the current net balance. Do not infer a debt/payment obligation, usage history, required reserve or exact private amount from the sign alone.
+
+Before the final correction: introduce a signed finite ledger parser specifically for balancePoint, preserve the nonnegative parser for counters/reward amounts, and display/classify negative points explicitly without inventing zero. The funded counter must not count a negative point-only balance; positive transition RH remains a separate usable ledger. Funding approval, manual selection, claim-once behavior and single-create/replay rules stay unchanged. Tests will use neutral signed-number and claim fixtures, not private amounts or live inference.
