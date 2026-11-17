@@ -2,7 +2,7 @@
 
 Date: 17 November 2026 (Asia/Jakarta)
 Investigation: RH-POOL-CLAIM-BALANCE-20261117
-Status: investigation; no implementation or generation fix claimed
+Status: candidate prepared; GitHub CI and deployment pending
 Base: 270f944d39b785f0973051490d0f8478815fa424
 
 ## Before changes
@@ -19,6 +19,15 @@ Planned scope: trace post-claim balance reads, preserve unknown values, distingu
 
 Validation will use neutral provider fixtures and GitHub CI. The local executor is unavailable; no local test pass is claimed. No live inference is authorized by this investigation.
 
-## Results
+## Candidate checkpoint
 
-Pending. Record the actual diff, tests, deployment, and limits here before completion. Do not equate UI consistency, CI or deployment with acceptance of a real paid submission.
+- Web-session status can make one additional read-only points-summary lookup when the first response is rejected, unavailable or incomplete. Import still uses one lookup. Complete zero balances are retained as zero; neither a reward amount nor balanceUnit is substituted for a missing balancePoint.
+- Status records bounded summary-read metadata and allowlisted field presence. Maintenance logs contain response metadata and presence flags, not numeric balances, credentials, prompts or media.
+- Incomplete cached ledgers are reconciled on the next maintenance invocation rather than blindly reused. The two-hour scheduling and account isolation remain.
+- The pool distinguishes verified available funds, confirmed zero, and an unverified ledger. Its counter now says accounts with a balance, while valid sessions remain eligible to ask RunningHub for final funding approval.
+- A confirmed claim with an unverified ledger is labeled as such rather than presented as a verified balance increase.
+- Structured provider funding refusals are logged as pre-task rejections. Account/machine selection, the validation/Save/single-create sequence and replay guards are unchanged.
+- Regression fixtures cover post-claim reconciliation, persistent partial responses, outages, claim-once behavior, no inferred balances, no inference calls, renderer labels and counter behavior. The existing browser expectation is updated for the precise counter label.
+- Five pure funding-classification examples ran in the hosted JavaScript runtime. No local Node or full-suite result is claimed; GitHub CI must validate the candidate before merge/deployment.
+
+Actual provider acceptance after a claim is not established by these changes. The original refusal remains a funding rejection, not a render failure. Final results, release identifiers and fresh read-only provider evidence will be appended here.

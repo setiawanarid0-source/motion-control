@@ -36,7 +36,11 @@ const context={
   loadSession:async()=>{},
   toast:()=>{}
 };
-vm.runInNewContext(code,context);
+const fundingStart=source.indexOf('function runningHubPoolFunding(');
+const fundingEnd=source.indexOf('function updatePoolSummary(',fundingStart);
+assert.ok(fundingStart>0&&fundingEnd>fundingStart);
+const fundingCode=source.slice(fundingStart,fundingEnd);
+vm.runInNewContext(fundingCode+'\n'+code,context);
 assert.doesNotThrow(()=>context.renderAccounts(),
   'Rendering 2 accounts must not throw a forEach TypeError');
 assert.ok(accountList.innerHTML.includes('account-alpha'));
@@ -73,7 +77,41 @@ state.accounts[0].status.sessionRenewal={state:'renewed',refreshedAt:'2026-11-11
 context.renderAccounts();assert.match(accountList.innerHTML,/Token diperbarui 17[.:]00 WIB/);
 state.accounts[0].status.sessionRenewal={state:'failed',code:'RH_WEB_REFRESH_MISSING'};
 context.renderAccounts();assert.ok(accountList.innerHTML.includes('refresh token belum tersimpan'));
-assert.ok(accountList.innerHTML.includes('Siap digunakan'),'A still-valid access token remains usable when refresh credentials are absent');
+assert.ok(accountList.innerHTML.includes('Saldo terverifikasi'),'A still-valid funded access token remains usable when refresh credentials are absent');
+
+state.accounts=[
+  {id:'funded',name:'Funded',canGenerate:true,status:{apiType:'WEB_SESSION',sessionVerified:true,
+    billingVersion:'NEW',balancePoint:30,transitionCoinRemained:0,dailyCredit:{state:'claimed',amount:30}}},
+  ...['unknown-a','unknown-b','unknown-c'].map(id=>({id,name:id,canGenerate:true,status:{
+    apiType:'WEB_SESSION',sessionVerified:true,billingVersion:'NEW',balancePoint:null,transitionCoinRemained:0,
+    dailyCredit:{state:'claimed',amount:30}}}))
+];
+context.renderAccounts();
+assert.equal((accountList.innerHTML.match(/Klaim harian dikonfirmasi; saldo belum terverifikasi/g)||[]).length,3);
+assert.equal((accountList.innerHTML.match(/\+30 points/g)||[]).length,1,'A reward receipt must not masquerade as a verified balance');
+assert.ok(accountList.innerHTML.includes('Sesi aktif · saldo belum terverifikasi'));
+assert.ok(state.accounts.every(a=>a.canGenerate),'Incomplete funding must not block access-token submission');
+const poolNodes={poolCount:{},poolCredits:{},poolReadyUnit:{},poolDot:{classList:{toggle(){}}}};
+let generateUpdates=0;
+const summaryContext={state:{view:'accounts',accounts:state.accounts},
+  $:selector=>poolNodes[selector.slice(1)],updateGenerate:()=>generateUpdates++};
+const summaryStart=source.indexOf('function updatePoolSummary(){');
+const summaryEnd=source.indexOf('function renderAccounts(){',summaryStart);
+vm.runInNewContext(fundingCode+'\n'+source.slice(summaryStart,summaryEnd),summaryContext);
+summaryContext.updatePoolSummary();
+assert.equal(poolNodes.poolCount.textContent,'1 akun bersaldo');
+assert.equal(poolNodes.poolCredits.textContent,'1');
+assert.equal(poolNodes.poolReadyUnit.textContent,'akun bersaldo');
+assert.equal(generateUpdates,1);
+state.accounts[1].status.balancePoint=0;
+context.renderAccounts();
+assert.ok(accountList.innerHTML.includes('Sesi aktif · saldo 0'),'Confirmed zero must be distinct from an unreadable ledger');
+summaryContext.updatePoolSummary();
+assert.equal(poolNodes.poolCount.textContent,'1 akun bersaldo');
+state.accounts[2].status.transitionCoinRemained=200;
+summaryContext.updatePoolSummary();
+assert.equal(poolNodes.poolCount.textContent,'2 akun bersaldo','Verified transition RH remains usable when points are missing');
+
 state.accounts=[];
 assert.doesNotThrow(()=>context.renderAccounts(),'Empty Account Pool still renders safely');
 assert.ok(accountList.innerHTML.includes('Belum ada akun'));
