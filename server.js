@@ -818,9 +818,18 @@ async function refreshPool(req,{renewTokens=false,automatic=false}={}){
     try{
       if(automatic){
         const cached=runningHubWeb.cachedStatus(account.key),audit=runningHubWeb.sessionAudit(account.key);
-        if(cached&&Date.parse(audit.nextAutomaticCheckAt)>Date.now())return {account,status:cached};
+        const incomplete=cached?.apiType==='WEB_SESSION'&&!cached.error&&
+          (cached.billingVersion==='UNKNOWN'||cached.billingVersion==='NEW'&&cached.balancePoint==null);
+        if(cached&&!incomplete&&Date.parse(audit.nextAutomaticCheckAt)>Date.now())return {account,status:cached};
       }
-      return {account,status:await accountStatus(account.key,{renewTokens,automatic,claimDailyCredit:automatic||renewTokens})};
+      const status=await accountStatus(account.key,{renewTokens,automatic,claimDailyCredit:automatic||renewTokens});
+      // Presence and response metadata only: no token, raw provider text, or
+      // numeric wallet/point balances enter the diagnostic log.
+      console.info('RunningHub pool balance read',JSON.stringify({accountName:account.name,
+        billingVersion:status.billingVersion,pointsKnown:status.balancePoint!=null,
+        coinsKnown:status.remainCoins!=null,transitionCoinsKnown:status.transitionCoinRemained!=null,
+        dailyCreditState:status.dailyCredit?.state||null,balanceRead:status.balanceRead||null}));
+      return {account,status};
     }
     catch(error){return {account,status:error.poolStatus||{error:error.message,errorCode:error.code||null,
       providerCode:error.providerCode??null,sessionRenewal:{state:'failed',code:error.code||null}}};}
@@ -1051,6 +1060,10 @@ async function handleGeneration(req,res){
         });
       } catch (error) {
         lastError = error;
+        if(['RUNNINGHUB_INSUFFICIENT_BALANCE','RUNNINGHUB_PAID_BALANCE_REQUIRED'].includes(error.code)&&error.definitelyRejected===true)
+          console.warn('RunningHub funding rejected before task creation',JSON.stringify({
+            accountName:account.name,workflow:workflowKey,mode,code:error.code,
+            providerCode:error.providerCode??null,taskCreated:false}));
         if(videoOnly&&error.code==='RUNNINGHUB_PAID_BALANCE_REQUIRED'&&error.definitelyRejected===true){
           // Only the exact structured provider refusal without any task ID is
           // eligible. Automatic may continue; a manual choice never moves.

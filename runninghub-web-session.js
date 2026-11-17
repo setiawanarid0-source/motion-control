@@ -210,13 +210,30 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     if(authFailure(result))throw error('Sesi RunningHub kedaluwarsa. Hubungkan ulang akun.','RH_WEB_AUTH_EXPIRED',true);
     throw error('RunningHub menolak permintaan: '+redact(result?.msg||result?.message||result?.code,session),'RH_WEB_PROVIDER_REJECTED',true);
   }
-  async function balances(profile,lookup){
-    let summary;
-    try{
-      const reply=await lookup();
-      if(Number(reply?.code)===0&&reply.data&&typeof reply.data==='object'&&!Array.isArray(reply.data))summary=reply.data;
-    }catch{}
-    return runningHubWebBalance(profile,summary);
+  async function balances(profile,lookup,{retryIncomplete=false}={}){
+    let summary,providerCode=null,problem='summary_unavailable',attempts=0;
+    const fields=['billingVersion','converting','balancePoint','balanceUnit','paidPoint','bonusPoint',
+      'activityPoint','activityUnit','transitionCoinRemained'];
+    for(let attempt=0;attempt<(retryIncomplete?2:1);attempt++){
+      attempts++;providerCode=null;
+      try{
+        const reply=await lookup();
+        providerCode=['number','string'].includes(typeof reply?.code)&&Number.isFinite(Number(reply.code))?Number(reply.code):null;
+        if(providerCode!==0){problem='summary_rejected';continue;}
+        if(!reply.data||typeof reply.data!=='object'||Array.isArray(reply.data)){
+          problem='summary_invalid';continue;
+        }
+        summary=reply.data;
+        const funds=runningHubWebBalance(profile,summary);
+        if(funds.billingVersion==='NEW'&&funds.balancePoint!==null||
+          funds.billingVersion==='OLD'&&funds.remainCoins!==null){problem=null;break;}
+        problem=funds.billingVersion==='NEW'?'points_missing':
+          funds.billingVersion==='OLD'?'coins_missing':'billing_version_unknown';
+      }catch{problem='summary_transport';}
+    }
+    return {...runningHubWebBalance(profile,summary),balanceRead:{
+      state:problem?(summary?'incomplete':'unavailable'):'verified',attempts,providerCode,problem,
+      presentFields:fields.filter(name=>summary&&Object.hasOwn(summary,name))}};
   }
   async function connect(input){
     let session=parseRunningHubSession(input);
@@ -263,7 +280,9 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     const tasks=requireSuccess(await readStatus('/task/list',{size:1,current:1,taskType:['WORKFLOW','API','CORPAPI','ExclAPI'],taskStatus:['RUNNING','QUEUED']}),get(key));
     const total=webBalanceNumber(tasks.total);
     if(!Number.isInteger(total))throw error('Status task web belum dapat diverifikasi.','RH_WEB_PROTOCOL_ERROR',true);
-    const funds=await balances(profile,()=>readStatus('/uc/point/summary',{}));
+    // A welfare grant and its spendable ledger can become visible separately.
+    // Reconcile a missing ledger once, without issuing another claim or task.
+    const funds=await balances(profile,()=>readStatus('/uc/point/summary',{}),{retryIncomplete:true});
     return {...funds,currentTaskCounts:total,dailyCredit:daily.receipt,
       sessionRenewal:{state:renewalError?'failed':renewTokens?'renewed':'automatic',
         code:renewalError?.code||null,providerCode:renewalError?.providerCode??null,

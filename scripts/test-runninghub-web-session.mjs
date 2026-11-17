@@ -74,6 +74,94 @@ test('daily credits are opt-in for maintenance, refresh balances after confirmat
   assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/welfare/daily-gift/claim').length,1);
 }));
 
+
+test('post-claim missing points are reconciled once without another claim or inference',()=>fixture(async({service,setHandler,calls})=>{
+  let granted=false,postGrantReads=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:0}};
+    if(route==='/uc/point/summary'){
+      if(!granted)return {code:0,data:{billingVersion:'NEW',balancePoint:0,transitionCoinRemained:0}};
+      postGrantReads++;
+      return {code:0,data:postGrantReads===1?{billingVersion:'NEW',balanceUnit:'30000',transitionCoinRemained:0}:
+        {billingVersion:'NEW',balancePoint:30,transitionCoinRemained:0}};
+    }
+    if(route==='/task/list')return {code:0,data:{total:0}};
+    if(route==='/api/welfare/summary')return {code:0,data:{enabled:true,dailyGift:{granted,amount:30}}};
+    if(route==='/api/welfare/daily-gift/claim'){granted=true;return {code:0,data:null};}
+    throw Error('Unexpected operation '+route);
+  });
+  const {key}=await service.connect(exported);
+  const status=await service.status(key,{claimDailyCredit:true});
+  assert.equal(status.dailyCredit.state,'claimed');
+  assert.equal(status.balancePoint,30);
+  assert.equal(status.balanceRead.state,'verified');
+  assert.equal(status.balanceRead.attempts,2);
+  assert.equal(postGrantReads,2);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/welfare/daily-gift/claim').length,1);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,0);
+}));
+
+test('a confirmed reward does not fabricate a missing points balance from its amount or accounting unit',()=>fixture(async({service,setHandler,calls})=>{
+  let granted=false,postGrantReads=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:0}};
+    if(route==='/uc/point/summary'){
+      if(granted)postGrantReads++;
+      return {code:0,data:{billingVersion:'NEW',balanceUnit:'30000',transitionCoinRemained:0,accessToken:'fixture-private'}};
+    }
+    if(route==='/task/list')return {code:0,data:{total:0}};
+    if(route==='/api/welfare/summary')return {code:0,data:{enabled:true,dailyGift:{granted,amount:30}}};
+    if(route==='/api/welfare/daily-gift/claim'){granted=true;return {code:0,data:null};}
+    throw Error('Unexpected operation '+route);
+  });
+  const {key}=await service.connect(exported);
+  const status=await service.status(key,{claimDailyCredit:true});
+  assert.equal(status.dailyCredit.state,'claimed');
+  assert.equal(status.dailyCredit.amount,30);
+  assert.equal(status.balancePoint,null);
+  assert.equal(status.balanceRead.state,'incomplete');
+  assert.equal(status.balanceRead.problem,'points_missing');
+  assert.equal(status.balanceRead.attempts,2);
+  assert.equal(postGrantReads,2);
+  assert.equal(canGenerateWithAccount(status),true,'Unknown funding must not restore a client-side credit gate');
+  assert.ok(!JSON.stringify(status.balanceRead).includes('fixture-private'));
+  assert.ok(!status.balanceRead.presentFields.includes('accessToken'));
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/api/welfare/daily-gift/claim').length,1);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,0);
+}));
+
+test('points-summary outages retry at most once and keep rejected balances unknown',()=>fixture(async({service,setHandler,calls})=>{
+  let phase='connect',reads=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:0}};
+    if(route==='/uc/point/summary'){
+      if(phase==='connect')return {code:0,data:{billingVersion:'NEW',balancePoint:0,transitionCoinRemained:0}};
+      reads++;
+      return phase==='recover'&&reads===2?{code:0,data:{billingVersion:'NEW',balancePoint:30,transitionCoinRemained:0}}:
+        {code:503,msg:'fixture temporary outage'};
+    }
+    if(route==='/task/list')return {code:0,data:{total:0}};
+    throw Error('Unexpected operation '+route);
+  });
+  const {key}=await service.connect(exported);
+  phase='recover';
+  const recovered=await service.status(key);
+  assert.equal(recovered.balancePoint,30);
+  assert.equal(recovered.balanceRead.state,'verified');
+  assert.equal(reads,2);
+  phase='reject';reads=0;
+  const rejected=await service.status(key);
+  assert.equal(reads,2);
+  assert.equal(rejected.balancePoint,null);
+  assert.equal(rejected.balanceRead.state,'unavailable');
+  assert.equal(rejected.balanceRead.providerCode,503);
+  assert.equal(rejected.sessionVerified,true);
+  assert.equal(calls.filter(c=>/daily-gift\/claim|task\/create/.test(new URL(c.url).pathname)).length,0);
+}));
+
 test('ordinary requests do not hammer a rejected rotating grant; verified re-import clears the latch',()=>fixture(async({service,setHandler,calls})=>{
   const {key}=await service.connect(exported);
   setHandler(async config=>{

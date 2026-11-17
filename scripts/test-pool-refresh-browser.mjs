@@ -34,7 +34,7 @@ try{
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.route('https://**',route=>route.abort());
     await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});
-    await page.waitForFunction(()=>document.getElementById('poolCount').textContent==='1 akun siap');
+    await page.waitForFunction(()=>document.getElementById('poolCount').textContent==='1 akun bersaldo');
     if(await page.locator('#menuBtn').isVisible())await page.locator('#menuBtn').click();
     await page.locator('[data-nav-group="accounts"]').click();
     await page.locator('[data-view="accounts"]').click();

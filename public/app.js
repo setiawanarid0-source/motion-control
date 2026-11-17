@@ -204,11 +204,27 @@ function renderPoolRefresh(){
   if(notice){notice.textContent=data.reconnectRequired?data.reconnectRequired+' akun perlu dihubungkan ulang':'';
     notice.hidden=!data.reconnectRequired;}
 }
+function runningHubPoolFunding(status){
+  if(!status||status.error||status.stale)return 'unverified';
+  if(status.billingConverting)return 'converting';
+  const known=value=>value!=null&&value!==''&&typeof value!=='boolean'&&
+    Number.isFinite(Number(value))&&Number(value)>=0;
+  if(status.billingVersion==='NEW'){
+    const points=status.balancePoint,rh=status.transitionCoinRemained;
+    if(known(points)&&Number(points)>0||known(rh)&&Number(rh)>0)return 'available';
+    return known(points)&&known(rh)?'empty':'unverified';
+  }
+  if(status.apiType==='WEB_SESSION'&&status.billingVersion!=='OLD')return 'unverified';
+  return known(status.remainCoins)?Number(status.remainCoins)>0?'available':'empty':'unverified';
+}
 function updatePoolSummary(){
   if(['image-create','image-history','kie-accounts'].includes(state.view)){
     window.vantaKiePoolSummary?.();updateGenerate();return;
   }
-  const healthy=state.accounts.filter(a=>a.canGenerate===true); $('#poolCount').textContent=`${healthy.length} akun siap`; $('#poolCredits').textContent=String(healthy.length); const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun siap'; $('#poolDot').classList.toggle('ready',healthy.length>0); updateGenerate();
+  const funded=state.accounts.filter(a=>a.canGenerate===true&&runningHubPoolFunding(a.status)==='available');
+  $('#poolCount').textContent=`${funded.length} akun bersaldo`; $('#poolCredits').textContent=String(funded.length);
+  const unit=$('#poolReadyUnit'); if(unit)unit.textContent='akun bersaldo';
+  $('#poolDot').classList.toggle('ready',funded.length>0); updateGenerate();
 }
 function renderAccounts(){
   const root=$('#accountList'); if(!state.accounts.length){root.innerHTML='<div class="empty-state">Belum ada akun di pool.<br>Hubungkan access token RunningHub dari panel di sebelah kiri.</div>';return;}
@@ -230,12 +246,14 @@ function renderAccounts(){
   const daily=s=>{
     const gift=s.dailyCredit;
     if(!gift)return '';
+    if(['claimed','already_claimed'].includes(gift.state)&&runningHubPoolFunding(s)==='unverified')
+      return 'Klaim harian dikonfirmasi; saldo belum terverifikasi';
     if(gift.state==='claimed')return 'Kredit gratis: diklaim'+(gift.amount>0?' +'+amount(gift.amount)+' points':'');
     return {already_claimed:'Kredit gratis: sudah diklaim',unavailable:'Kredit gratis belum tersedia',
       pending:'Klaim kredit sedang dipastikan',failed:'Klaim kredit belum berhasil',
       requires_action:'Klaim perlu pemeriksaan di RunningHub'}[gift.state]||'';
   };
-  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>Access token · ${ready?'Siap digunakan':s.billingConverting?'Saldo sedang dikonversi':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>${funds(s)}</span>${ok&&s.billingVersion==='NEW'?`<span>RH ${amount(s.transitionCoinRemained)}</span>`:''}${ok&&s.walletBalance>0&&s.currency?`<span>Wallet ${escapeHtml(s.currency)} ${amount(s.walletBalance)}</span>`:''}<span>Tasks ${ok?amount(s.currentTaskCounts):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}${renewal(s)?`<span>${escapeHtml(renewal(s))}</span>`:''}${daily(s)?`<span>${escapeHtml(daily(s))}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
+  root.innerHTML=sortedRunningHubAccounts().map(a=>{const s=a.status||{};const ok=!s.error&&a.status,ready=a.canGenerate===true;return `<div class="account-card"><div><div class="account-card-main"><div class="account-icon">◎</div><div><strong>${escapeHtml(a.name)}</strong><small>Access token · ${ready?runningHubPoolFunding(s)==='available'?'Saldo terverifikasi':runningHubPoolFunding(s)==='empty'?'Sesi aktif · saldo 0':'Sesi aktif · saldo belum terverifikasi':s.billingConverting?'Saldo sedang dikonversi':'Status tidak tersedia'}</small></div></div><div class="account-metrics"><span>${funds(s)}</span>${ok&&s.billingVersion==='NEW'?`<span>RH ${amount(s.transitionCoinRemained)}</span>`:''}${ok&&s.walletBalance>0&&s.currency?`<span>Wallet ${escapeHtml(s.currency)} ${amount(s.walletBalance)}</span>`:''}<span>Tasks ${ok?amount(s.currentTaskCounts):'—'}</span>${s.error?`<span>${escapeHtml(s.error)}</span>`:''}${renewal(s)?`<span>${escapeHtml(renewal(s))}</span>`:''}${daily(s)?`<span>${escapeHtml(daily(s))}</span>`:''}</div></div><button class="delete-account" data-delete="${a.id}" type="button" aria-label="Remove ${escapeHtml(a.name)}" title="Remove account"><span class="delete-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 11H8L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"/></svg></span><span class="delete-account-label">Remove</span></button></div>`}).join('');
   $$('[data-delete]').forEach(btn=>btn.onclick=async()=>{try{
     // Claim browser-only completed History BEFORE changing the provider key vault.
     await claimBrowserHistory();
