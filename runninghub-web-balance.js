@@ -3,11 +3,27 @@
 // separate, and keep absent/invalid numbers unknown rather than inventing zero.
 export function webBalanceNumber(value){
   if(typeof value==='string'){
-    value=value.trim().replaceAll(',','');
-    if(!/^\d+(?:\.\d+)?$/.test(value))return null;
+    value=value.trim();
+    // Match native decimal values, including BigDecimal exponent strings.
+    // Commas are supported only as complete thousands groups, never decimals.
+    if(value.includes(',')){
+      if(!/^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value))return null;
+      value=value.replaceAll(',','');
+    }
+    if(!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value))return null;
     value=Number(value);
   }
-  return typeof value==='number'&&Number.isFinite(value)&&value>=0?value:null;
+  return typeof value==='number'&&Number.isFinite(value)&&value>=0?(value===0?0:value):null;
+}
+
+export function webBalanceEncoding(value){
+  if(value===null)return 'null';
+  if(value===undefined)return 'missing';
+  if(typeof value==='number')return !Number.isFinite(value)?'non_finite_number':value<0?'negative_number':'number';
+  if(typeof value!=='string')return typeof value;
+  if(!value.trim())return 'empty_string';
+  if(webBalanceNumber(value)===null)return 'unsupported_string';
+  return /[eE]/.test(value)?'scientific_string':'decimal_string';
 }
 
 export function runningHubWebBalance(profile,summary){

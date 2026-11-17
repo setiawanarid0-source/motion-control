@@ -42,3 +42,6 @@ A read-only maintenance check still found incomplete numeric point balances on t
 Follow-up hypothesis: the native client converts balancePoint with Number(), while the current parser only accepts a plain decimal string. Decimal exponent strings are valid numeric representations and need dedicated coverage. Extend only decimal numeric syntax, retain nonnegative/finite validation, and add a value-encoding tag without logging amounts or arbitrary provider strings. Then inspect the fresh encoding evidence before assigning the actual cause.
 
 This is not a currency conversion or a fallback from a reward amount/accounting unit. Do not turn null or missing points into zero or into the claimed amount. No generator or account/machine routing change is planned.
+
+
+Numeric candidate prepared: plain decimal/exponent encodings are supported without any currency scaling; finite nonnegative amounts remain required; malformed comma groups remain unknown. Metadata adds an encoding tag only. A hosted pure-function comparison reproduced the old rejection of valid exponent strings and passed twelve targeted cases with the candidate. These are synthetic parser tests, not evidence that the affected live accounts use that representation. Full Node/HTTP/renderer validation remains delegated to CI.

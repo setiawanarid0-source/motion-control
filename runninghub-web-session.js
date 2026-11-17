@@ -5,7 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import FormData from 'form-data';
 import axios from 'axios';
-import {runningHubWebBalance,webBalanceNumber} from './runninghub-web-balance.js';
+import {runningHubWebBalance,webBalanceNumber,webBalanceEncoding} from './runninghub-web-balance.js';
 import {billingScalars} from './runninghub-billing-evidence.js';
 import {runningHubWorkflowContent} from './runninghub-workflow-content.js';
 import {createRunningHubDailyCredit} from './runninghub-daily-credit.js';
@@ -233,6 +233,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     }
     return {...runningHubWebBalance(profile,summary),balanceRead:{
       state:problem?(summary?'incomplete':'unavailable'):'verified',attempts,providerCode,problem,
+      pointEncoding:webBalanceEncoding(summary?.balancePoint),
       presentFields:fields.filter(name=>summary&&Object.hasOwn(summary,name))}};
   }
   async function connect(input){
