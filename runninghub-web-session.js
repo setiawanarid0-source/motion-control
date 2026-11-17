@@ -235,7 +235,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
     return {...funds,balanceRead:{
       state:problem?(summary?'incomplete':'unavailable'):'verified',attempts,providerCode,problem,
       pointEncoding:webBalanceEncoding(summary?.balancePoint),
-      pointAvailability:funds.balancePoint===null?'unverified':funds.balancePoint===0?'zero':'positive',
+      pointAvailability:funds.balancePoint===null?'unverified':funds.balancePoint<0?'negative':funds.balancePoint===0?'zero':'positive',
       presentFields:fields.filter(name=>summary&&Object.hasOwn(summary,name))}};
   }
   async function connect(input){

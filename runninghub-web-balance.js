@@ -1,7 +1,7 @@
 // RunningHub's own web client reads /uc/getUserInfo and /uc/point/summary.
 // OLD accounts use RH coins; NEW accounts display points. Keep both ledgers
 // separate, and keep absent/invalid numbers unknown rather than inventing zero.
-export function webBalanceNumber(value){
+function webDecimalNumber(value){
   if(typeof value==='string'){
     value=value.trim();
     // Match native decimal values, including BigDecimal exponent strings.
@@ -13,8 +13,15 @@ export function webBalanceNumber(value){
     if(!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value))return null;
     value=Number(value);
   }
-  return typeof value==='number'&&Number.isFinite(value)&&value>=0?(value===0?0:value):null;
+  return typeof value==='number'&&Number.isFinite(value)?(value===0?0:value):null;
 }
+
+// Counters and reward quantities stay nonnegative; a ledger can be negative.
+export function webBalanceNumber(value){
+  const parsed=webDecimalNumber(value);
+  return parsed!==null&&parsed>=0?parsed:null;
+}
+export function webLedgerBalanceNumber(value){return webDecimalNumber(value);}
 
 export function webBalanceEncoding(value){
   if(value===null)return 'null';
@@ -22,7 +29,7 @@ export function webBalanceEncoding(value){
   if(typeof value==='number')return !Number.isFinite(value)?'non_finite_number':value<0?'negative_number':'number';
   if(typeof value!=='string')return typeof value;
   if(!value.trim())return 'empty_string';
-  if(webBalanceNumber(value)===null)return 'unsupported_string';
+  if(webLedgerBalanceNumber(value)===null)return 'unsupported_string';
   return /[eE]/.test(value)?'scientific_string':'decimal_string';
 }
 
@@ -38,7 +45,7 @@ export function runningHubWebBalance(profile,summary){
     remainCoins:webBalanceNumber(profile?.totalCoin),
     virtualCoin:webBalanceNumber(profile?.virtualCoin),
     virtualCoinDaily:webBalanceNumber(profile?.virtualCoinDaily),
-    balancePoint:webBalanceNumber(summary?.balancePoint),
+    balancePoint:webLedgerBalanceNumber(summary?.balancePoint),
     paidPoint:webBalanceNumber(summary?.paidPoint),
     bonusPoint:webBalanceNumber(summary?.bonusPoint),
     activityPoint:webBalanceNumber(summary?.activityPoint),
