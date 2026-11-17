@@ -7,7 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import vm from 'node:vm';
 import {createRunningHubWebSession,parseRunningHubSession,isRunningHubWebKey} from '../runninghub-web-session.js';
-import {runningHubWebBalance,webBalanceNumber} from '../runninghub-web-balance.js';
+import {runningHubWebBalance,webBalanceNumber,webBalanceEncoding} from '../runninghub-web-balance.js';
 import {canGenerateWithAccount,rankGenerationAccounts} from '../runninghub-account-priority.js';
 import {partitionAccountRefresh} from '../account-eligibility.js';
 
@@ -75,6 +75,38 @@ test('daily credits are opt-in for maintenance, refresh balances after confirmat
 }));
 
 
+
+test('native exponent strings stay points, preserve real zero and never create a task',()=>fixture(async({service,setHandler,calls})=>{
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/uc/getUserInfo')return {code:0,data:{id:userId,totalCoin:'0E-8'}};
+    if(route==='/uc/point/summary')return {code:0,data:{billingVersion:'NEW',balancePoint:'3E+1',balanceUnit:'30000',transitionCoinRemained:'0E-8'}};
+    if(route==='/task/list')return {code:0,data:{total:0}};
+    throw Error('Unexpected operation '+route);
+  });
+  const {key}=await service.connect(exported);
+  const status=await service.status(key);
+  assert.equal(status.remainCoins,0);
+  assert.equal(status.balancePoint,30);
+  assert.equal(status.transitionCoinRemained,0);
+  assert.equal(status.balanceRead.state,'verified');
+  assert.equal(status.balanceRead.pointEncoding,'scientific_string');
+  assert.equal(status.balanceRead.pointAvailability,'positive');
+  assert.equal(status.balanceRead.attempts,1);
+  assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,0);
+}));
+test('balance numeric grammar handles decimal encodings without accepting malformed or nonfinite amounts',()=>{
+  for(const [raw,expected] of [['3E+1',30],['0E-8',0],['-0E-8',0],['+30.0',30],['.125',.125],['30.',30],['6.123e0',6.123],['1,734',1734]])
+    assert.equal(webBalanceNumber(raw),expected);
+  for(const raw of ['1,2,3','1,23','0x20','3E','3E+','1e309','-1e2','Infinity','NaN','30 points'])
+    assert.equal(webBalanceNumber(raw),null);
+  assert.equal(webBalanceEncoding(null),'null');
+  assert.equal(webBalanceEncoding(undefined),'missing');
+  assert.equal(webBalanceEncoding('0E-8'),'scientific_string');
+  assert.equal(webBalanceEncoding('30'),'decimal_string');
+  assert.equal(webBalanceEncoding('fixture-private'),'unsupported_string');
+});
+
 test('post-claim missing points are reconciled once without another claim or inference',()=>fixture(async({service,setHandler,calls})=>{
   let granted=false,postGrantReads=0;
   setHandler(async config=>{
@@ -123,6 +155,7 @@ test('a confirmed reward does not fabricate a missing points balance from its am
   assert.equal(status.balancePoint,null);
   assert.equal(status.balanceRead.state,'incomplete');
   assert.equal(status.balanceRead.problem,'points_missing');
+  assert.equal(status.balanceRead.pointAvailability,'unverified');
   assert.equal(status.balanceRead.attempts,2);
   assert.equal(postGrantReads,2);
   assert.equal(canGenerateWithAccount(status),true,'Unknown funding must not restore a client-side credit gate');

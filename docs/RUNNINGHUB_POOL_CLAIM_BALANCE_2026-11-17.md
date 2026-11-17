@@ -31,3 +31,17 @@ Validation will use neutral provider fixtures and GitHub CI. The local executor 
 - Five pure funding-classification examples ran in the hosted JavaScript runtime. No local Node or full-suite result is claimed; GitHub CI must validate the candidate before merge/deployment.
 
 Actual provider acceptance after a claim is not established by these changes. The original refusal remains a funding rejection, not a render failure. Final results, release identifiers and fresh read-only provider evidence will be appended here.
+
+
+## First release and remaining representation check
+
+PR117 merged as 2c1d70633bb311304f8c96bd62b6766745c17554; deployment b31c7ed8-65e6-4934-80b1-6d450b158787 reached SUCCESS on 17 November 2026 at 07:53:11 WIB. All six PR and main checks passed. The same service, volume and source scope were preserved.
+
+A read-only maintenance check still found incomplete numeric point balances on three sessions after two lookups. The provider returned code0, confirmed the daily claim, and included the balancePoint field. Field presence alone does not identify whether the value is null, a supported number or a numeric representation rejected by the parser. No real paid task was submitted to test this.
+
+Follow-up hypothesis: the native client converts balancePoint with Number(), while the current parser only accepts a plain decimal string. Decimal exponent strings are valid numeric representations and need dedicated coverage. Extend only decimal numeric syntax, retain nonnegative/finite validation, and add a value-encoding tag without logging amounts or arbitrary provider strings. Then inspect the fresh encoding evidence before assigning the actual cause.
+
+This is not a currency conversion or a fallback from a reward amount/accounting unit. Do not turn null or missing points into zero or into the claimed amount. No generator or account/machine routing change is planned.
+
+
+Numeric candidate prepared: plain decimal/exponent encodings are supported without any currency scaling; finite nonnegative amounts remain required; malformed comma groups remain unknown. Metadata adds an encoding tag only. A hosted pure-function comparison reproduced the old rejection of valid exponent strings and passed twelve targeted cases with the candidate. These are synthetic parser tests, not evidence that the affected live accounts use that representation. Full Node/HTTP/renderer validation remains delegated to CI.
