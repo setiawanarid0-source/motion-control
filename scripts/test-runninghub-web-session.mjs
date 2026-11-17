@@ -91,6 +91,7 @@ test('native exponent strings stay points, preserve real zero and never create a
   assert.equal(status.transitionCoinRemained,0);
   assert.equal(status.balanceRead.state,'verified');
   assert.equal(status.balanceRead.pointEncoding,'scientific_string');
+  assert.equal(status.balanceRead.pointAvailability,'positive');
   assert.equal(status.balanceRead.attempts,1);
   assert.equal(calls.filter(c=>new URL(c.url).pathname==='/task/create').length,0);
 }));
@@ -154,6 +155,7 @@ test('a confirmed reward does not fabricate a missing points balance from its am
   assert.equal(status.balancePoint,null);
   assert.equal(status.balanceRead.state,'incomplete');
   assert.equal(status.balanceRead.problem,'points_missing');
+  assert.equal(status.balanceRead.pointAvailability,'unverified');
   assert.equal(status.balanceRead.attempts,2);
   assert.equal(postGrantReads,2);
   assert.equal(canGenerateWithAccount(status),true,'Unknown funding must not restore a client-side credit gate');
