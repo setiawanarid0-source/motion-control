@@ -1,8 +1,8 @@
-# RunningHub Pool claim and balance investigation
+# Catatan perbaikan klaim dan saldo Pool RunningHub
 
 Date: 17 November 2026 (Asia/Jakarta)
 Investigation: RH-POOL-CLAIM-BALANCE-20261117
-Status: candidate prepared; GitHub CI and deployment pending
+Status akhir: perbaikan pembacaan saldo dan status pool sudah aktif; saldo points negatif terverifikasi setelah klaim. Belum ada uji generate baru.
 Base: 270f944d39b785f0973051490d0f8478815fa424
 
 ## Before changes
@@ -57,3 +57,30 @@ Before the final correction: introduce a signed finite ledger parser specificall
 
 
 Signed-ledger candidate prepared. Hosted pure-function checks preserve a negative point ledger, reject the same value as a counter/reward amount, exclude negative point-only funds from the funded counter, and retain positive transition RH separately. HTTP/claim and real-renderer fixtures cover these behaviors without private amounts or inference. Full CI remains required before release.
+
+
+## Penutup RH-POOL-CLAIM-BALANCE-20261117
+
+**Temuan terverifikasi:** tiga sesi yang dilaporkan memiliki angka balancePoint negatif dari RunningHub meskipun klaim hariannya terkonfirmasi. Parser Vanta sebelumnya hanya menerima angka nonnegatif, sehingga menyembunyikan saldo tersebut sebagai tanda —. Status sesi aktif juga sebelumnya disamakan dengan akun siap. Jangan menganggap jumlah hadiah pada tanda terima sebagai saldo akhir yang dapat dipakai.
+
+**Perubahan selesai:**
+- Saldo points bertanda kini dipertahankan sesuai angka provider; counter, jumlah task dan jumlah hadiah tetap memakai parser nonnegatif.
+- Nilai negatif, nol, positif, dan data yang belum tersedia dibedakan. Nilai negatif yang valid tidak lagi dianggap kegagalan pembacaan.
+- Kartu akun menjelaskan saldo points negatif dan klaim yang terkonfirmasi. Penghitung memakai akun bersaldo; saldo points negatif saja tidak dihitung sebagai dana tersedia, sedangkan transition RH positif tetap diperhitungkan terpisah.
+- Rekonsiliasi metadata dibatasi; tidak membuat saldo dari jumlah klaim atau balanceUnit. Interval dua jam, isolasi kegagalan akun, pemilihan akun/mode, otoritas pendanaan provider, dan larangan replay tidak berubah.
+- Tidak ada perubahan graph generasi, model, node video, kredensial, volume atau akun. Tidak ada generate/inference baru oleh asisten.
+
+**Bukti rilis akhir:**
+- PR119 digabungkan menjadi 7905905cc784a2e581fd576d2fc8b2afc32dcdfe, tree 6e59d6e37e42b367988e62e4aaf13151b1a41639.
+- Deployment d777227f-34c5-444c-a181-6f6df38dd6ec pada layanan Vanta yang sama mencapai SUCCESS 17 November 2026 pukul 08:17:09 WIB.
+- Audit baca-saja 08:17:07 WIB pada tiga sesi menunjukkan providerCode0, dailyCreditStateclaimed, pointsKnowntrue, stateverified, attempts1, pointEncodingnegative_number, pointAvailabilitynegative. Jumlah saldo privat dan kredensial tidak dicatat pada dokumen publik ini.
+- Enam check PR119 dan enam check commit main rilis selesai success: regression test, image contract, popup Chromium, Firefox, Edge dan WebKit. Full npm run check dijalankan oleh GitHub CI dan pemeriksaan sebelum rilis, bukan terminal lokal.
+- Fixture HTTP/klaim serta renderer asli membuktikan hadiah terkonfirmasi dapat berdampingan dengan saldo akhir negatif, tidak terjadi klaim/task tambahan, dan RH positif tidak disembunyikan oleh points negatif. Script browser pool tersendiri diperbarui ekspektasinya, tetapi tidak dijalankan oleh workflow browser-popup yang dikonfigurasi; jangan mengklaim verifikasi visual mobile baru.
+- PR117 dan PR118 juga lulus enam check masing-masing. Hipotesis format eksponen diperiksa dan dukungan angkanya dibenahi, tetapi bukti langsung menetapkan angka negatif sebagai penyebab tiga saldo yang semula tersembunyi.
+- Selama rollout pertama, deployment lama sempat dilaporkan CRASHED ketika penggantinya diproses; pengganti kemudian SUCCESS. Penyebab status lama itu tidak ditetapkan dan tidak dipakai untuk menjelaskan penolakan pendanaan.
+
+**Batas dan langkah berikut:**
+- Screenshot awal menunjukkan penolakan pendanaan sebelum task ID dibuat. Pembacaan saldo kini benar, tetapi ini bukan bukti sebuah generate baru akan diterima atau hadiah harian cukup untuk setiap workflow.
+- Tanda negatif saja tidak membuktikan riwayat pemakaian, kewajiban pembayaran, minimum reserve atau penyebab saldo menjadi negatif. Jangan mengarang angka konversi, menyuruh top-up berdasarkan dugaan, atau memalsukan saldo positif.
+- Pengguna dapat refresh Vanta untuk melihat saldo dan status yang benar. Jangan mengulang generate akun yang sama semata-mata untuk memperoleh error yang sudah diketahui.
+- Penutupan catatan ini adalah perubahan dokumentasi saja setelah rilis. Commit aplikasi yang dipin tetap 7905905cc784a2e581fd576d2fc8b2afc32dcdfe; dokumentasi yang lebih baru tidak memerlukan perubahan runtime.
