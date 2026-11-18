@@ -55,7 +55,7 @@ assert.match(graphValidationError(removedFilenames)?.message,/Filenames.*vhs_fil
 for(const reply of [{...removedFilenames,code:0},{...removedFilenames,code:'bad'},
   {...removedFilenames,taskId:'2119000000000000001'},
   {...removedFilenames,data:{taskId:'2119000000000000001'}},
-  {...removedFilenames,success:true},{msg:removedFilenames.msg}])
+  {...removedFilenames,success:true},{...removedFilenames,data:{result:true}},{msg:removedFilenames.msg}])
   assert.equal(graphValidationError(reply),null,'Contradictory or incomplete acknowledgements stay uncertain');
 assert.equal(graphValidationError(absentNode)?.definitelyRejected,true,'Explicit pre-execution missing-node error is a rejected graph');
 assert.equal(graphValidationError({...absentNode,data:{taskId:'2109126366731984999'}}),null,'Accepted task IDs always forbid retry');

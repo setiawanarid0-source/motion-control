@@ -26,7 +26,8 @@ export function findValidationRejection(data) {
       const failedCode=['number','string'].includes(typeof code)&&String(code).trim()!==''&&
         Number.isFinite(Number(code))&&Number(code)!==0;
       const directFailure=!Object.hasOwn(data,'code')&&data.result===false&&data.error?.type==='vhs_filenames_removed';
-      if((failedCode||directFailure)&&data.success!==true&&data.result!==true&&data.data?.success!==true)
+      if((failedCode||directFailure)&&data.success!==true&&data.result!==true&&
+        data.data?.success!==true&&data.data?.result!==true)
         return p;
     }
     if(p?.result===false && ['prompt_outputs_failed_validation','missing_node_type'].includes(p.error?.type))
