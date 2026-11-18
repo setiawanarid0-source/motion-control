@@ -39,3 +39,11 @@ Log percobaan ini bukan penolakan kredit, bukan bukti token kedaluwarsa, dan buk
 ## Penutup
 
 Pemeriksaan log runtime, sumber aktif, sambungan graf, dan registry node publik selesai. Tidak ada perubahan aplikasi, workflow, deployment, akun, atau task dalam investigasi ini. Tidak ada render GPU baru dan generate belum dinyatakan pulih. Dokumen ini menyimpan hasil diagnosis; bukan catatan rilis perbaikan.
+
+## Awal perbaikan RH-VHS-FILENAMES-REPAIR-20261118
+
+Pengguna meminta perbaikan langsung setelah diagnosis. Otorisasi mencakup implementasi, pengujian, dan deployment pada layanan Vanta yang sama. Acuan aplikasi rollback: 7905905cc784a2e581fd576d2fc8b2afc32dcdfe; acuan repository sebelum perbaikan: cca00b0e1b4dce1b28a10c54b53a45053f873a01.
+
+Rencana: pilih jalur ekspor yang didukung registry RunningHub saat ini, verifikasi implementasi encoder/arsip, pertahankan resep inferensi dan kebutuhan video/audio/ZIP, perbaiki klasifikasi error terstruktur tanpa replay submission, lalu jalankan pemeriksaan relevan dan CI sebelum rilis. Model, sampling, pemilihan akun/mesin, dan retensi tiga hari tetap sesuai kontrak pengguna. Tidak menjalankan render GPU; hasil render baru harus tetap ditandai belum diuji.
+
+Status awal: investigasi sumber ekspor berlangsung, belum ada perubahan aplikasi dan belum ada klaim generate pulih. Jangan memperlakukan sekadar hilangnya link Filenames atau lolosnya schema sebagai bukti kualitas keluaran.
