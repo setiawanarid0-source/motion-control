@@ -1,0 +1,41 @@
+# Diagnosis MotionFly: VHS Filenames dihapus — 18 November 2026
+
+ID investigasi: RH-VHS-FILENAMES-DIAGNOSIS-20261118  
+Status: penyebab penolakan teridentifikasi; aplikasi dan workflow belum diubah pada investigasi ini.  
+Tanggal lokal: 18 November 2026 (Asia/Jakarta).
+
+## Permintaan dan kondisi awal
+
+Pengguna melaporkan tidak bisa generate video secara tiba-tiba. Dua screenshot memakai MotionFly · 1080 HD + ZIP, mesin Standard, dan pilihan Account 01/Account 02. Vanta menampilkan “Status penerimaan belum pasti” tanpa task ID.
+
+Lingkup pemeriksaan: baca log layanan Vanta yang sama, cocokkan sumber aplikasi terpasang dengan graf MotionFly, lalu baca registry node RunningHub terbaru. Tidak mengirim generate/task-create baru, mengulang submission yang belum pasti, membatalkan task, mengubah akun/mesin/saldo, atau mengubah workflow inferensi.
+
+## Bukti yang diperiksa
+
+1. Railway masih menjalankan deployment d777227f-34c5-444c-a181-6f6df38dd6ec berstatus SUCCESS, source aplikasi 7905905cc784a2e581fd576d2fc8b2afc32dcdfe. Tidak ada rilis aplikasi baru sejak perbaikan pembacaan saldo 17 November pada layanan yang diperiksa.
+2. Main saat diagnosis adalah eeec1ca36cefed4a0ad453782d7e49c8848423d4. Perubahan setelah source aplikasi tersebut hanya dokumentasi investigasi saldo sebelumnya.
+3. Empat baris runtime “RunningHub acceptance unconfirmed” pada 18 November pukul 11:53:57, 11:54:48, 11:55:38, dan 11:55:52 UTC (18:53–18:55 WIB) memuat respons dengan result:false dan error.type **vhs_filenames_removed**. Pesan menyebut Video Combine dan Filenames. Pesan runtime dipotong oleh kode aplikasi menjadi 160 karakter; jangan menganggapnya respons provider lengkap atau bukti tidak ada task pada seluruh riwayat akun.
+4. GET publik https://www.runninghub.ai/object_info berhasil HTTP 200 saat diagnosis. nodes_info memuat 20.617 definisi. VHS_VideoCombine sekarang mendeklarasikan output:[] dan output_name:[], tetap output_node:true. Jadi node penyimpan video masih ada, tetapi port keluaran Filenames tidak tersedia pada registry terbaru.
+5. Snapshot registry lama di workflows/runninghub-web-node-schemas.json masih mendeklarasikan satu output VHS_VideoCombine: Filenames bertipe VHS_FILENAMES. Ini berbeda dengan registry yang baru dibaca.
+6. MotionFly aktif berasal dari motionfly-hd-workflow.js dan workflows/motionfly-hd-runninghub.json. Builder memasukkan root 490, 493, dan 496. Node 493 VHS_VideoCombine memakai output slot 0 melalui link 1041 ke node 494 VHS_SelectFilename.filenames. Node 494 diteruskan melalui link 1042 ke node 496 CompressImages. Jalur preview → pilih nama berkas → ZIP ini bergantung pada port yang sudah dihapus.
+7. SHA-256 snapshot registry baca-saja: ecbd2e9451424b3ce0040c56020982482bdcf094d437aac0cff2dc385c28f7cd. Snapshot diambil tanpa sesi akun dan tanpa alokasi GPU. Deklarasi registry tidak membuktikan eksekusi atau kualitas video pengganti.
+
+## Kesimpulan
+
+Penolakan yang teramati berasal dari pemeriksaan kompatibilitas RunningHub terhadap penggunaan output Filenames milik VHS_VideoCombine. Graf ekspor ZIP Vanta masih memakai kontrak port lama. Temuan ini menjelaskan mengapa pergantian akun tidak menghilangkan error yang sama.
+
+Vanta juga mempunyai kekurangan pelaporan: createTask jatuh ke Error(data.msg) untuk respons ini; req.submissionAttempted sudah disetel sebelum /task/create. runQueuedGeneration lalu mengubahnya menjadi status uncertain dan mengganti pesan asli dengan peringatan penerimaan belum pasti. Jadi pesan pada screenshot berasal dari lapisan penanganan Vanta; error teknis yang mendasarinya diterima dari RunningHub.
+
+Log percobaan ini bukan penolakan kredit, bukan bukti token kedaluwarsa, dan bukan bukti kesalahan gambar/video. Tidak menetapkan gangguan menyeluruh RunningHub, waktu persis perubahan platform, status penerimaan seluruh percobaan pada riwayat akun, atau pembebanan/refund kredit. Akun bersaldo tidak menjamin graf dengan port yang dihapus akan diterima.
+
+## Yang perlu diperbaiki berikutnya
+
+- Sesuaikan jalur ekspor dengan kontrak node RunningHub terkini. Pertahankan MP4, audio, FPS, ukuran/orientasi, preview, retensi, dan kebutuhan ZIP pengguna; jangan diam-diam membuang ZIP atau mengubah model/sampling untuk menghindari error ekspor.
+- Periksa implementasi/runtime jalur pengganti. Kehadiran node alternatif di registry saja belum membuktikan kompatibilitas encoding, output, watermark, atau ZIP yang sesuai.
+- Kenali penolakan struktural vhs_filenames_removed secara khusus dan tampilkan penyebab yang dapat dipahami. Hanya tandai pasti ditolak apabila respons lengkap dan tahapnya membuktikan hal itu; tetap pertahankan larangan replay untuk timeout, respons ambigu, atau adanya task ID.
+- Periksa workflow lain yang masih menyambungkan output VHS sebelum menyatakan masalah memengaruhi semuanya. Diagnosis konkret saat ini adalah MotionFly pada screenshot.
+- Gunakan ID investigasi ini sebagai acuan sebelum implementasi berikutnya. Tidak menyuruh pengguna mengulang generate yang sama sebagai pengganti diagnosis.
+
+## Penutup
+
+Pemeriksaan log runtime, sumber aktif, sambungan graf, dan registry node publik selesai. Tidak ada perubahan aplikasi, workflow, deployment, akun, atau task dalam investigasi ini. Tidak ada render GPU baru dan generate belum dinyatakan pulih. Dokumen ini menyimpan hasil diagnosis; bukan catatan rilis perbaikan.
