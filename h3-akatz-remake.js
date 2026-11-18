@@ -5,6 +5,7 @@ import {h3PhotoPlan,prepareH3Input} from './minimax-h3-motion.js';
 import {AKATZ_PROFILE} from './h3-akatz-motion.js';
 import {assertAkatzBaseline} from './h3-akatz-options.js';
 import {runningHubWorkflowContent} from './runninghub-workflow-content.js';
+import {withRunningHubVideoOutputs} from './runninghub-video-output.js';
 
 export const REMAKE_LEGACY_REVISION='akatz-source-viggle-remake-65e798f-v1';
 export const REMAKE_PREVIOUS_REVISION='akatz-source-viggle-remake-65e798f-v2';
@@ -243,7 +244,7 @@ export function remakeExecutionPlan(source){
 export function remakeEditorForFrames({frames=360,width=1080,height=1920}={}){
   const source={...h3PhotoPlan(width,height),totalFrames:frames,fps:24,hasAudio:true};
   const graph=remakeGraphForInputs({imageName:'UPLOAD_EDITED_FIRST_FRAME.png',videoName:'UPLOAD_SOURCE_VIDEO.mp4',source});
-  const editor=JSON.parse(runningHubWorkflowContent(graph));
+  const editor=JSON.parse(runningHubWorkflowContent(withRunningHubVideoOutputs(graph)));
   editor.extra.vanta_export={source_revision:REMAKE_REVISION,source_repository:REMAKE_SOURCE,source_commit:REMAKE_COMMIT,
     conditioning_adapter:'native_1080_full_reference_composition',text_tokenization:'joint_text_only',reference_latent_dtype:'float16',
     preset_frames:frames,preset_seconds:frames/24,generation_window_frames:124,continuation_frames:18,

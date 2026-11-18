@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {compileMotionFlyHD} from './motionfly-hd-workflow.js';
 import {withIntegratedRife60,withIntegratedRife60Editor} from './integrated-rife.js';
 import {withOriginalVideoArchive} from './runninghub-output.js';
+import {withRunningHubVideoOutputsEditor} from './runninghub-video-output.js';
 
 // Keep numeric rules and short policy enums, never account identifiers,
 // credentials, URLs, contact details, free text, or arbitrary response objects.
@@ -39,7 +40,7 @@ export function motionFlyBillingWorkflow(){
     if(node.widgets_values&&!Array.isArray(node.widgets_values))node.widgets_values_named=structuredClone(node.widgets_values);
   }
   editor.extra||={};
-  const workflow=withIntegratedRife60Editor(editor);
+  const workflow=withRunningHubVideoOutputsEditor(withIntegratedRife60Editor(editor));
   const actual=compileMotionFlyHD(workflow);
   const expected=withOriginalVideoArchive(withIntegratedRife60(compileMotionFlyHD(base)));
   expected['30'].inputs.image=image;expected['33'].inputs.video=video;expected['331'].inputs.seed=50;

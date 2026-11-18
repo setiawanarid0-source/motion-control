@@ -1,3 +1,5 @@
+import {withRunningHubVideoOutputs} from './runninghub-video-output.js';
+
 const isVideo=output=>/video|mp4/i.test(String(output?.fileType||''))||
   /\.mp4(?:\?|$)/i.test(String(output?.fileUrl||''));
 const isZip=output=>/^(?:application\/)?(?:x-)?zip(?:-compressed)?$/i.test(String(output?.fileType||''))||
@@ -22,7 +24,7 @@ export function selectOriginalVideoArchive(outputs){
 // Reuse the proven export chain without changing sampling, frames, audio,
 // resolution, FPS or the existing saved backup. Historical builders stay intact.
 export function withOriginalVideoArchive(graph){
-  if(Object.values(graph).some(n=>n?.class_type==='CompressImages'))return graph;
+  if(Object.values(graph).some(n=>n?.class_type==='CompressImages'))return withRunningHubVideoOutputs(graph);
   const final=graph['490']?.class_type==='VHS_VideoCombine'?'490':
     graph['3']?.class_type==='VHS_VideoCombine'?'3':null;
   if(!final)throw Error('Node video final workflow tidak ditemukan.');
@@ -34,7 +36,7 @@ export function withOriginalVideoArchive(graph){
   result[base+1]={class_type:'VHS_SelectFilename',inputs:{filenames:[String(base),0],index:-1}};
   result[base+2]={class_type:'CompressImages',inputs:{'images or video_path':[String(base+1),0],
     filename_prefix:prefix+'_ZIP',image_format:'PNG',password:''}};
-  return result;
+  return withRunningHubVideoOutputs(result);
 }
 
 // Diagnostic clips can finish before the final render. Prefer the graph's

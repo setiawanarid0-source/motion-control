@@ -47,6 +47,8 @@ try{
         const ui=byId.get(id);assert.equal(ui.type,node.class_type);
         for(const [field,value] of Object.entries(node.inputs)){
           if(Array.isArray(value)&&value.length===2&&typeof value[0]==='string'&&Number.isInteger(value[1])){
+            assert.notEqual(prompt.prompt[value[0]]?.class_type,'VHS_VideoCombine',
+              'No workflow may consume RunningHub\'s removed VHS Filenames output');
             const slot=ui.inputs.findIndex(p=>p.name===field),input=ui.inputs[slot];
             const link=editor.links.find(l=>l[0]===input.link);
             assert.deepEqual(link.slice(1,5),[Number(value[0]),value[1],Number(id),slot],id+'.'+field);
@@ -122,7 +124,7 @@ try{
     const select=graph[zip.inputs['images or video_path'][0]];
     assert.equal(select.class_type,'VHS_SelectFilename');assert.equal(select.inputs.index,-1);
     const video=graph[select.inputs.filenames[0]];
-    assert.equal(video.class_type,'VHS_VideoCombine');assert.equal(video.inputs.save_output,false);
+    assert.equal(video.class_type,'VideoCombineV2');assert.equal(video.inputs.save_output,false);
     const final=graph['490']||graph['3'];
     for(const field of ['images','audio','frame_rate','crf','pix_fmt','format'])
       assert.deepEqual(video.inputs[field],final.inputs[field],field+' must retain the final video recipe');

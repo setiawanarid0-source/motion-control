@@ -49,6 +49,132 @@
         "SetLatentNoiseMask"
       ],
       "note": "Declaration/layout only, not GPU attestation. RefModApply editor MatchType ports are resolved to CONDITIONING, one of the raw declared allowed types, for this text conditioning recipe."
+    },
+    "videoOutputCompatibility": {
+      "experiment": "RH-VHS-FILENAMES-REPAIR-20261118",
+      "registry": "https://www.runninghub.ai/object_info",
+      "registryDate": "2026-11-18",
+      "registrySha256": "ecbd2e9451424b3ce0040c56020982482bdcf094d437aac0cff2dc385c28f7cd",
+      "encoderRepository": "FX-FeiHou/ComfyUI-FeiHou-Toolbox",
+      "backendBlob": "dfea01360b48051632efac576e77dd5a1129db8d",
+      "frontendBlob": "5c798526d9bc5af3beada2beb94c2e841a1caa40",
+      "nodes": {
+        "VHS_VideoCombine": {
+          "output": [],
+          "output_name": [],
+          "inputNames": {
+            "required": [
+              "images",
+              "frame_rate",
+              "loop_count",
+              "filename_prefix",
+              "format",
+              "pingpong",
+              "save_output"
+            ],
+            "optional": [
+              "audio",
+              "meta_batch",
+              "vae",
+              "no_preview"
+            ]
+          },
+          "h264Fields": [
+            [
+              "pix_fmt",
+              [
+                "yuv420p",
+                "yuv420p10le"
+              ]
+            ],
+            [
+              "crf",
+              "INT",
+              {
+                "default": 19,
+                "min": 0,
+                "max": 100,
+                "step": 1
+              }
+            ],
+            [
+              "save_metadata",
+              "BOOLEAN",
+              {
+                "default": true
+              }
+            ],
+            [
+              "trim_to_audio",
+              "BOOLEAN",
+              {
+                "default": false
+              }
+            ]
+          ]
+        },
+        "VideoCombineV2": {
+          "output": [
+            "VHS_FILENAMES"
+          ],
+          "output_name": [
+            "Filenames"
+          ],
+          "inputNames": {
+            "required": [
+              "images"
+            ],
+            "optional": [
+              "audio",
+              "meta_batch",
+              "vae",
+              "frame_rate",
+              "loop_count",
+              "filename_prefix",
+              "format",
+              "pingpong",
+              "save_output",
+              "latent"
+            ]
+          },
+          "h264Fields": [
+            [
+              "pix_fmt",
+              [
+                "yuv420p",
+                "yuv420p10le"
+              ]
+            ],
+            [
+              "crf",
+              "INT",
+              {
+                "default": 19,
+                "min": 0,
+                "max": 100,
+                "step": 1
+              }
+            ],
+            [
+              "save_metadata",
+              "BOOLEAN",
+              {
+                "default": true
+              }
+            ],
+            [
+              "trim_to_audio",
+              "BOOLEAN",
+              {
+                "default": false
+              }
+            ]
+          ]
+        }
+      },
+      "note": "V2 is registered with the VHS_FILENAMES output. Its source preserves VHS codec/format values and returns only the final audio-muxed file; metadata uses stream-copy. This snapshot is declaration/source evidence, not a paid-worker render attestation. Historical API builder recipes remain unchanged until the delivery adapter runs.",
+      "encoderTree": "435b9449ca8279414aa329e541a80286879a87cc",
+      "encoderCommit": "8ba47000b9aeaf6cae6a5ddfab981e668726fd8c"
     }
   },
   "nodes": {
@@ -3948,12 +4074,7 @@
           "type": "BOOLEAN"
         }
       ],
-      "outputs": [
-        {
-          "name": "Filenames",
-          "type": "VHS_FILENAMES"
-        }
-      ],
+      "outputs": [],
       "widgetOrder": [
         "save_output",
         "filename_prefix",
@@ -5640,6 +5761,114 @@
       ],
       "widgetOrder": [],
       "defaults": {}
+    },
+    "VideoCombineV2": {
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE,LATENT"
+        },
+        {
+          "shape": 7,
+          "name": "audio",
+          "type": "AUDIO"
+        },
+        {
+          "shape": 7,
+          "name": "meta_batch",
+          "type": "VHS_BatchManager"
+        },
+        {
+          "shape": 7,
+          "name": "vae",
+          "type": "VAE"
+        },
+        {
+          "widget": {
+            "name": "frame_rate"
+          },
+          "name": "frame_rate",
+          "type": "FLOAT"
+        },
+        {
+          "widget": {
+            "name": "loop_count"
+          },
+          "name": "loop_count",
+          "type": "INT"
+        },
+        {
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "name": "filename_prefix",
+          "type": "STRING"
+        },
+        {
+          "widget": {
+            "name": "format"
+          },
+          "name": "format",
+          "type": "COMBO"
+        },
+        {
+          "widget": {
+            "name": "pingpong"
+          },
+          "name": "pingpong",
+          "type": "BOOLEAN"
+        },
+        {
+          "widget": {
+            "name": "save_output"
+          },
+          "name": "save_output",
+          "type": "BOOLEAN"
+        },
+        {
+          "shape": 7,
+          "name": "latent",
+          "type": "LATENT"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES"
+        }
+      ],
+      "widgetOrder": [
+        "save_output",
+        "filename_prefix",
+        "loop_count",
+        "format",
+        "frame_rate",
+        "pingpong",
+        "pix_fmt",
+        "crf",
+        "save_metadata",
+        "trim_to_audio",
+        "videopreview"
+      ],
+      "defaults": {
+        "save_output": true,
+        "filename_prefix": "VANTA-H3-AKATZ-V1_5-NATIVE1080",
+        "loop_count": 0,
+        "format": "video/h264-mp4",
+        "frame_rate": 24,
+        "pingpong": false,
+        "pix_fmt": "yuv420p",
+        "crf": 12,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      },
+      "controls": {},
+      "objectWidgets": true
     }
   }
 }

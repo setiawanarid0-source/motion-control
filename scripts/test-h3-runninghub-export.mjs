@@ -8,6 +8,7 @@ import {akatzEditorWorkflow,installAkatzEditorDownload,AKATZ_EDITOR_FILENAME} fr
 import {AKATZ_PROFILE,AKATZ_REVISION,AKATZ_ASSET,akatzGraphForInputs} from '../h3-akatz-motion.js';
 import {h3PhotoPlan} from '../minimax-h3-motion.js';
 import {createH3AppearanceModel} from '../h3-appearance-model.js';
+import {withRunningHubVideoOutputsEditor} from '../runninghub-video-output.js';
 
 const models={characterLoraFile:'api-lora-usa/'+'a'.repeat(32)+'.safetensors',
   turboLoraFile:'api-lora-usa/'+'b'.repeat(32)+'.safetensors'};
@@ -99,7 +100,10 @@ try{
     const response=await fetch(url);assert.equal(response.status,200);
     assert.equal(response.headers.get('cache-control'),'no-store');
     assert.ok(response.headers.get('content-disposition').includes(AKATZ_EDITOR_FILENAME));
-    assert.deepEqual(await response.json(),workflow);
+    const downloaded=await response.json();
+    assert.deepEqual(downloaded,withRunningHubVideoOutputsEditor(workflow));
+    assert.equal(downloaded.nodes.find(n=>n.id===493).type,'VideoCombineV2');
+    assert.deepEqual(downloaded.nodes.find(n=>n.id===490).outputs,[]);
     available={};const missing=await fetch(url);assert.equal(missing.status,503);
     assert.equal(missing.headers.get('content-disposition'),null,'Never download an error as a workflow');
     assert.match((await missing.json()).error,/Receipt/);assert.equal(requests,0);

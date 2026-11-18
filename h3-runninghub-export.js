@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import {AKATZ_PROFILE,AKATZ_REVISION,akatzGraphForInputs} from './h3-akatz-motion.js';
 import {h3PhotoPlan} from './minimax-h3-motion.js';
+import {withRunningHubVideoOutputsEditor} from './runninghub-video-output.js';
 
 const schemas=JSON.parse(fs.readFileSync(new URL('./workflows/runninghub-akatz-node-schemas.json',import.meta.url),'utf8'));
 export const AKATZ_EDITOR_FILENAME='VANTA_MINIMAX_H3_AKATZ_V8_RUNNINGHUB.json';
@@ -111,7 +112,7 @@ export function installAkatzEditorDownload({app,getModelFiles,buildWorkflow=akat
       const models=getModelFiles();
       if(requiresUploadedModels(_req)&&(!models.characterLoraFile||!models.turboLoraFile))
         return res.status(503).json({error:'Receipt kedua model Akatz belum tersedia untuk ekspor. Tidak ada model upload atau generate yang dijalankan.'});
-      const workflow=buildWorkflow(models,_req);
+      const workflow=withRunningHubVideoOutputsEditor(buildWorkflow(models,_req));
       res.set('Content-Type','application/json; charset=utf-8');
       const selectedFilename=typeof filename==='function'?filename(_req):filename;
       res.set('Content-Disposition','attachment; filename="'+selectedFilename+'"');

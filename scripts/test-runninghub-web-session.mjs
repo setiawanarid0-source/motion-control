@@ -962,6 +962,22 @@ test('a nonzero native validation refusal still stops before Save and create',()
   assert.deepEqual(calls.map(c=>new URL(c.url).pathname),['/api/workflow/getContent','/api/user/task/work/valid']);
 }));
 
+test('a removed-output validation error is shown precisely and never reaches Save or create',()=>fixture(async({service,calls,setHandler})=>{
+  const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
+  setHandler(async config=>{
+    const route=new URL(config.url).pathname;
+    if(route==='/api/workflow/getContent')return {code:0,data:{userId,workflowContent:'{"nodes":[]}',draft:false}};
+    if(route==='/api/user/task/work/valid')return {code:500,msg:JSON.stringify({result:false,
+      error:{type:'vhs_filenames_removed',message:'Video Combine Filenames removed'}})};
+    throw Error('No Save or create after a removed-output validation rejection');
+  });
+  let submitted=0;
+  await assert.rejects(service.submit(key,{instanceType:'default',workflow:{'1':{class_type:'PrimitiveString',inputs:{value:'actual'}}}},
+    {onBeforeSubmit:()=>submitted++}),e=>e.code==='RUNNINGHUB_WORKFLOW_VALIDATION'&&e.definitelyRejected===true&&/vhs_filenames_removed/.test(e.message));
+  assert.equal(submitted,0);
+  assert.deepEqual(calls.map(c=>new URL(c.url).pathname),['/api/workflow/getContent','/api/user/task/work/valid']);
+}));
+
 test('native Save failure is definite pre-submission; chosen mode is never changed',()=>fixture(async({service,calls,setHandler})=>{
   const {key}=await service.connect(exported);await service.prepare(key);calls.length=0;
   setHandler(async config=>{

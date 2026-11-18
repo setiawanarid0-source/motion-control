@@ -15,10 +15,21 @@ function parsePromptTip(candidate) {
 export function findValidationRejection(data) {
   if(!data||typeof data!=='object'||data.taskId||data.data?.taskId)return null;
   const sources=[
-    data.msg,data.promptTips,data.data?.promptTips,data.data?.message,data.message
+    data.msg,data.promptTips,data.data?.promptTips,data.data?.message,data.message,data,data.data
   ];
   for(const raw of sources) {
     const p=parsePromptTip(raw);
+    if(p?.result===false && p.error?.type==='vhs_filenames_removed'){
+      const code=data.code;
+      // A success acknowledgement or any task ID remains uncertain. The
+      // removed-port diagnosis is a definite refusal only with explicit failure.
+      const failedCode=['number','string'].includes(typeof code)&&String(code).trim()!==''&&
+        Number.isFinite(Number(code))&&Number(code)!==0;
+      const directFailure=!Object.hasOwn(data,'code')&&data.result===false&&data.error?.type==='vhs_filenames_removed';
+      if((failedCode||directFailure)&&data.success!==true&&data.result!==true&&
+        data.data?.success!==true&&data.data?.result!==true)
+        return p;
+    }
     if(p?.result===false && ['prompt_outputs_failed_validation','missing_node_type'].includes(p.error?.type))
       return p;
   }
@@ -32,6 +43,10 @@ function clean(value,limit=100) {
 export function graphValidationError(response) {
   const rejected=findValidationRejection(response);
   if(!rejected)return null;
+  if(rejected.error.type==='vhs_filenames_removed')return Object.assign(new Error(
+    'RunningHub menolak sambungan Filenames pada Video Combine (vhs_filenames_removed). '+
+    'Jalur ekspor video perlu diperbarui agar sesuai dengan node RunningHub. Task tidak diterima.'
+  ),{code:RH_WORKFLOW_VALIDATION_CODE,definitelyRejected:true});
   const details=Object.entries(rejected.node_errors||{})
     .slice(0,3)
     .map(([nodeId,node])=>{

@@ -49,6 +49,14 @@ const responses=[
   {code:0,msg:'success',data:{taskId:'2109126366731984999',taskStatus:'RUNNING'}}
 ];
 const absentNode={code:500,msg:JSON.stringify({result:false,error:{type:'missing_node_type',message:"Node 'TARA' not found"}})};
+const removedFilenames={code:500,msg:JSON.stringify({result:false,error:{type:'vhs_filenames_removed',message:'Video Combine Filenames output removed'}})};
+assert.equal(graphValidationError(removedFilenames)?.definitelyRejected,true);
+assert.match(graphValidationError(removedFilenames)?.message,/Filenames.*vhs_filenames_removed/);
+for(const reply of [{...removedFilenames,code:0},{...removedFilenames,code:'bad'},
+  {...removedFilenames,taskId:'2119000000000000001'},
+  {...removedFilenames,data:{taskId:'2119000000000000001'}},
+  {...removedFilenames,success:true},{...removedFilenames,data:{result:true}},{msg:removedFilenames.msg}])
+  assert.equal(graphValidationError(reply),null,'Contradictory or incomplete acknowledgements stay uncertain');
 assert.equal(graphValidationError(absentNode)?.definitelyRejected,true,'Explicit pre-execution missing-node error is a rejected graph');
 assert.equal(graphValidationError({...absentNode,data:{taskId:'2109126366731984999'}}),null,'Accepted task IDs always forbid retry');
 assert.equal(graphValidationError({...absentNode,taskId:'2109126366731984999'}),null);
@@ -264,6 +272,18 @@ async function runRifeReplies(replies,{accountId='auto',workflow='rife60',accoun
 }
 const refused={code:402,msg:paidMessage};
 const accepted={code:0,msg:'success',data:{taskId:'2119000000000000001',taskStatus:'RUNNING'}};
+for(const accountId of ['auto','one']){
+  await runRifeReplies([removedFilenames],{workflow:'current',accountId});
+  assert.equal(attempts,1,'Invalid output must never be replayed across accounts');
+  assert.equal(saved.stage,'error');assert.equal(registered.length,0);
+  assert.match(saved.error,/vhs_filenames_removed/);
+  ui.data=saved;vm.runInContext('displaySubmissionFailure(data);',ui);
+  assert.equal(fields.get('#taskStatus').textContent,'Workflow ditolak RunningHub');
+  assert.match(fields.get('#taskFailureDetail').textContent,/Filenames/);
+}
+for(const reply of [{...removedFilenames,code:0},{...removedFilenames,taskId:'2119000000000000001'}]){
+  await runRifeReplies([reply]);assert.equal(attempts,1);assert.equal(saved.stage,'uncertain');
+}
 await runRifeReplies([{code:380,msg:'WORKFLOW_NOT_EXISTS'}]);
 assert.equal(attempts,1);assert.equal(saved.stage,'error');assert.equal(registered.length,0);
 assert.equal(saved.failureCode,'RH_WEB_WORKSPACE_NOT_FOUND');assert.match(saved.error,/WORKFLOW_NOT_EXISTS/);
