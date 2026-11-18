@@ -1,7 +1,7 @@
 # Diagnosis MotionFly: VHS Filenames dihapus — 18 November 2026
 
 ID investigasi: RH-VHS-FILENAMES-DIAGNOSIS-20261118  
-Status terkini: kandidat perbaikan ekspor terimplementasi dan tes lokal lengkap lulus; CI serta deployment belum terkonfirmasi. Riwayat diagnosis awal dipertahankan di bawah.  
+Status terkini: perbaikan kompatibilitas ekspor sudah aktif di Vanta; tes aplikasi, CI dan deployment lulus. Render GPU baru belum terkonfirmasi.
 Tanggal lokal: 18 November 2026 (Asia/Jakarta).
 
 ## Permintaan dan kondisi awal
@@ -73,3 +73,20 @@ Belum rilis pada saat entri ini ditulis. CI, deployment dan render GPU pengguna 
 Full npm run check lokal selesai exit0 setelah dependensi OpenCV untuk lingkungan pengujian scratch tersedia. Semua rangkaian regresi yang dikonfigurasi, termasuk migrasi output baru, 53 tes web-session, enam workflow × dua mesin, worker/UI/no-replay, editor HTTP/Remake, retensi/arsip/history, serta kontrak lain lulus. Dependensi OpenCV ini hanya untuk menjalankan rangkaian pengujian yang sudah ada; package dependensi produksi dan Dockerfile tidak diubah.
 
 Tahap berikut: terbitkan kandidat, tunggu seluruh CI yang diwajibkan, gabungkan pada main yang sama, pin layanan Railway yang sama ke commit teruji, lalu periksa status deployment dan health. Tidak menjalankan ulang empat submission lama atau generate GPU baru.
+
+## Penutup RH-VHS-FILENAMES-REPAIR-20261118
+
+**Rilis terverifikasi:** PR120 digabungkan ke main pada commit aplikasi 5d0c31038b3c17cefec15cf7f26cc8cbf2de9192. Tree 0be2332607d2fda66d7541aa7db208a5bcea7fb1 identik dengan kandidat yang lulus CI; 18 blob perubahan dicocokkan terhadap berkas lokal. Kandidat terakhir a2777c2dfda717fbbfb482ce23c6d71ca4104d87 menambahkan penjagaan untuk sinyal penerimaan nested yang bertentangan; tes worker terkait lulus dan full CI kandidat tersebut juga lulus.
+
+Keenam check PR dan keenam check commit main aplikasi selesai success: regression test, image-contract, serta popup Chromium, Firefox, Edge, WebKit. Full npm run check lokal exit0; rangkaian before-start pada deployment juga berjalan hingga selesai sebelum server mulai mendengarkan.
+
+Deployment 0bb1a8e2-2faa-408c-a206-1b31bc73a39d mencapai **SUCCESS pada 18 November 2026 pukul 21:25:44 WIB** (14:25:44.477 UTC). Pembacaan kembali source layanan yang sama memastikan pin 5d0c31038b3c17cefec15cf7f26cc8cbf2de9192. Runtime mencatat VANTA listening pada port8080 dan cache model startup siap. Volume /data tetap 5000MB pada volume yang sama; dua layanan agent lain tidak diubah. Empat entri source yang sebelumnya staged telah diselaraskan ke source aktif dan kini hanya perbedaan tampilan no-op; tidak memakai accept-deploy untuk menerapkan perubahan lingkungan lain.
+
+**Hasil:** jalur ZIP baru tidak lagi mengonsumsi port VHS_VideoCombine yang dihapus. Node ekspor pengganti yang terdaftar, pembaca error dan unduhan editor aktif. Model/sampling, input dan pola RIFE yang sudah berlaku, audio/FPS/ukuran, akun/mesin, retensi tiga hari dan larangan replay tetap sesuai kontrak. Tidak mengulang empat submission lama secara otomatis atau memulai render GPU baru oleh asisten.
+
+**Batas:** deployment, registry, source, tes encoder CPU dan fixture transport bukan bukti render baru diterima/selesai pada worker RunningHub. Hasil visual dan artefak provider berikutnya masih memerlukan tes pengguna. Tidak menjanjikan hilangnya masalah H3 lain seperti OOM, tekstur atau mimik; perubahan ini khusus kompatibilitas ekspor dan pelaporan penolakan. Jika ada error lain, ambil task ID/error runtime baru tanpa mengirim create ulang secara otomatis.
+
+**Rollback dan acuan berikut:** source sebelum perbaikan adalah 7905905cc784a2e581fd576d2fc8b2afc32dcdfe. Rollback kode memungkinkan pemulihan aplikasi lama, tetapi sambungan Filenames lama tetap tidak cocok dengan registry terbaru; jangan menjadikannya solusi keberhasilan generate. Pembaruan penutup dokumen setelah rilis adalah dokumentasi saja; pin aplikasi yang sudah teruji tetap dipertahankan.
+
+
+Pemeriksaan HTTP sesudah rilis: /health merespons HTTP200 dengan ok=true pada 18 November 21:26:21 WIB. Permintaan app.js tanpa sesi owner mengembalikan HTML, sehingga tidak dipakai sebagai bukti asset JavaScript/visual UI terautentikasi. Versi aktif dipastikan dari source pin layanan dan deployment SUCCESS; verifikasi visual browser owner baru belum dilakukan.
