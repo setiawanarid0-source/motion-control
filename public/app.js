@@ -320,7 +320,7 @@ function displaySubmissionFailure(data,{restored=false}={}){
   const msg=String(data?.error||'Alasan kegagalan tidak dikembalikan provider.').trim().slice(0,950);
   const providerStage=data?.failureStage==='submitting';
   const ambiguous=data?.stage==='uncertain';
-  const rejectedGraph=/prompt_outputs_failed_validation|RUNNINGHUB_WORKFLOW_VALIDATION/i.test(msg);
+  const rejectedGraph=/prompt_outputs_failed_validation|RUNNINGHUB_WORKFLOW_VALIDATION|vhs_filenames_removed/i.test(msg);
   const capacityFull=/TASK_QUEUE_MAXED/i.test(String(data.error||''));
   const paidBalanceRequired=data?.failureCode==='RUNNINGHUB_PAID_BALANCE_REQUIRED';
   const insufficientBalance=data?.failureCode==='RUNNINGHUB_INSUFFICIENT_BALANCE';

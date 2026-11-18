@@ -162,7 +162,7 @@ for(const hasAudio of [true,false]){
   const editor=remakeEditorForFrames({frames,width,height}),byId=new Map(editor.nodes.map(n=>[String(n.id),n]));
   const audioGraph=hasAudio?g:remakeGraphForInputs({imageName:'photo.png',videoName:'video.mp4',source:{...source,hasAudio:true}});
   for(const [id,n] of Object.entries(audioGraph)){
-    const ui=byId.get(id);assert.equal(ui.type,n.class_type);
+    const ui=byId.get(id);assert.equal(ui.type,id==='493'?'VideoCombineV2':n.class_type);
     for(const [key,v] of Object.entries(n.inputs)){
       if(edge(v)){
         const port=ui.inputs.find(x=>x.name===key),l=editor.links.find(x=>x[0]===port.link);

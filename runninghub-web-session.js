@@ -8,6 +8,8 @@ import axios from 'axios';
 import {runningHubWebBalance,webBalanceNumber,webBalanceEncoding} from './runninghub-web-balance.js';
 import {billingScalars} from './runninghub-billing-evidence.js';
 import {runningHubWorkflowContent} from './runninghub-workflow-content.js';
+import {withRunningHubVideoOutputs} from './runninghub-video-output.js';
+import {graphValidationError} from './runninghub-graph-validation.js';
 import {createRunningHubDailyCredit} from './runninghub-daily-credit.js';
 import {RH_POOL_INTERVAL_MS,RH_RENEW_BEFORE_MS,RH_POOL_CACHE_TTL_MS,RH_RECONNECT_CODES,nextRunningHubMaintenance} from './runninghub-maintenance.js';
 import {extractTaskFailure} from './task-failure.js';
@@ -208,6 +210,8 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
   function requireSuccess(result,session){
     if(Number(result?.code)===0&&result.data!=null)return result.data;
     if(authFailure(result))throw error('Sesi RunningHub kedaluwarsa. Hubungkan ulang akun.','RH_WEB_AUTH_EXPIRED',true);
+    const validation=graphValidationError(result);
+    if(validation)throw validation;
     throw error('RunningHub menolak permintaan: '+redact(result?.msg||result?.message||result?.code,session),'RH_WEB_PROVIDER_REJECTED',true);
   }
   async function balances(profile,lookup,{retryIncomplete=false}={}){
@@ -462,6 +466,7 @@ export function createRunningHubWebSession({dir,encrypt,decrypt,http=axios,now=(
       inputs[change.fieldName]=typeof previous==='number'?Number(change.fieldValue):
         typeof previous==='boolean'?change.fieldValue===true||change.fieldValue==='true':change.fieldValue;
     }
+    graph=withRunningHubVideoOutputs(graph);
     const workflowContent=runningHubWorkflowContent(graph);
     const workflowId=await workspace(key),clientId=crypto.randomUUID().replaceAll('-','');
     const promptContent=JSON.stringify({client_id:clientId,prompt:graph,

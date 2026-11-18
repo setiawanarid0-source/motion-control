@@ -1,7 +1,7 @@
 # Diagnosis MotionFly: VHS Filenames dihapus — 18 November 2026
 
 ID investigasi: RH-VHS-FILENAMES-DIAGNOSIS-20261118  
-Status: penyebab penolakan teridentifikasi; aplikasi dan workflow belum diubah pada investigasi ini.  
+Status terkini: kandidat perbaikan ekspor terimplementasi dan tes lokal lengkap lulus; CI serta deployment belum terkonfirmasi. Riwayat diagnosis awal dipertahankan di bawah.  
 Tanggal lokal: 18 November 2026 (Asia/Jakarta).
 
 ## Permintaan dan kondisi awal
@@ -47,3 +47,29 @@ Pengguna meminta perbaikan langsung setelah diagnosis. Otorisasi mencakup implem
 Rencana: pilih jalur ekspor yang didukung registry RunningHub saat ini, verifikasi implementasi encoder/arsip, pertahankan resep inferensi dan kebutuhan video/audio/ZIP, perbaiki klasifikasi error terstruktur tanpa replay submission, lalu jalankan pemeriksaan relevan dan CI sebelum rilis. Model, sampling, pemilihan akun/mesin, dan retensi tiga hari tetap sesuai kontrak pengguna. Tidak menjalankan render GPU; hasil render baru harus tetap ditandai belum diuji.
 
 Status awal: investigasi sumber ekspor berlangsung, belum ada perubahan aplikasi dan belum ada klaim generate pulih. Jangan memperlakukan sekadar hilangnya link Filenames atau lolosnya schema sebagai bukti kualitas keluaran.
+
+## Implementasi kandidat RH-VHS-FILENAMES-REPAIR-20261118
+
+Perubahan aktual sebelum rilis:
+- Adapter delivery memigrasikan hanya VHS_VideoCombine yang output-nya dikonsumsi node lain menjadi **VideoCombineV2**. Registry 18 November masih mendeklarasikan port VHS_FILENAMES pada V2. Encoder backup yang tidak mempunyai downstream tetap memakai VHS asli dengan deklarasi nol output. Input encoder, CRF/pix_fmt, format H.264, FPS, audio, ukuran/frame sumber, dan sambungan SelectFilename → CompressImages dipertahankan.
+- Adapter dipasang setelah penambahan ZIP, sebelum native validation/Save/create, serta pada unduhan editor Akatz dan graf audit baca-saja MotionFly. Seluruh prompt dan workflow editor pada submission memakai hasil adaptasi yang sama. Historical builder/inference recipe tetap sebagai sumber, tidak diganti model lain.
+- Snapshot layout editor menambahkan VideoCombineV2 dan memperbarui output VHS_VideoCombine menjadi kosong sesuai registry. Provenance sumber dan registry disimpan bersama snapshot.
+- Penolakan struktural vhs_filenames_removed kini dikenali sebagai workflow validation error dan ditampilkan langsung. Bukti eksplisit failure tetap diperlukan; task ID, code0 yang bertentangan, timeout, atau respons tidak lengkap tetap uncertain dan tidak direplay. Pemilihan akun/mode serta single-submit tetap berlaku.
+- Cache versi app.js diperbarui agar pesan baru termuat setelah refresh.
+
+Sumber encoder diperiksa pada FX-FeiHou/ComfyUI-FeiHou-Toolbox, commit 8ba47000b9aeaf6cae6a5ddfab981e668726fd8c, backend blob dfea01360b48051632efac576e77dd5a1129db8d. V2 memakai backend VHS yang dibundel; mengembalikan satu file audio-final dan melakukan penyematan metadata dengan stream-copy. Input latent opsional tidak dihubungkan; fitur simpan/gabung latent baru tidak diaktifkan.
+
+Pemeriksaan kandidat yang sudah dijalankan:
+- Tes transport aktual server mencakup enam workflow × dua mesin (Standard/Plus): validasi native, Save dan satu create memakai prompt/editor yang sama, tanpa sambungan keluar dari VHS_VideoCombine. Ini transport fixture, bukan pengajuan task provider.
+- Tes migrasi MotionFly membuktikan hanya encoder 493 berubah class; input encoder, sambungan ZIP 494/496, RIFE60, dan semua node inferensi tetap. Migrasi tidak memutasi basis dan idempotent.
+- Tes worker/UI membuktikan penolakan removed-port tidak berpindah akun, menghasilkan error terminal dengan alasan asli, sedangkan acknowledgement bertentangan tetap uncertain. Tes native preflight mencakup penolakan sebelum Save/create.
+- Uji source encoder CPU dengan tensor sintetis dan FFmpeg nyata: 4 kasus, landscape/portrait, 24/60 FPS, dengan/tanpa audio. Ukuran, jumlah frame, H.264/yuv420p, FPS dan durasi sesuai; hash paket video identik dengan backend VHS pembanding, paket audio identik bila ada audio, dan byte MP4 identik sesudah ZIP round-trip. File final satu per ekspor. Infrastruktur ComfyUI IO/folder/progress distub; tidak menguji RunningHub worker, GPU atau node ZIP provider baru.
+- Pemeriksaan awal menemukan ekspektasi class lama pada tes ekspor Remake dan graf audit MotionFly; keduanya disesuaikan dengan jalur ekspor aktual dan tes terkait lulus. Full suite lokal pertama terhenti karena OpenCV tidak tersedia pada interpreter scratch; dependensi pengujian lokal ditambahkan tanpa mengubah dependensi aplikasi. Pemeriksaan ulang sedang dijalankan.
+
+Belum rilis pada saat entri ini ditulis. CI, deployment dan render GPU pengguna belum terkonfirmasi. Jangan menyatakan generate sudah pulih dari uji CPU atau fixture saja.
+
+### Pemeriksaan lengkap kandidat
+
+Full npm run check lokal selesai exit0 setelah dependensi OpenCV untuk lingkungan pengujian scratch tersedia. Semua rangkaian regresi yang dikonfigurasi, termasuk migrasi output baru, 53 tes web-session, enam workflow × dua mesin, worker/UI/no-replay, editor HTTP/Remake, retensi/arsip/history, serta kontrak lain lulus. Dependensi OpenCV ini hanya untuk menjalankan rangkaian pengujian yang sudah ada; package dependensi produksi dan Dockerfile tidak diubah.
+
+Tahap berikut: terbitkan kandidat, tunggu seluruh CI yang diwajibkan, gabungkan pada main yang sama, pin layanan Railway yang sama ke commit teruji, lalu periksa status deployment dan health. Tidak menjalankan ulang empat submission lama atau generate GPU baru.
