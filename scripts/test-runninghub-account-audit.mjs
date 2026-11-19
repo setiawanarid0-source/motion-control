@@ -45,7 +45,7 @@ assert.deepEqual(plus.accounts[0].workspace.runValidation.numericFields,{require
 assert.doesNotMatch(JSON.stringify(plus),/private-key|secretPoint|accessToken|not-a-number|arbitrary/);
 await assert.rejects(auditRunningHubAccounts({accounts,instanceType:'ultra',request:async()=>{throw Error('Invalid audit mode must not reach the provider');}}),/Mode audit tidak valid/);
 const workflowAudit=motionFlyBillingWorkflow();
-assert.equal(workflowAudit.nodeCount,103);assert.equal(workflowAudit.name,'motionflyHD');
+assert.equal(workflowAudit.nodeCount,106);assert.equal(workflowAudit.name,'motionflyHD');
 assert.match(workflowAudit.graphSha256,/^[a-f0-9]{64}$/);
 assert.equal(JSON.parse(workflowAudit.workflowContent).nodes.find(n=>n.id===760060).type,'RIFEInterpolation');
 const evidence=billingScalars({profile:{id:999,email:'private@example.com',memberInfo:{memberCode:'0011'},powerValue:'1001'},
@@ -60,7 +60,7 @@ const detailed=await auditRunningHubAccounts({accounts:accounts.slice(0,1),insta
     workspace:{configured:true,contentNodeCount:0,validatedWorkflow:body.workflowAudit.name,validatedNodeCount:body.workflowAudit.nodeCount,
       validatedGraphSha256:body.workflowAudit.graphSha256,validationMedia:'placeholder-file-names'}}};}});
 assert.equal(detailedBody.inspectBilling,true);assert.equal(detailedBody.workflowAudit.workflowContent,workflowAudit.workflowContent);
-assert.equal(detailed.accounts[0].workspace.validatedNodeCount,103);
+assert.equal(detailed.accounts[0].workspace.validatedNodeCount,106);
 assert.deepEqual(detailed.accounts[0].billingEvidence,evidence);
 assert.doesNotMatch(JSON.stringify(detailed),/fake-token|private@example|apiKey|workflowContent|vanta-billing-reference/);
 const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');

@@ -12,19 +12,23 @@ for(const link of editor.links){
   assert.equal(nodes.get(link[3])?.inputs[link[4]]?.link,link[0],'Editor input must agree with its link');
   assert.ok(nodes.get(link[1])?.outputs[link[2]]?.links?.includes(link[0]),'Editor output must retain its link');
 }
-assert.equal(graph['308'].inputs.keep_proportion,'total_pixels','The photo must set the aspect ratio without a portrait crop');
-assert.equal(graph['308'].inputs.width,640);assert.equal(graph['308'].inputs.height,1120);
-assert.equal(graph['308'].inputs.upscale_method,'nvidia_rtx_vsr');
+assert.equal(graph['308'].inputs.keep_proportion,'resize','The photo must retain its full frame without a portrait crop');
+assert.deepEqual(graph['308'].inputs.width,['499',0]);assert.deepEqual(graph['308'].inputs.height,['502',0]);
+assert.equal(graph['308'].inputs.upscale_method,'area');assert.equal(graph['308'].inputs.device,'cpu');
 assert.deepEqual(graph['89'].inputs.width,['308',1]);
 assert.deepEqual(graph['89'].inputs.height,['308',2]);
 assert.equal(graph['89'].inputs.keep_proportion,'pad','A differently shaped driver must retain its complete motion frame');
 assert.deepEqual(graph['418'].inputs.width,['89',1]);
 assert.deepEqual(graph['418'].inputs.height,['89',2]);
-assert.deepEqual(graph['497'].inputs.image,['30',0],'Final sizing must use the original photo, not the driver or rounded latent canvas');
-assert.equal(graph['497'].inputs.keep_proportion,'total_pixels');
-assert.deepEqual(graph['489'].inputs.width,['497',1]);
-assert.deepEqual(graph['489'].inputs.height,['497',2]);
-assert.equal(graph['489'].inputs.divisible_by,8,'RTX VSR and H.264 must retain an aligned output, including 1080 px');
+for(const id of ['497','498','499','502']){
+  assert.equal(graph[id].class_type,'MathExpression|pysssss');
+  assert.deepEqual(graph[id].inputs.a,['30',0],'Sizing must read the original photo shape without resizing its pixels');
+}
+assert.deepEqual(graph['489'].inputs.width,['497',0]);
+assert.deepEqual(graph['489'].inputs.height,['498',0]);
+assert.equal(graph['489'].inputs.divisible_by,8,'H.264 must retain an aligned output, including 1080 px');
+assert.equal(graph['489'].inputs.upscale_method,'lanczos');assert.equal(graph['489'].inputs.device,'cpu');
+assert.ok(!JSON.stringify(graph).includes('nvidia_rtx_vsr'),'No reachable VSR may change the photo or final video');
 
 // Exercise graph dependencies with the external ImageResizeKJv2 sizing contract:
 // https://github.com/kijai/ComfyUI-KJNodes/blob/main/nodes/image_nodes.py
@@ -42,12 +46,22 @@ function geometry(photo,driver){
     else if(node.class_type==='WanSCAILToVideo')result=[null,null,{width:value(node.inputs.width),height:value(node.inputs.height)}];
     else if(node.class_type==='KSampler')result=[value(node.inputs.latent_image)];
     else if(node.class_type==='VAEDecode')result=[value(node.inputs.samples)];
+    else if(node.class_type==='MathExpression|pysssss'){
+      const image=value(node.inputs.a);
+      const expression=node.inputs.expression.replaceAll('a.width',String(image.width)).replaceAll('a.height',String(image.height));
+      const number=Function('floor','min','sqrt','"use strict";return ('+expression+');')(Math.floor,Math.min,Math.sqrt);
+      result=[Math.trunc(number),number];
+    }
     else if(node.class_type==='ImageResizeKJv2'){
       const input=value(node.inputs.image),mode=node.inputs.keep_proportion;
       let width=value(node.inputs.width),height=value(node.inputs.height);
       if(mode==='total_pixels'){
         const pixels=width*height,aspect=input.width/input.height;
         width=Math.trunc(Math.sqrt(pixels*aspect));height=Math.trunc(Math.sqrt(pixels/aspect));
+      }else if(mode==='resize'){
+        const scale=Math.min(width/input.width,height/input.height);
+        assert.ok(scale<=1,'Reference processing cannot enlarge even a small photo');
+        width=Math.round(input.width*scale);height=Math.round(input.height*scale);
       }else if(mode==='pad'){
         // The fitted content and centered padding fill the requested canvas.
         // At divisible_by=2 and a multiple-of-16 target, native padding rounds
@@ -76,12 +90,13 @@ function geometry(photo,driver){
   return {reference:run('308')[0],guide:run('89')[0],output:run('489')[0]};
 }
 
-for(const [width,height] of [[2048,1529],[1200,900],[900,1200],[1920,1080],[1080,1920],[1200,1200],[2520,1080]]){
+for(const [width,height] of [[2048,1529],[1200,900],[900,1200],[1920,1080],[1080,1920],[1200,1200],[2520,1080],[320,480],[640,480],[481,643],[32,32]]){
   let previous;
   for(const [driverWidth,driverHeight] of [[1080,1920],[1920,1080],[1000,1000]]){
     const plan=geometry({width,height},{width:driverWidth,height:driverHeight});
     assert.deepEqual(plan.reference,plan.guide,'Reference, guide, SAM3 masks and latent must share one canvas');
     assert.ok(plan.reference.width*plan.reference.height<=640*1120,'Adaptive sizing must retain the sampling pixel budget');
+    assert.ok(plan.reference.width<=width&&plan.reference.height<=height,'A small photo must never be upscaled');
     assert.ok(plan.output.width*plan.output.height<=1080*1920,'Adaptive HD must retain the final pixel budget');
     const expected=width/height,actual=plan.output.width/plan.output.height;
     assert.ok(Math.abs(actual/expected-1)<.01,'Output must follow the photo within encoder alignment');
@@ -93,10 +108,11 @@ for(const [width,height] of [[2048,1529],[1200,900],[900,1200],[1920,1080],[1080
 const landscape=geometry({width:2048,height:1529},{width:1072,height:1920});
 assert.deepEqual(landscape.output,{width:1664,height:1240},'The reported landscape photo must no longer produce a portrait output');
 assert.deepEqual(geometry({width:1080,height:1920},{width:1920,height:1080}).output,{width:1080,height:1920});
+assert.deepEqual(geometry({width:320,height:480},{width:1920,height:1080}).reference,{width:320,height:480},'Aligned small references retain their exact size');
 
 const preserved=structuredClone(graph);
-for(const id of ['89','308','489','497'])delete preserved[id];
+for(const id of ['89','308','489','497','498','499','502'])delete preserved[id];
 assert.equal(createHash('sha256').update(JSON.stringify(preserved)).digest('hex'),
   '21c0188f377a36cd3c9342f95f4532ee22425511d7fdc8b9a45ca77cfc9d1ee6',
   'Models, prompts, sampler, FPS, audio, preview and original-video ZIP must retain their existing recipe');
-console.log('PASS: MotionFly follows photo aspect across landscape/portrait/square and different drivers; aligned masks/latents, bounded HD pixels, audio and ZIP preserved. Geometry only; no live inference.');
+console.log('PASS: MotionFly has no VSR/refiner, never enlarges reference photos, preserves small aligned sizes and photo aspect across drivers; aligned masks/latents, HD pixels, unchanged generation/audio/ZIP. Geometry only; no live inference.');

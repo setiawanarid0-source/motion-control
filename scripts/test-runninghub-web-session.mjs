@@ -517,7 +517,7 @@ test('audits the actual MotionFly/RIFE editor and native billing rules without s
     if(route==='/api/workflow/simpleList')return {code:0,data:[]};
     if(route==='/api/user/task/work/valid'){
       const editor=JSON.parse(config.data.workflowContent);
-      assert.equal(editor.nodes.length,103);assert.equal(editor.nodes.find(n=>n.id===760060).type,'RIFEInterpolation');
+      assert.equal(editor.nodes.length,106);assert.equal(editor.nodes.find(n=>n.id===760060).type,'RIFEInterpolation');
       return {code:0,data:{billingVersion:'NEW',canCreateTask:config.data.instanceType==='default'}};
     }
     throw Error('No create, save, upload or cancel may occur in this audit');
@@ -525,7 +525,7 @@ test('audits the actual MotionFly/RIFE editor and native billing rules without s
   for(const instanceType of ['default','plus']){
     const result=await service.request('/uc/openapi/accountStatus',key,{inspectWorkspace:true,inspectBilling:true,workflowAudit,instanceType});
     assert.equal(result.data.workspace.contentNodeCount,0);
-    assert.equal(result.data.workspace.validatedNodeCount,103);
+    assert.equal(result.data.workspace.validatedNodeCount,106);
     assert.equal(result.data.workspace.validatedGraphSha256,workflowAudit.graphSha256);
     assert.equal(result.data.workspace.runValidation.canCreateTask,instanceType==='default');
     assert.equal(result.data.billingEvidence['profile.memberInfo.memberCode'],'0011');

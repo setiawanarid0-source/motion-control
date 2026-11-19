@@ -6,8 +6,8 @@ import {compileMotionFlyHD} from '../motionfly-hd-workflow.js';
 const read=p=>JSON.parse(fs.readFileSync(new URL('../workflows/'+p,import.meta.url),'utf8'));
 const source=fs.readFileSync(new URL('../workflows/motionfly-hd-runninghub.json',import.meta.url));
 assert.equal(createHash('sha256').update(source).digest('hex'),
-  '77aaf68ba641159c1bce3cebb85e3a77e480be3a012879d311717592fcf02a30',
-  'The reviewed adaptive MotionFly editor workflow must retain its validated revision');
+  '42513fc1a5d4c1a893b27df902afdf4174d6094b5d34dd5a4c2820c91b1db531',
+  'The reviewed raw-reference MotionFly editor workflow must retain its validated revision');
 const editor=JSON.parse(source),motionfly=compileMotionFlyHD(editor),current=read('current-api.json');
 for(const [name,graph] of Object.entries({motionfly,current})){
   for(const [id,node] of Object.entries(graph))for(const [field,value] of Object.entries(node.inputs||{})){
@@ -29,7 +29,7 @@ for(const [name,graph] of Object.entries({motionfly,current})){
   assert.equal(graph['490'].inputs.save_output,true);
 }
 assert.equal(current['489'].inputs.width,1080);assert.equal(current['489'].inputs.height,1920);
-assert.deepEqual(motionfly['489'].inputs.width,['497',1]);assert.deepEqual(motionfly['489'].inputs.height,['497',2]);
+assert.deepEqual(motionfly['489'].inputs.width,['497',0]);assert.deepEqual(motionfly['489'].inputs.height,['498',0]);
 assert.equal(current['33'].inputs.force_rate,40,'KOH (1) rate must remain unchanged');
 assert.equal(motionfly['33'].inputs.force_rate,24,'Use the supplied workflow rate without the old R4 conversion');
 assert.equal(motionfly['33'].inputs.force_size,'Disabled');
@@ -39,11 +39,16 @@ assert.equal(motionfly['331'].inputs.sampler_name,'euler');assert.equal(motionfl
 assert.equal(motionfly['331'].inputs.denoise,1);
 assert.deepEqual(motionfly['89'].inputs.width,['308',1]);assert.deepEqual(motionfly['89'].inputs.height,['308',2]);
 assert.equal(motionfly['89'].inputs.keep_proportion,'pad');
-assert.equal(motionfly['308'].inputs.keep_proportion,'total_pixels');
+assert.equal(motionfly['308'].inputs.keep_proportion,'resize');
+assert.deepEqual(motionfly['308'].inputs.width,['499',0]);
+assert.deepEqual(motionfly['308'].inputs.height,['502',0]);
+assert.equal(motionfly['308'].inputs.upscale_method,'area');
+assert.equal(motionfly['489'].inputs.upscale_method,'lanczos');
 for(const id of ['308','489']){
-  assert.equal(motionfly[id].inputs.upscale_method,'nvidia_rtx_vsr');
-  assert.equal(motionfly[id].inputs.device,'gpu');
+  assert.equal(motionfly[id].inputs.device,'cpu');
 }
+assert.ok(!JSON.stringify(motionfly).includes('nvidia_rtx_vsr'));
+for(const id of ['497','498','499','502'])assert.deepEqual(motionfly[id].inputs.a,['30',0]);
 assert.equal(motionfly['308'].inputs.divisible_by,16);assert.equal(motionfly['489'].inputs.divisible_by,8);
 assert.deepEqual(motionfly['308'].inputs.image,['30',0]);
 assert.deepEqual(motionfly['418'].inputs.reference_image,['308',0]);
