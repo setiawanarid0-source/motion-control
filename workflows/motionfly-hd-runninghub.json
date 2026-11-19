@@ -1,5 +1,5 @@
 {
-  "last_link_id": 1047,
+  "last_link_id": 1052,
   "nodes": [
     {
       "mode": 0,
@@ -4943,12 +4943,12 @@
       "widgets_values": [
         640,
         1120,
-        "nvidia_rtx_vsr",
-        "total_pixels",
+        "area",
+        "resize",
         "0, 0, 0",
         "center",
         16,
-        "gpu"
+        "cpu"
       ],
       "inputs": [
         {
@@ -4970,7 +4970,7 @@
             "name": "width"
           },
           "name": "width",
-          "link": null,
+          "link": 1051,
           "label": "width",
           "type": "INT",
           "localized_name": "width"
@@ -4980,7 +4980,7 @@
             "name": "height"
           },
           "name": "height",
-          "link": null,
+          "link": 1052,
           "label": "height",
           "type": "INT",
           "localized_name": "height"
@@ -5066,7 +5066,7 @@
         "Node name for S&R": "ImageResizeKJv2"
       },
       "order": 73,
-      "title": "Reference photo - adaptive aspect ratio"
+      "title": "Reference photo - downscale only, no AI enhancement"
     },
     {
       "outputs": [
@@ -6941,12 +6941,12 @@
       "widgets_values": [
         1080,
         1920,
-        "nvidia_rtx_vsr",
+        "lanczos",
         "crop",
         "0, 0, 0",
         "center",
         8,
-        "gpu"
+        "cpu"
       ],
       "inputs": [
         {
@@ -7042,7 +7042,7 @@
       "flags": {},
       "id": 489,
       "type": "ImageResizeKJv2",
-      "title": "Final HD - reference photo aspect ratio",
+      "title": "Final HD - photo aspect ratio, plain Lanczos",
       "properties": {
         "cnr_id": "comfyui-workflow-encrypt",
         "ver": "1.0.0",
@@ -7280,7 +7280,10 @@
           "name": "IMAGE",
           "links": [
             929,
-            1045
+            1045,
+            1048,
+            1049,
+            1050
           ],
           "label": "IMAGE",
           "type": "IMAGE",
@@ -7542,183 +7545,268 @@
       "bgcolor": "#353"
     },
     {
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "links": [],
-          "label": "IMAGE",
-          "type": "IMAGE",
-          "localized_name": "IMAGE"
-        },
-        {
-          "name": "width",
-          "links": [
-            1046
-          ],
-          "label": "width",
-          "type": "INT",
-          "localized_name": "width"
-        },
-        {
-          "name": "height",
-          "links": [
-            1047
-          ],
-          "label": "height",
-          "type": "INT",
-          "localized_name": "height"
-        },
-        {
-          "name": "mask",
-          "label": "mask",
-          "type": "MASK",
-          "localized_name": "mask",
-          "links": []
-        }
-      ],
-      "size": [
-        263.9888610839844,
-        336
-      ],
+      "id": 497,
+      "type": "MathExpression|pysssss",
       "pos": [
         4400,
         800
       ],
-      "widgets_values": [
-        1080,
-        1920,
-        "lanczos",
-        "total_pixels",
-        "0, 0, 0",
-        "center",
-        8,
-        "cpu"
+      "size": [
+        430,
+        180
       ],
+      "flags": {},
+      "mode": 0,
+      "order": 101,
+      "title": "HD width from original photo - dimensions only",
       "inputs": [
         {
-          "name": "image",
-          "label": "image",
-          "type": "IMAGE",
-          "localized_name": "image",
+          "name": "a",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
           "link": 1045
         },
         {
+          "name": "b",
+          "type": "INT,FLOAT,IMAGE,LATENT",
           "shape": 7,
-          "name": "mask",
-          "label": "mask",
-          "type": "MASK",
-          "localized_name": "mask"
+          "link": null
         },
         {
-          "widget": {
-            "name": "width"
-          },
-          "name": "width",
-          "label": "width",
-          "type": "INT",
-          "localized_name": "width"
-        },
-        {
-          "widget": {
-            "name": "height"
-          },
-          "name": "height",
-          "label": "height",
-          "type": "INT",
-          "localized_name": "height"
-        },
-        {
-          "widget": {
-            "name": "upscale_method"
-          },
-          "name": "upscale_method",
-          "label": "upscale_method",
-          "type": "COMBO",
-          "localized_name": "upscale_method"
-        },
-        {
-          "widget": {
-            "name": "keep_proportion"
-          },
-          "name": "keep_proportion",
-          "label": "keep_proportion",
-          "type": "COMBO",
-          "localized_name": "keep_proportion"
-        },
-        {
-          "widget": {
-            "name": "pad_color"
-          },
-          "name": "pad_color",
-          "label": "pad_color",
-          "type": "STRING",
-          "localized_name": "pad_color"
-        },
-        {
-          "widget": {
-            "name": "crop_position"
-          },
-          "name": "crop_position",
-          "label": "crop_position",
-          "type": "COMBO",
-          "localized_name": "crop_position"
-        },
-        {
-          "widget": {
-            "name": "divisible_by"
-          },
-          "name": "divisible_by",
-          "label": "divisible_by",
-          "type": "INT",
-          "localized_name": "divisible_by"
-        },
-        {
-          "widget": {
-            "name": "device"
-          },
+          "name": "c",
+          "type": "INT,FLOAT,IMAGE,LATENT",
           "shape": 7,
-          "name": "device",
-          "label": "device",
-          "type": "COMBO",
-          "localized_name": "device"
+          "link": null
+        },
+        {
+          "name": "expression",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "widget": {
+            "name": "expression"
+          },
+          "link": null
         }
       ],
-      "flags": {},
-      "id": 497,
-      "type": "ImageResizeKJv2",
-      "title": "HD size from reference photo",
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            1046
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
       "properties": {
-        "cnr_id": "comfyui-workflow-encrypt",
-        "ver": "1.0.0",
-        "ue_properties": {
-          "widget_ue_connectable": {
-            "crop_position": true,
-            "pad_color": true,
-            "divisible_by": true,
-            "width": true,
-            "keep_proportion": true,
-            "upscale_method": true,
-            "device": true,
-            "height": true
-          },
-          "input_ue_unconnectable": {},
-          "version": "7.8"
-        },
-        "widget_ue_connectable": {
-          "crop_position": true,
-          "pad_color": true,
-          "divisible_by": true,
-          "width": true,
-          "keep_proportion": true,
-          "upscale_method": true,
-          "device": true,
-          "height": true
-        },
-        "aux_id": "kijai/ComfyUI-KJNodes",
-        "Node name for S&R": "ImageResizeKJv2"
+        "Node name for S&R": "MathExpression|pysssss"
       },
-      "order": 0
+      "widgets_values": [
+        "floor(sqrt(2073600 * a.width / a.height) / 8) * 8"
+      ]
+    },
+    {
+      "id": 498,
+      "type": "MathExpression|pysssss",
+      "pos": [
+        4870,
+        800
+      ],
+      "size": [
+        430,
+        180
+      ],
+      "flags": {},
+      "mode": 0,
+      "order": 102,
+      "title": "HD height from original photo - dimensions only",
+      "inputs": [
+        {
+          "name": "a",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
+          "link": 1048
+        },
+        {
+          "name": "b",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
+          "link": null
+        },
+        {
+          "name": "c",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
+          "link": null
+        },
+        {
+          "name": "expression",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "widget": {
+            "name": "expression"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            1047
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MathExpression|pysssss"
+      },
+      "widgets_values": [
+        "floor(sqrt(2073600 * a.height / a.width) / 8) * 8"
+      ]
+    },
+    {
+      "id": 499,
+      "type": "MathExpression|pysssss",
+      "pos": [
+        4400,
+        1050
+      ],
+      "size": [
+        430,
+        180
+      ],
+      "flags": {},
+      "mode": 0,
+      "order": 103,
+      "title": "Model width from photo - never enlarge",
+      "inputs": [
+        {
+          "name": "a",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
+          "link": 1049
+        },
+        {
+          "name": "b",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
+          "link": null
+        },
+        {
+          "name": "c",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
+          "link": null
+        },
+        {
+          "name": "expression",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "widget": {
+            "name": "expression"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            1051
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MathExpression|pysssss"
+      },
+      "widgets_values": [
+        "floor(a.width * min(1, sqrt(716800 / (a.width * a.height))))"
+      ]
+    },
+    {
+      "id": 502,
+      "type": "MathExpression|pysssss",
+      "pos": [
+        4870,
+        1050
+      ],
+      "size": [
+        430,
+        180
+      ],
+      "flags": {},
+      "mode": 0,
+      "order": 104,
+      "title": "Model height from photo - never enlarge",
+      "inputs": [
+        {
+          "name": "a",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
+          "link": 1050
+        },
+        {
+          "name": "b",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
+          "link": null
+        },
+        {
+          "name": "c",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "shape": 7,
+          "link": null
+        },
+        {
+          "name": "expression",
+          "type": "INT,FLOAT,IMAGE,LATENT",
+          "widget": {
+            "name": "expression"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            1052
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MathExpression|pysssss"
+      },
+      "widgets_values": [
+        "floor(a.height * min(1, sqrt(716800 / (a.width * a.height))))"
+      ]
     }
   ],
   "extra": {
@@ -7752,7 +7840,20 @@
     "ue_links": [],
     "KKvideo_latentpreviewrate": 0,
     "VHS_latentpreviewrate": 0,
-    "frontendVersion": "1.23.0"
+    "frontendVersion": "1.23.0",
+    "vanta_motionfly_reference": {
+      "revision": "raw-reference-no-vsr-20261119",
+      "reference_ai_enhancement": false,
+      "reference_upscale": false,
+      "reference_alignment": 16,
+      "work_pixel_budget": 716800,
+      "aspect_source": "original_photo_shape",
+      "output_pixel_budget": 2073600,
+      "output_alignment": 8,
+      "output_resize": "plain_lanczos",
+      "file_reencoding": false,
+      "gpu_render_verified": false
+    }
   },
   "groups": [
     {
@@ -8917,21 +9018,61 @@
       0,
       497,
       0,
-      "IMAGE"
+      "INT,FLOAT,IMAGE,LATENT"
     ],
     [
       1046,
       497,
-      1,
+      0,
       489,
       2,
       "INT"
     ],
     [
       1047,
-      497,
-      2,
+      498,
+      0,
       489,
+      3,
+      "INT"
+    ],
+    [
+      1048,
+      30,
+      0,
+      498,
+      0,
+      "INT,FLOAT,IMAGE,LATENT"
+    ],
+    [
+      1049,
+      30,
+      0,
+      499,
+      0,
+      "INT,FLOAT,IMAGE,LATENT"
+    ],
+    [
+      1050,
+      30,
+      0,
+      502,
+      0,
+      "INT,FLOAT,IMAGE,LATENT"
+    ],
+    [
+      1051,
+      499,
+      0,
+      308,
+      2,
+      "INT"
+    ],
+    [
+      1052,
+      502,
+      0,
+      308,
       3,
       "INT"
     ]
@@ -8939,6 +9080,6 @@
   "id": "5e3b2cd8-2119-4be4-87d6-b524515abe69",
   "config": {},
   "version": 0.4,
-  "last_node_id": 497,
+  "last_node_id": 502,
   "revision": 0
 }

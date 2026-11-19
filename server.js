@@ -84,8 +84,8 @@ const workflowGraphs = {
 const workflowMeta = {
   motionflyHD: {
     id:'motionflyHD',name:MOTIONFLY_HD_NAME,
-    subtitle:'Rasio foto · HD · 60 FPS · audio sumber · ZIP',
-    detail:'Rasio hasil mengikuti gambar referensi, termasuk landscape, portrait, dan persegi. Mask SAM3 diproses otomatis; audio sumber, preview HD dan ZIP 60 FPS melalui RIFE dalam job yang sama.',
+    subtitle:'Foto tanpa AI refine · HD · 60 FPS · audio sumber · ZIP',
+    detail:'Foto referensi tanpa AI upscale/refine; hanya diperkecil bila perlu untuk model. Rasio hasil mengikuti foto asli. Mask SAM3, audio sumber, preview HD dan ZIP 60 FPS melalui RIFE dalam satu job.',
     outputKind:'video'
   },
   minimaxH3AkatzV3: {
